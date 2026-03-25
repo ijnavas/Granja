@@ -68,27 +68,14 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                 </div>
             </div>
 
-            <div class="form-group">
-                <label>Tipo de animal *</label>
-                <select name="tipo_animal_id" id="tipoAnimalSelect" required>
-                    <option value="">— Selecciona tipo —</option>
-                    <?php
-                    $especieActual = '';
-                    foreach ($tipos as $t):
-                        if ($t['especie'] !== $especieActual):
-                            if ($especieActual) echo '</optgroup>';
-                            echo '<optgroup label="' . ucfirst($t['especie']) . '" data-especie="' . $t['especie'] . '">';
-                            $especieActual = $t['especie'];
-                        endif;
-                    ?>
-                        <option value="<?= $t['id'] ?>"
-                                data-especie="<?= e($t['especie']) ?>"
-                                <?= ($lote['tipo_animal_id'] ?? '') == $t['id'] ? 'selected' : '' ?>>
-                            <?= e($t['nombre']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                    <?php if ($especieActual) echo '</optgroup>'; ?>
-                </select>
+            <!-- Tipo animal — se asigna automáticamente según la especie de la granja -->
+            <input type="hidden" name="tipo_animal_id" id="tipoAnimalHidden"
+                   value="<?= e($lote['tipo_animal_id'] ?? '') ?>">
+
+            <div class="form-group" id="tipoAnimalDisplay" style="display:none">
+                <label>Tipo de animal</label>
+                <div style="padding:.6rem .85rem;background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:7px;font-size:.9rem;color:#374151" id="tipoAnimalTexto">—</div>
+                <span class="form-hint">Asignado automáticamente según la especie de la granja</span>
             </div>
 
             <!-- Raza (solo porcino) -->
@@ -196,6 +183,7 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
 <script>
 const granjas = <?= json_encode(array_values($granjas)) ?>;
 const navesPorGranja = {};
+const tipos = <?= json_encode(array_values($tipos)) ?>;
 
 function actualizarEspecie(sel) {
     const opt     = sel.options[sel.selectedIndex];
@@ -214,17 +202,22 @@ function actualizarEspecie(sel) {
 
     document.getElementById('especieHidden').value = especie;
 
-    // Filtrar tipos de animal por especie
-    const tipoSel = document.getElementById('tipoAnimalSelect');
-    const opciones = tipoSel.querySelectorAll('option[data-especie]');
-    opciones.forEach(o => {
-        o.style.display = (!especie || o.dataset.especie === especie) ? '' : 'none';
-    });
-    // Seleccionar automáticamente si solo hay una opción visible
-    const visibles = Array.from(opciones).filter(o => o.style.display !== 'none');
-    if (visibles.length === 1) tipoSel.value = visibles[0].value;
-    else if (especie) tipoSel.value = '';
+    // Asignar tipo animal automáticamente según especie
+    const tiposEspecie = tipos.filter(t => t.especie === especie);
+    const hiddenTipo   = document.getElementById('tipoAnimalHidden');
+    const displayTipo  = document.getElementById('tipoAnimalDisplay');
+    const textoTipo    = document.getElementById('tipoAnimalTexto');
 
+    if (tiposEspecie.length > 0) {
+        hiddenTipo.value   = tiposEspecie[0].id;
+        textoTipo.textContent = tiposEspecie[0].nombre;
+        displayTipo.style.display = '';
+    } else {
+        hiddenTipo.value  = '';
+        displayTipo.style.display = 'none';
+    }
+
+    // Mostrar razas solo para porcino
     const razaGroup = document.getElementById('razaGroup');
     razaGroup.style.display = especie === 'porcino' ? '' : 'none';
     actualizarCodigo();
@@ -329,5 +322,17 @@ document.addEventListener('DOMContentLoaded', () => {
     actualizarCodigo();
     const granjasel = document.getElementById('granjaSelect');
     if (granjasel && granjasel.value) actualizarEspecie(granjasel);
+
+    // En edición, mostrar el tipo animal actual
+    <?php if ($esEdicion && !empty($lote['tipo_animal_id'])): ?>
+    const hiddenTipo  = document.getElementById('tipoAnimalHidden');
+    const displayTipo = document.getElementById('tipoAnimalDisplay');
+    const textoTipo   = document.getElementById('tipoAnimalTexto');
+    const tipoActual  = tipos.find(t => t.id == <?= $lote['tipo_animal_id'] ?>);
+    if (tipoActual) {
+        textoTipo.textContent = tipoActual.nombre;
+        displayTipo.style.display = '';
+    }
+    <?php endif; ?>
 });
 </script>
