@@ -122,6 +122,12 @@ function capitalizar(string $texto): string
 {
     return mb_convert_case(mb_strtolower(trim($texto)), MB_CASE_TITLE, 'UTF-8');
 }
+
+/**
+ * Datos del usuario en sesión
+ */
+function auth_user(): ?array
+{
     if (!Session::has('usuario_id')) return null;
     return [
         'id'     => Session::get('usuario_id'),
