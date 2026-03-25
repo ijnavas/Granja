@@ -78,7 +78,7 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                         <option value="">— Sin especificar raza —</option>
                         <?php foreach ($razas as $r): ?>
                             <option value="<?= $r['id'] ?>"
-                                    data-sufijo="<?= e(strtoupper(substr($r['nombre'], 0, 2))) ?>"
+                                    data-identificador="<?= e($r['identificador'] ?? '') ?>"
                                     <?= ($lote['raza_id'] ?? '') == $r['id'] ? 'selected' : '' ?>>
                                 <?= e($r['nombre']) ?><?= $r['porcentaje'] ? ' (' . $r['porcentaje'] . ')' : '' ?>
                             </option>
@@ -205,8 +205,7 @@ function actualizarCodigo() {
     let sufijo = '';
     if (razaSel && razaSel.value) {
         const opt = razaSel.options[razaSel.selectedIndex];
-        const nombre = opt.text.split('(')[0].trim();
-        sufijo = nombre.substring(0, 2).toUpperCase();
+        sufijo = (opt.dataset.identificador || '').trim().toUpperCase();
     }
 
     const codigo = 'L ' + year + '/' + week + (sufijo ? ' ' + sufijo : '');
