@@ -216,7 +216,7 @@ function actualizarCodigo() {
         sufijo = (opt.dataset.identificador || '').trim().toUpperCase();
     }
 
-    const codigo = 'L ' + year + '/' + week + (sufijo ? ' ' + sufijo : '');
+    const codigo = 'L ' + week + '/' + year + (sufijo ? ' ' + sufijo : '');
     const preview = document.getElementById('codigoPreview');
     if (preview) preview.value = codigo;
 }

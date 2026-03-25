@@ -60,7 +60,7 @@ class Lote
         $dt   = new \DateTime($fechaNacimiento);
         $year = $dt->format('y');
         $week = $dt->format('W');
-        $base = "L {$year}/{$week}";
+        $base = "L {$week}/{$year}";
         return $sufijo ? "{$base} {$sufijo}" : $base;
     }
 
