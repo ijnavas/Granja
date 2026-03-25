@@ -146,10 +146,18 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
             <input type="text" id="nuevaRazaNombre" placeholder="Ej: 100% Ibérico, Duroc..."
                    style="width:100%;padding:.6rem .85rem;border:1.5px solid #d1d5db;border-radius:7px;font-size:.9rem;font-family:inherit">
         </div>
-        <div class="form-group" style="margin-bottom:1.25rem">
+        <div class="form-group" style="margin-bottom:.85rem">
             <label>Porcentaje (opcional)</label>
             <input type="text" id="nuevaRazaPorcentaje" placeholder="50%, 75%, 100%..."
                    style="width:100%;padding:.6rem .85rem;border:1.5px solid #d1d5db;border-radius:7px;font-size:.9rem;font-family:inherit">
+        </div>
+        <div class="form-group" style="margin-bottom:1.25rem">
+            <label>Identificador (opcional)</label>
+            <input type="text" id="nuevaRazaIdentificador" maxlength="5"
+                   placeholder="IB, DU, PT..."
+                   oninput="this.value=this.value.toUpperCase()"
+                   style="width:100%;padding:.6rem .85rem;border:1.5px solid #d1d5db;border-radius:7px;font-size:.9rem;font-family:monospace;font-weight:700;text-transform:uppercase">
+            <span style="font-size:.75rem;color:#9ca3af">Siglas que aparecen al final del código del lote</span>
         </div>
         <div style="display:flex;gap:.75rem">
             <button type="button" class="btn btn-primary" onclick="guardarRaza()">Guardar</button>
@@ -221,9 +229,10 @@ function getISOWeek(d) {
 }
 
 async function guardarRaza() {
-    const nombre     = document.getElementById('nuevaRazaNombre').value.trim();
-    const porcentaje = document.getElementById('nuevaRazaPorcentaje').value.trim();
-    const errEl      = document.getElementById('razaError');
+    const nombre        = document.getElementById('nuevaRazaNombre').value.trim();
+    const porcentaje    = document.getElementById('nuevaRazaPorcentaje').value.trim();
+    const identificador = document.getElementById('nuevaRazaIdentificador').value.trim().toUpperCase();
+    const errEl         = document.getElementById('razaError');
 
     if (nombre.length < 2) { errEl.textContent = 'El nombre es obligatorio.'; errEl.style.display=''; return; }
     errEl.style.display = 'none';
@@ -231,6 +240,7 @@ async function guardarRaza() {
     const fd = new FormData();
     fd.append('nombre', nombre);
     fd.append('porcentaje', porcentaje);
+    fd.append('identificador', identificador);
     fd.append('csrf_token', document.querySelector('[name=csrf_token]').value);
 
     const res  = await fetch('<?= base_url('lotes/raza') ?>', { method:'POST', body: fd });
@@ -241,6 +251,7 @@ async function guardarRaza() {
     const sel = document.getElementById('razaSelect');
     const opt = document.createElement('option');
     opt.value = data.id;
+    opt.dataset.identificador = data.identificador || '';
     opt.textContent = data.nombre + (data.porcentaje ? ' (' + data.porcentaje + ')' : '');
     opt.selected = true;
     sel.appendChild(opt);
@@ -248,6 +259,7 @@ async function guardarRaza() {
     document.getElementById('modalRaza').style.display = 'none';
     document.getElementById('nuevaRazaNombre').value = '';
     document.getElementById('nuevaRazaPorcentaje').value = '';
+    document.getElementById('nuevaRazaIdentificador').value = '';
     actualizarCodigo();
 }
 

@@ -150,15 +150,30 @@ class LoteController extends BaseController
     {
         auth_required();
         header('Content-Type: application/json');
-        $uid        = Session::get('usuario_id');
-        $nombre     = trim($_POST['nombre'] ?? '');
-        $porcentaje = trim($_POST['porcentaje'] ?? '');
+        $uid           = Session::get('usuario_id');
+        $nombre        = trim($_POST['nombre'] ?? '');
+        $porcentaje    = trim($_POST['porcentaje'] ?? '');
+        $identificador = strtoupper(trim($_POST['identificador'] ?? ''));
+
         if (strlen($nombre) < 2) {
             echo json_encode(['ok' => false, 'msg' => 'Nombre demasiado corto']);
             return;
         }
-        $id = $this->razaModel->create($uid, $nombre, $porcentaje ?: null);
-        echo json_encode(['ok' => true, 'id' => $id, 'nombre' => capitalizar($nombre), 'porcentaje' => $porcentaje]);
+
+        $id = $this->razaModel->create([
+            'usuario_id'    => $uid,
+            'nombre'        => capitalizar($nombre),
+            'porcentaje'    => $porcentaje ?: null,
+            'identificador' => $identificador ?: null,
+        ]);
+
+        echo json_encode([
+            'ok'            => true,
+            'id'            => $id,
+            'nombre'        => capitalizar($nombre),
+            'porcentaje'    => $porcentaje ?: null,
+            'identificador' => $identificador ?: null,
+        ]);
     }
 
     public function delete(string $id): void
