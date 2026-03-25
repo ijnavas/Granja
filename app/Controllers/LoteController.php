@@ -85,10 +85,12 @@ class LoteController extends BaseController
             $codigo .= "-{$sufijo}";
         }
 
-        $naveId = $this->post('nave_id') ?: null;
+        $naveId   = $this->post('nave_id') ?: null;
+        $granjaId = $this->post('granja_id') ?: null;
 
         $this->model->create([
             'nave_id'         => $naveId ? (int)$naveId : null,
+            'granja_id'       => $granjaId ? (int)$granjaId : null,
             'tipo_animal_id'  => (int)$this->post('tipo_animal_id'),
             'raza_id'         => $razaId,
             'codigo'          => $codigo,
@@ -139,9 +141,12 @@ class LoteController extends BaseController
             $this->redirect("lotes/{$id}/editar");
         }
 
-        $naveId = $this->post('nave_id') ?: null;
+        $naveId   = $this->post('nave_id') ?: null;
+        $granjaId = $this->post('granja_id') ?: null;
+
         $this->model->update((int)$id, Session::get('usuario_id'), [
             'nave_id'         => $naveId ? (int)$naveId : null,
+            'granja_id'       => $granjaId ? (int)$granjaId : null,
             'tipo_animal_id'  => (int)$this->post('tipo_animal_id'),
             'raza_id'         => $this->post('raza_id') ? (int)$this->post('raza_id') : null,
             'num_animales'    => (int)$this->post('num_animales', 0),

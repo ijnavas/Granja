@@ -22,31 +22,36 @@ class Lote
                    ta.nombre  AS tipo_animal_nombre,
                    ta.especie AS especie,
                    n.nombre   AS nave_nombre,
-                   g.nombre   AS granja_nombre,
+                   COALESCE(g.nombre, g2.nombre) AS granja_nombre,
                    DATEDIFF(CURDATE(), l.fecha_entrada) AS dias_en_granja,
                    (SELECT p.peso_medio_kg FROM pesajes p WHERE p.lote_id = l.id ORDER BY p.fecha DESC LIMIT 1) AS ultimo_peso
             FROM lotes l
             JOIN tipos_animal ta ON l.tipo_animal_id = ta.id
-            LEFT JOIN naves n ON l.nave_id = n.id
+            LEFT JOIN naves n  ON l.nave_id   = n.id
             LEFT JOIN granjas g ON n.granja_id = g.id
-            WHERE (g.usuario_id = :uid OR l.nave_id IS NULL)
+            LEFT JOIN granjas g2 ON l.granja_id = g2.id
+            WHERE (g.usuario_id = :uid OR g2.usuario_id = :uid2)
             ORDER BY l.estado, l.fecha_entrada DESC
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['uid' => $userId, 'uid2' => $userId]);
         return $stmt->fetchAll();
     }
 
     public function find(int $id, int $userId): ?array
     {
         $stmt = $this->db->prepare("
-            SELECT l.*, ta.nombre AS tipo_animal_nombre, n.nombre AS nave_nombre, g.nombre AS granja_nombre
+            SELECT l.*, ta.nombre AS tipo_animal_nombre,
+                   n.nombre AS nave_nombre,
+                   COALESCE(g.nombre, g2.nombre) AS granja_nombre,
+                   COALESCE(g.id, g2.id) AS granja_id
             FROM lotes l
             JOIN tipos_animal ta ON l.tipo_animal_id = ta.id
-            LEFT JOIN naves n ON l.nave_id = n.id
-            LEFT JOIN granjas g ON n.granja_id = g.id
-            WHERE l.id = :id AND (g.usuario_id = :uid OR l.nave_id IS NULL)
+            LEFT JOIN naves n   ON l.nave_id    = n.id
+            LEFT JOIN granjas g ON n.granja_id  = g.id
+            LEFT JOIN granjas g2 ON l.granja_id = g2.id
+            WHERE l.id = :id AND (g.usuario_id = :uid OR g2.usuario_id = :uid2 OR (l.nave_id IS NULL AND l.granja_id IS NULL))
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => $userId, 'uid2' => $userId]);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -80,8 +85,8 @@ class Lote
     public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO lotes (nave_id, tipo_animal_id, raza_id, codigo, num_animales, peso_entrada_kg, fecha_entrada, observaciones)
-            VALUES (:nave_id, :tipo_animal_id, :raza_id, :codigo, :num_animales, :peso_entrada_kg, :fecha_entrada, :observaciones)
+            INSERT INTO lotes (nave_id, granja_id, tipo_animal_id, raza_id, codigo, num_animales, peso_entrada_kg, fecha_entrada, observaciones)
+            VALUES (:nave_id, :granja_id, :tipo_animal_id, :raza_id, :codigo, :num_animales, :peso_entrada_kg, :fecha_entrada, :observaciones)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();
@@ -94,6 +99,7 @@ class Lote
             LEFT JOIN naves n ON l.nave_id = n.id
             LEFT JOIN granjas g ON n.granja_id = g.id
             SET l.nave_id         = :nave_id,
+                l.granja_id       = :granja_id,
                 l.tipo_animal_id  = :tipo_animal_id,
                 l.raza_id         = :raza_id,
                 l.num_animales    = :num_animales,
