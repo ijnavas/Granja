@@ -118,15 +118,16 @@ class LoteController extends BaseController
         }
 
         $this->view('lotes/form', [
-            'lote'           => $lote,
-            'naves'          => $this->naveModel->selectOptions($uid),
-            'granjas'        => $granjas,
-            'tipos'          => $this->model->tiposAnimal(),
-            'tiposPorGranja' => $tiposPorGranja,
-            'razas'          => $this->razaModel->allParaUsuario($uid),
-            'pageTitle'      => 'Editar lote ' . $lote['codigo'],
-            'codigoAuto'     => $lote['codigo'],
-            'error'          => Session::getFlash('error'),
+            'lote'                 => $lote,
+            'naves'                => $this->naveModel->selectOptions($uid),
+            'granjas'              => $granjas,
+            'granjaPreseleccionada'=> null,
+            'tipos'                => $this->model->tiposAnimal(),
+            'tiposPorGranja'       => $tiposPorGranja,
+            'razas'                => $this->razaModel->allParaUsuario($uid),
+            'pageTitle'            => 'Editar lote ' . $lote['codigo'],
+            'codigoAuto'           => $lote['codigo'],
+            'error'                => Session::getFlash('error'),
         ]);
     }
 
