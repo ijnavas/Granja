@@ -85,7 +85,7 @@ class Granja
     public function selectOptions(int $userId): array
     {
         $stmt = $this->db->prepare("
-            SELECT id, nombre, especie FROM granjas WHERE usuario_id = :uid AND activa = 1 ORDER BY nombre
+            SELECT id, nombre, especie, tipo_produccion FROM granjas WHERE usuario_id = :uid AND activa = 1 ORDER BY nombre
         ");
         $stmt->execute(['uid' => $userId]);
         return $stmt->fetchAll();

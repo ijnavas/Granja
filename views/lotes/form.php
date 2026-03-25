@@ -184,12 +184,14 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
 const granjas = <?= json_encode(array_values($granjas)) ?>;
 const navesPorGranja = {};
 const tipos = <?= json_encode(array_values($tipos)) ?>;
+const tiposPorGranja = <?= json_encode($tiposPorGranja) ?>;
 
 function actualizarEspecie(sel) {
-    const opt     = sel.options[sel.selectedIndex];
-    const especie = opt ? (opt.dataset.especie || '') : '';
-    const badge   = document.getElementById('especieBadge');
-    const vacia   = document.getElementById('especieVacia');
+    const opt      = sel.options[sel.selectedIndex];
+    const especie  = opt ? (opt.dataset.especie || '') : '';
+    const granjaId = sel.value;
+    const badge    = document.getElementById('especieBadge');
+    const vacia    = document.getElementById('especieVacia');
 
     if (especie) {
         badge.textContent = especie.charAt(0).toUpperCase() + especie.slice(1);
@@ -202,18 +204,19 @@ function actualizarEspecie(sel) {
 
     document.getElementById('especieHidden').value = especie;
 
-    // Asignar tipo animal automáticamente según especie
-    const tiposEspecie = tipos.filter(t => t.especie === especie);
-    const hiddenTipo   = document.getElementById('tipoAnimalHidden');
-    const displayTipo  = document.getElementById('tipoAnimalDisplay');
-    const textoTipo    = document.getElementById('tipoAnimalTexto');
+    // Asignar tipo animal según el mapa granja → tipo resuelto en el servidor
+    const hiddenTipo  = document.getElementById('tipoAnimalHidden');
+    const displayTipo = document.getElementById('tipoAnimalDisplay');
+    const textoTipo   = document.getElementById('tipoAnimalTexto');
 
-    if (tiposEspecie.length > 0) {
-        hiddenTipo.value   = tiposEspecie[0].id;
-        textoTipo.textContent = tiposEspecie[0].nombre;
+    const tipoId = tiposPorGranja[granjaId] || null;
+    if (tipoId) {
+        hiddenTipo.value = tipoId;
+        const tipoObj = tipos.find(t => t.id == tipoId);
+        textoTipo.textContent = tipoObj ? tipoObj.nombre : '—';
         displayTipo.style.display = '';
     } else {
-        hiddenTipo.value  = '';
+        hiddenTipo.value = '';
         displayTipo.style.display = 'none';
     }
 

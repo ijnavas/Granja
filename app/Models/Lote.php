@@ -140,4 +140,41 @@ class Lote
     {
         return $this->db->query("SELECT id, nombre, especie FROM tipos_animal ORDER BY especie, nombre")->fetchAll();
     }
+
+    /**
+     * Devuelve el tipo_animal_id más apropiado según especie y tipo de producción de la granja
+     */
+    public function tipoAnimalParaGranja(string $especie, ?string $tipoProduccion): ?int
+    {
+        // Mapa de tipo_produccion → palabras clave en nombre del tipo animal
+        $mapa = [
+            'Cebo'         => ['cebo', 'engorde'],
+            'Maternidad'   => ['reproductora', 'maternidad', 'madre'],
+            'Recría'       => ['lechón', 'recría', 'destete'],
+            'Ciclo cerrado'=> ['engorde', 'cebo'],
+            'Mixta'        => ['engorde', 'cebo'],
+        ];
+
+        $palabras = $mapa[$tipoProduccion ?? ''] ?? [];
+
+        // Buscar por palabras clave si hay tipo de producción
+        if ($palabras) {
+            $stmt = $this->db->prepare("SELECT id FROM tipos_animal WHERE especie = :especie ORDER BY nombre");
+            $stmt->execute(['especie' => $especie]);
+            $tipos = $stmt->fetchAll();
+            foreach ($tipos as $t) {
+                foreach ($palabras as $palabra) {
+                    if (stripos($t['nombre'], $palabra) !== false) {
+                        return (int) $t['id'];
+                    }
+                }
+            }
+        }
+
+        // Fallback: primer tipo de esa especie
+        $stmt = $this->db->prepare("SELECT id FROM tipos_animal WHERE especie = :especie ORDER BY id LIMIT 1");
+        $stmt->execute(['especie' => $especie]);
+        $id = $stmt->fetchColumn();
+        return $id ? (int) $id : null;
+    }
 }

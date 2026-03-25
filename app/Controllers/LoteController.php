@@ -35,15 +35,26 @@ class LoteController extends BaseController
     {
         auth_required();
         $uid = Session::get('usuario_id');
+
+        // Construir mapa granja → tipo_animal_id resuelto
+        $granjas = $this->granjaModel->selectOptions($uid);
+        $tiposPorGranja = [];
+        foreach ($granjas as $g) {
+            if ($g['especie']) {
+                $tiposPorGranja[$g['id']] = $this->model->tipoAnimalParaGranja($g['especie'], $g['tipo_produccion'] ?? null);
+            }
+        }
+
         $this->view('lotes/form', [
-            'lote'       => null,
-            'naves'      => $this->naveModel->selectOptions($uid),
-            'granjas'    => $this->granjaModel->selectOptions($uid),
-            'tipos'      => $this->model->tiposAnimal(),
-            'razas'      => $this->razaModel->allParaUsuario($uid),
-            'pageTitle'  => 'Nuevo lote',
-            'codigoAuto' => '',
-            'error'      => Session::getFlash('error'),
+            'lote'           => null,
+            'naves'          => $this->naveModel->selectOptions($uid),
+            'granjas'        => $granjas,
+            'tipos'          => $this->model->tiposAnimal(),
+            'tiposPorGranja' => $tiposPorGranja,
+            'razas'          => $this->razaModel->allParaUsuario($uid),
+            'pageTitle'      => 'Nuevo lote',
+            'codigoAuto'     => '',
+            'error'          => Session::getFlash('error'),
         ]);
     }
 
@@ -94,15 +105,24 @@ class LoteController extends BaseController
         $lote = $this->model->find((int)$id, $uid);
         if (!$lote) $this->redirect('lotes');
 
+        $granjas = $this->granjaModel->selectOptions($uid);
+        $tiposPorGranja = [];
+        foreach ($granjas as $g) {
+            if ($g['especie']) {
+                $tiposPorGranja[$g['id']] = $this->model->tipoAnimalParaGranja($g['especie'], $g['tipo_produccion'] ?? null);
+            }
+        }
+
         $this->view('lotes/form', [
-            'lote'       => $lote,
-            'naves'      => $this->naveModel->selectOptions($uid),
-            'granjas'    => $this->granjaModel->selectOptions($uid),
-            'tipos'      => $this->model->tiposAnimal(),
-            'razas'      => $this->razaModel->allParaUsuario($uid),
-            'pageTitle'  => 'Editar lote ' . $lote['codigo'],
-            'codigoAuto' => $lote['codigo'],
-            'error'      => Session::getFlash('error'),
+            'lote'           => $lote,
+            'naves'          => $this->naveModel->selectOptions($uid),
+            'granjas'        => $granjas,
+            'tipos'          => $this->model->tiposAnimal(),
+            'tiposPorGranja' => $tiposPorGranja,
+            'razas'          => $this->razaModel->allParaUsuario($uid),
+            'pageTitle'      => 'Editar lote ' . $lote['codigo'],
+            'codigoAuto'     => $lote['codigo'],
+            'error'          => Session::getFlash('error'),
         ]);
     }
 
