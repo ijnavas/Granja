@@ -33,6 +33,8 @@ use App\Controllers\SiloController;
 use App\Controllers\LoteController;
 use App\Controllers\CuadraController;
 
+use App\Controllers\ConfigController;
+
 Session::start();
 
 // ── Rutas ────────────────────────────────────────────────────
@@ -98,5 +100,12 @@ $router->post('/cuadras/{id}/actualizar',       [CuadraController::class, 'updat
 $router->post('/cuadras/{id}/eliminar',         [CuadraController::class, 'delete']);
 $router->post('/cuadras/{id}/asignar',          [CuadraController::class, 'asignarLote']);
 $router->post('/cuadras/{id}/retirar',          [CuadraController::class, 'retirarLote']);
+
+// Configuración (solo admin)
+$router->get('/configuracion',                              [ConfigController::class, 'index']);
+$router->post('/configuracion/razas',                       [ConfigController::class, 'crearRaza']);
+$router->get('/configuracion/razas/{id}/editar',            [ConfigController::class, 'editarRaza']);
+$router->post('/configuracion/razas/{id}/actualizar',       [ConfigController::class, 'actualizarRaza']);
+$router->post('/configuracion/razas/{id}/eliminar',         [ConfigController::class, 'eliminarRaza']);
 
 $router->dispatch();

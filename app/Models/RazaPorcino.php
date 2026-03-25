@@ -26,46 +26,58 @@ class RazaPorcino
         return $stmt->fetchAll();
     }
 
-    /**
-     * Devuelve el sufijo corto para el código del lote (ej: "IB", "DU")
-     */
-    public function sufijoCodigo(int $razaId): ?string
+    public function allAdmin(): array
     {
-        $stmt = $this->db->prepare("SELECT nombre, porcentaje FROM razas_porcino WHERE id = :id LIMIT 1");
-        $stmt->execute(['id' => $razaId]);
-        $raza = $stmt->fetch();
-        if (!$raza) return null;
-
-        // Generar siglas automáticas: primeras 2 letras en mayúscula
-        $palabras = explode(' ', $raza['nombre']);
-        $siglas   = '';
-        foreach ($palabras as $p) {
-            if (strlen($p) >= 2) $siglas .= strtoupper(substr($p, 0, 2));
-            if (strlen($siglas) >= 2) break;
-        }
-        return substr($siglas, 0, 2);
+        $stmt = $this->db->query("
+            SELECT r.*, u.nombre AS creador
+            FROM razas_porcino r
+            LEFT JOIN usuarios u ON r.usuario_id = u.id
+            WHERE r.activa = 1
+            ORDER BY r.usuario_id IS NULL DESC, r.nombre
+        ");
+        return $stmt->fetchAll();
     }
 
-    public function create(int $userId, string $nombre, ?string $porcentaje): int
+    public function find(int $id): ?array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM razas_porcino WHERE id = :id AND activa = 1");
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO razas_porcino (usuario_id, nombre, porcentaje)
-            VALUES (:usuario_id, :nombre, :porcentaje)
+            INSERT INTO razas_porcino (usuario_id, nombre, porcentaje, identificador)
+            VALUES (:usuario_id, :nombre, :porcentaje, :identificador)
         ");
-        $stmt->execute([
-            'usuario_id' => $userId,
-            'nombre'     => capitalizar($nombre),
-            'porcentaje' => $porcentaje ?: null,
-        ]);
+        $stmt->execute($data);
         return (int) $this->db->lastInsertId();
     }
 
-    public function delete(int $id, int $userId): bool
+    public function update(int $id, array $data): bool
     {
         $stmt = $this->db->prepare("
-            UPDATE razas_porcino SET activa = 0
-            WHERE id = :id AND usuario_id = :uid
+            UPDATE razas_porcino
+            SET nombre = :nombre, porcentaje = :porcentaje, identificador = :identificador
+            WHERE id = :id
         ");
-        return $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $data['id'] = $id;
+        return $stmt->execute($data);
+    }
+
+    public function delete(int $id): bool
+    {
+        $stmt = $this->db->prepare("UPDATE razas_porcino SET activa = 0 WHERE id = :id");
+        return $stmt->execute(['id' => $id]);
+    }
+
+    public function sufijoCodigo(int $razaId): ?string
+    {
+        $stmt = $this->db->prepare("SELECT identificador FROM razas_porcino WHERE id = :id LIMIT 1");
+        $stmt->execute(['id' => $razaId]);
+        $val = $stmt->fetchColumn();
+        return ($val && trim($val) !== '') ? strtoupper(trim($val)) : null;
     }
 }
