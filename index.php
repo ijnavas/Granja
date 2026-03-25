@@ -103,9 +103,16 @@ $router->post('/cuadras/{id}/retirar',          [CuadraController::class, 'retir
 
 // Configuración (solo admin)
 $router->get('/configuracion',                              [ConfigController::class, 'index']);
+$router->get('/configuracion/razas',                        [ConfigController::class, 'razas']);
 $router->post('/configuracion/razas',                       [ConfigController::class, 'crearRaza']);
 $router->get('/configuracion/razas/{id}/editar',            [ConfigController::class, 'editarRaza']);
 $router->post('/configuracion/razas/{id}/actualizar',       [ConfigController::class, 'actualizarRaza']);
 $router->post('/configuracion/razas/{id}/eliminar',         [ConfigController::class, 'eliminarRaza']);
+$router->get('/configuracion/tablas',                       [ConfigController::class, 'tablas']);
+$router->get('/configuracion/tablas/crear',                 [ConfigController::class, 'crearTabla']);
+$router->post('/configuracion/tablas',                      [ConfigController::class, 'storeTabla']);
+$router->get('/configuracion/tablas/{id}/editar',           [ConfigController::class, 'editarTabla']);
+$router->post('/configuracion/tablas/{id}/actualizar',      [ConfigController::class, 'actualizarTabla']);
+$router->post('/configuracion/tablas/{id}/eliminar',        [ConfigController::class, 'eliminarTabla']);
 
 $router->dispatch();
