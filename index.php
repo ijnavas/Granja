@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 
-define('ROOT_PATH', dirname(__DIR__));
+// ROOT_PATH apunta a la misma carpeta donde está index.php
+define('ROOT_PATH', __DIR__);
 
 // Autoloader PSR-4 simple (sin Composer)
 spl_autoload_register(function (string $class): void {
@@ -28,7 +29,7 @@ use App\Controllers\AuthController;
 
 Session::start();
 
-// ── Rutas ────────────────────────────────────────────────────────
+// ── Rutas ────────────────────────────────────────────────────
 $router = new Router();
 
 $router->get('/',          [AuthController::class, 'loginForm']);
