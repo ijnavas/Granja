@@ -26,20 +26,19 @@ require ROOT_PATH . '/app/Helpers/functions.php';
 use App\Core\Session;
 use App\Core\Router;
 use App\Controllers\AuthController;
+use App\Controllers\DashboardController;
 
 Session::start();
 
 // ── Rutas ────────────────────────────────────────────────────
 $router = new Router();
 
-$router->get('/',          [AuthController::class, 'loginForm']);
-$router->get('/login',     [AuthController::class, 'loginForm']);
-$router->post('/login',    [AuthController::class, 'login']);
-$router->get('/register',  [AuthController::class, 'registerForm']);
-$router->post('/register', [AuthController::class, 'register']);
-$router->get('/logout',    [AuthController::class, 'logout']);
-
-// TODO: añadir rutas del panel cuando se desarrolle
-// $router->get('/dashboard', [DashboardController::class, 'index']);
+$router->get('/',           [AuthController::class,    'loginForm']);
+$router->get('/login',      [AuthController::class,    'loginForm']);
+$router->post('/login',     [AuthController::class,    'login']);
+$router->get('/register',   [AuthController::class,    'registerForm']);
+$router->post('/register',  [AuthController::class,    'register']);
+$router->get('/logout',     [AuthController::class,    'logout']);
+$router->get('/dashboard',  [DashboardController::class, 'index']);
 
 $router->dispatch();
