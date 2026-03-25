@@ -71,6 +71,7 @@ $router->post('/naves/{id}/eliminar',       [NaveController::class, 'delete']);
 $router->get('/silos',                      [SiloController::class, 'index']);
 $router->get('/silos/crear',                [SiloController::class, 'create']);
 $router->post('/silos',                     [SiloController::class, 'store']);
+$router->get('/silos/{id}',                 [SiloController::class, 'show']);
 $router->get('/silos/{id}/editar',          [SiloController::class, 'edit']);
 $router->post('/silos/{id}/actualizar',     [SiloController::class, 'update']);
 $router->post('/silos/{id}/eliminar',       [SiloController::class, 'delete']);

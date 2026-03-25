@@ -28,6 +28,20 @@ class SiloController extends BaseController
         $this->view('silos/index', ['silos' => $silos, 'pageTitle' => 'Silos']);
     }
 
+    public function show(string $id): void
+    {
+        auth_required();
+        $silo = $this->model->find((int)$id, Session::get('usuario_id'));
+        if (!$silo) $this->redirect('silos');
+        $navesAsig = $this->model->navesAsignadas((int)$id);
+        $this->view('silos/show', [
+            'silo'      => $silo,
+            'navesAsig' => $navesAsig,
+            'pageTitle' => e($silo['nombre']),
+            'success'   => Session::getFlash('success'),
+        ]);
+    }
+
     public function create(): void
     {
         auth_required();

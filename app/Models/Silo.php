@@ -36,9 +36,15 @@ class Silo
     public function find(int $id, int $userId): ?array
     {
         $stmt = $this->db->prepare("
-            SELECT s.* FROM silos s
+            SELECT s.*, g.nombre AS granja_nombre,
+                   ROUND((s.stock_actual_kg / NULLIF(s.capacidad_kg, 0)) * 100) AS pct_stock,
+                   GROUP_CONCAT(n.nombre ORDER BY n.nombre SEPARATOR ', ') AS naves_abastecidas
+            FROM silos s
             JOIN granjas g ON s.granja_id = g.id
+            LEFT JOIN silo_nave sn ON sn.silo_id = s.id
+            LEFT JOIN naves n ON sn.nave_id = n.id AND n.activa = 1
             WHERE s.id = :id AND g.usuario_id = :uid
+            GROUP BY s.id
         ");
         $stmt->execute(['id' => $id, 'uid' => $userId]);
         $row = $stmt->fetch();
