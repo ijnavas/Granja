@@ -45,6 +45,8 @@ class RazaPorcino
         }
         return substr($siglas, 0, 2);
     }
+
+    public function create(int $userId, string $nombre, ?string $porcentaje): int
     {
         $stmt = $this->db->prepare("
             INSERT INTO razas_porcino (usuario_id, nombre, porcentaje)

@@ -123,6 +123,8 @@ class Nave
         $stmt->execute(['nave_id' => $naveId]);
         return $stmt->fetchAll();
     }
+
+    public function selectOptions(int $userId, ?int $granjaId = null): array
     {
         $sql = "
             SELECT n.id, n.nombre, g.nombre AS granja_nombre
