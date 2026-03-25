@@ -1,8 +1,76 @@
 <?php
 $esEdicion = !is_null($granja);
 $action    = $esEdicion ? base_url("granjas/{$granja['id']}/actualizar") : base_url('granjas');
+$lat       = $granja['latitud']  ?? 40.4168;
+$lng       = $granja['longitud'] ?? -3.7038;
+$tieneCoords = !empty($granja['latitud']) && !empty($granja['longitud']);
 ?>
 <link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+
+<style>
+    #map {
+        height: 340px;
+        border-radius: 8px;
+        border: 1.5px solid #d1d5db;
+        cursor: crosshair;
+        z-index: 0;
+    }
+    .map-hint {
+        font-size: .78rem;
+        color: #6b7280;
+        margin-top: .4rem;
+        display: flex;
+        align-items: center;
+        gap: .4rem;
+    }
+    .coords-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: .75rem;
+        align-items: end;
+        margin-top: .75rem;
+    }
+    .coords-row input { background: #f9fafb; }
+    #btnBuscar {
+        padding: .6rem 1rem;
+        background: #f3f4f6;
+        border: 1.5px solid #d1d5db;
+        border-radius: 7px;
+        font-size: .875rem;
+        font-family: inherit;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background .15s;
+    }
+    #btnBuscar:hover { background: #e5e7eb; }
+    .search-row {
+        display: flex;
+        gap: .5rem;
+        margin-bottom: .75rem;
+    }
+    .search-row input {
+        flex: 1;
+        padding: .6rem .85rem;
+        border: 1.5px solid #d1d5db;
+        border-radius: 7px;
+        font-size: .875rem;
+        font-family: inherit;
+        outline: none;
+    }
+    .search-row input:focus { border-color: #1d4ed8; }
+    .search-row button {
+        padding: .6rem 1rem;
+        background: #1d4ed8;
+        color: #fff;
+        border: none;
+        border-radius: 7px;
+        font-size: .875rem;
+        font-family: inherit;
+        cursor: pointer;
+    }
+    .search-row button:hover { background: #1e40af; }
+</style>
 
 <div class="page-header">
     <h2><?= e($pageTitle) ?></h2>
@@ -13,55 +81,177 @@ $action    = $esEdicion ? base_url("granjas/{$granja['id']}/actualizar") : base_
     <div class="alert-flash alert-error"><?= e($error) ?></div>
 <?php endif; ?>
 
-<div class="form-card">
+<div class="form-card" style="max-width:780px">
     <form method="POST" action="<?= $action ?>">
         <?= csrf_field() ?>
 
         <div class="form-grid">
+
+            <!-- DATOS GENERALES -->
             <div class="form-section-title">Datos generales</div>
 
-            <div class="form-group">
-                <label>Nombre de la granja *</label>
-                <input type="text" name="nombre" required value="<?= e($granja['nombre'] ?? '') ?>" placeholder="Granja El Pinar">
+            <div class="form-grid form-grid-2">
+                <div class="form-group">
+                    <label>Nombre de la granja *</label>
+                    <input type="text" name="nombre" required
+                           value="<?= e($granja['nombre'] ?? '') ?>"
+                           placeholder="Granja El Pinar">
+                </div>
+                <div class="form-group">
+                    <label>Código REGA</label>
+                    <input type="text" name="codigo_rega"
+                           value="<?= e($granja['codigo_rega'] ?? '') ?>"
+                           placeholder="ES140123450001"
+                           maxlength="30">
+                    <span class="form-hint">Registro de Explotaciones Agrarias</span>
+                </div>
             </div>
 
-            <div class="form-group">
-                <label>Tipo de producción</label>
-                <select name="tipo_produccion">
-                    <option value="">— Sin especificar —</option>
-                    <?php foreach (['Cebo', 'Ciclo cerrado', 'Maternidad', 'Recría', 'Mixta'] as $t): ?>
-                        <option value="<?= $t ?>" <?= ($granja['tipo_produccion'] ?? '') === $t ? 'selected' : '' ?>><?= $t ?></option>
-                    <?php endforeach; ?>
-                </select>
+            <div class="form-grid form-grid-2">
+                <div class="form-group">
+                    <label>Tipo de producción</label>
+                    <select name="tipo_produccion">
+                        <option value="">— Sin especificar —</option>
+                        <?php foreach (['Cebo','Ciclo cerrado','Maternidad','Recría','Mixta'] as $t): ?>
+                            <option value="<?= $t ?>" <?= ($granja['tipo_produccion'] ?? '') === $t ? 'selected' : '' ?>>
+                                <?= $t ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Capacidad máxima (animales)</label>
+                    <input type="number" name="capacidad_max" min="0"
+                           value="<?= e($granja['capacidad_max'] ?? '') ?>"
+                           placeholder="500">
+                </div>
             </div>
 
+            <!-- UBICACIÓN -->
             <div class="form-section-title" style="margin-top:.5rem">Ubicación</div>
 
             <div class="form-group">
                 <label>Dirección</label>
-                <input type="text" name="direccion" value="<?= e($granja['direccion'] ?? '') ?>" placeholder="Calle, número, polígono...">
+                <input type="text" name="direccion"
+                       value="<?= e($granja['direccion'] ?? '') ?>"
+                       placeholder="Calle, número, polígono...">
             </div>
 
             <div class="form-grid form-grid-2">
                 <div class="form-group">
                     <label>Municipio</label>
-                    <input type="text" name="municipio" value="<?= e($granja['municipio'] ?? '') ?>">
+                    <input type="text" name="municipio"
+                           value="<?= e($granja['municipio'] ?? '') ?>">
                 </div>
                 <div class="form-group">
                     <label>Provincia</label>
-                    <input type="text" name="provincia" value="<?= e($granja['provincia'] ?? '') ?>">
+                    <input type="text" name="provincia"
+                           value="<?= e($granja['provincia'] ?? '') ?>">
                 </div>
             </div>
 
             <div class="form-group" style="max-width:160px">
                 <label>Código postal</label>
-                <input type="text" name="codigo_postal" maxlength="10" value="<?= e($granja['codigo_postal'] ?? '') ?>">
+                <input type="text" name="codigo_postal" maxlength="10"
+                       value="<?= e($granja['codigo_postal'] ?? '') ?>">
             </div>
+
+            <!-- MAPA -->
+            <div class="form-section-title" style="margin-top:.5rem">Localización en mapa</div>
+
+            <div class="form-group">
+                <label>Buscar dirección en el mapa</label>
+                <div class="search-row">
+                    <input type="text" id="searchInput" placeholder="Escribe una dirección o nombre de lugar..." 
+                           onkeydown="if(event.key==='Enter'){event.preventDefault();buscarDireccion();}">
+                    <button type="button" onclick="buscarDireccion()">Buscar</button>
+                </div>
+                <div id="map"></div>
+                <p class="map-hint">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    Haz clic en el mapa para seleccionar la ubicación exacta de la granja
+                </p>
+            </div>
+
+            <div class="coords-row">
+                <div class="form-group">
+                    <label>Latitud</label>
+                    <input type="text" name="latitud" id="latInput"
+                           value="<?= e($granja['latitud'] ?? '') ?>"
+                           placeholder="40.4168" readonly>
+                </div>
+                <div class="form-group">
+                    <label>Longitud</label>
+                    <input type="text" name="longitud" id="lngInput"
+                           value="<?= e($granja['longitud'] ?? '') ?>"
+                           placeholder="-3.7038" readonly>
+                </div>
+                <button type="button" id="btnBorrarCoords" onclick="borrarCoords()">Borrar punto</button>
+            </div>
+
         </div>
 
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary"><?= $esEdicion ? 'Guardar cambios' : 'Crear granja' ?></button>
+            <button type="submit" class="btn btn-primary">
+                <?= $esEdicion ? 'Guardar cambios' : 'Crear granja' ?>
+            </button>
             <a href="<?= base_url('granjas') ?>" class="btn btn-secondary">Cancelar</a>
         </div>
     </form>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const initLat  = <?= $tieneCoords ? $lat : 40.4168 ?>;
+const initLng  = <?= $tieneCoords ? $lng : -3.7038 ?>;
+const initZoom = <?= $tieneCoords ? 14 : 6 ?>;
+
+const map = L.map('map').setView([initLat, initLng], initZoom);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+}).addTo(map);
+
+let marker = null;
+
+<?php if ($tieneCoords): ?>
+marker = L.marker([<?= $lat ?>, <?= $lng ?>]).addTo(map);
+<?php endif; ?>
+
+map.on('click', function(e) {
+    const { lat, lng } = e.latlng;
+    setMarker(lat, lng);
+});
+
+function setMarker(lat, lng) {
+    if (marker) marker.setLatLng([lat, lng]);
+    else marker = L.marker([lat, lng]).addTo(map);
+
+    document.getElementById('latInput').value = lat.toFixed(7);
+    document.getElementById('lngInput').value = lng.toFixed(7);
+}
+
+function borrarCoords() {
+    if (marker) { map.removeLayer(marker); marker = null; }
+    document.getElementById('latInput').value = '';
+    document.getElementById('lngInput').value = '';
+}
+
+function buscarDireccion() {
+    const q = document.getElementById('searchInput').value.trim();
+    if (!q) return;
+
+    fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q) + '&limit=1', {
+        headers: { 'Accept-Language': 'es' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.length) { alert('No se encontró la dirección. Prueba con otro término.'); return; }
+        const { lat, lon } = data[0];
+        map.setView([parseFloat(lat), parseFloat(lon)], 14);
+        setMarker(parseFloat(lat), parseFloat(lon));
+    })
+    .catch(() => alert('Error al buscar. Comprueba tu conexión.'));
+}
+</script>

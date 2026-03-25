@@ -45,8 +45,8 @@ class Granja
     public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO granjas (usuario_id, nombre, direccion, municipio, provincia, codigo_postal, tipo_produccion)
-            VALUES (:usuario_id, :nombre, :direccion, :municipio, :provincia, :codigo_postal, :tipo_produccion)
+            INSERT INTO granjas (usuario_id, nombre, codigo_rega, capacidad_max, direccion, municipio, provincia, codigo_postal, tipo_produccion, latitud, longitud)
+            VALUES (:usuario_id, :nombre, :codigo_rega, :capacidad_max, :direccion, :municipio, :provincia, :codigo_postal, :tipo_produccion, :latitud, :longitud)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();
@@ -56,12 +56,16 @@ class Granja
     {
         $stmt = $this->db->prepare("
             UPDATE granjas SET
-                nombre = :nombre,
-                direccion = :direccion,
-                municipio = :municipio,
-                provincia = :provincia,
-                codigo_postal = :codigo_postal,
-                tipo_produccion = :tipo_produccion
+                nombre          = :nombre,
+                codigo_rega     = :codigo_rega,
+                capacidad_max   = :capacidad_max,
+                direccion       = :direccion,
+                municipio       = :municipio,
+                provincia       = :provincia,
+                codigo_postal   = :codigo_postal,
+                tipo_produccion = :tipo_produccion,
+                latitud         = :latitud,
+                longitud        = :longitud
             WHERE id = :id AND usuario_id = :usuario_id
         ");
         $data['id'] = $id;
