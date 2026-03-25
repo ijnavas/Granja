@@ -36,8 +36,11 @@ class LoteController extends BaseController
         auth_required();
         $uid = Session::get('usuario_id');
 
-        // Construir mapa granja → tipo_animal_id resuelto
         $granjas = $this->granjaModel->selectOptions($uid);
+
+        // Preseleccionar granja si solo hay una
+        $granjaPreseleccionada = count($granjas) === 1 ? $granjas[0]['id'] : null;
+
         $tiposPorGranja = [];
         foreach ($granjas as $g) {
             if ($g['especie']) {
@@ -46,15 +49,16 @@ class LoteController extends BaseController
         }
 
         $this->view('lotes/form', [
-            'lote'           => null,
-            'naves'          => $this->naveModel->selectOptions($uid),
-            'granjas'        => $granjas,
-            'tipos'          => $this->model->tiposAnimal(),
-            'tiposPorGranja' => $tiposPorGranja,
-            'razas'          => $this->razaModel->allParaUsuario($uid),
-            'pageTitle'      => 'Nuevo lote',
-            'codigoAuto'     => '',
-            'error'          => Session::getFlash('error'),
+            'lote'                 => null,
+            'naves'                => $this->naveModel->selectOptions($uid),
+            'granjas'              => $granjas,
+            'granjaPreseleccionada'=> $granjaPreseleccionada,
+            'tipos'                => $this->model->tiposAnimal(),
+            'tiposPorGranja'       => $tiposPorGranja,
+            'razas'                => $this->razaModel->allParaUsuario($uid),
+            'pageTitle'            => 'Nuevo lote',
+            'codigoAuto'           => '',
+            'error'                => Session::getFlash('error'),
         ]);
     }
 

@@ -52,7 +52,7 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                         <?php foreach ($granjas as $g): ?>
                             <option value="<?= $g['id'] ?>"
                                     data-especie="<?= e($g['especie'] ?? '') ?>"
-                                    <?= ($lote['granja_id'] ?? '') == $g['id'] ? 'selected' : '' ?>>
+                                    <?= ($lote['granja_id'] ?? $granjaPreseleccionada) == $g['id'] ? 'selected' : '' ?>>
                                 <?= e($g['nombre']) ?>
                             </option>
                         <?php endforeach; ?>
@@ -325,6 +325,11 @@ document.addEventListener('DOMContentLoaded', () => {
     actualizarCodigo();
     const granjasel = document.getElementById('granjaSelect');
     if (granjasel && granjasel.value) actualizarEspecie(granjasel);
+
+    // Si solo hay una granja, ocultar el selector (ya está preseleccionada)
+    <?php if (!$esEdicion && count($granjas) === 1): ?>
+    granjasel.closest('.form-group').style.display = 'none';
+    <?php endif; ?>
 
     // En edición, mostrar el tipo animal actual
     <?php if ($esEdicion && !empty($lote['tipo_animal_id'])): ?>
