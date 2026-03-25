@@ -1,25 +1,9 @@
 <?php
 $tieneCoords = !empty($granja['latitud']) && !empty($granja['longitud']);
 ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
 <?php if ($tieneCoords): ?>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <?php endif; ?>
-<style>
-    .detail-header {
-        background:#fff; border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,.07);
-        padding:1.75rem; margin-bottom:1.5rem;
-        display:grid; grid-template-columns:1fr auto; gap:1.5rem; align-items:start;
-    }
-    .detail-nombre { font-size:1.4rem; font-weight:700; color:#111827; margin-bottom:.3rem; }
-    .detail-rega   { font-size:.8rem; font-family:monospace; color:#6b7280; }
-    .detail-meta   { display:flex; flex-wrap:wrap; gap:1.5rem; margin-top:1rem; }
-    .meta-item     { font-size:.82rem; color:#6b7280; }
-    .meta-item strong { display:block; font-size:1rem; font-weight:600; color:#111827; }
-    .detail-actions { display:flex; gap:.5rem; flex-shrink:0; }
-    #mini-map { height:200px; border-radius:8px; border:1px solid #e5e7eb; width:280px; }
-    .badge-especie { display:inline-block; padding:.2rem .75rem; border-radius:20px; font-size:.78rem; font-weight:600; }
-</style>
 
 <div class="page-header">
     <h2>Detalle granja</h2>

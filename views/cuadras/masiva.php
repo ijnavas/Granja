@@ -1,12 +1,6 @@
 <?php
 $navePreseleccionada = $_GET['nave'] ?? null;
 ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
-<style>
-    .preview-list { border:1.5px solid #d1d5db; border-radius:7px; padding:.75rem 1rem; background:#f9fafb; font-size:.875rem; color:#374151; min-height:48px; max-height:200px; overflow-y:auto; }
-    .preview-item { padding:.2rem 0; border-bottom:1px solid #f0f0f0; }
-    .preview-item:last-child { border-bottom:none; }
-</style>
 
 <div class="page-header">
     <h2>Crear cuadras en lote</h2>

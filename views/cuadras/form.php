@@ -2,7 +2,6 @@
 $esEdicion = !is_null($cuadra);
 $action    = $esEdicion ? base_url("cuadras/{$cuadra['id']}/actualizar") : base_url('cuadras');
 ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
 
 <div class="page-header">
     <h2><?= e($pageTitle) ?></h2>

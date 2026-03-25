@@ -1,5 +1,4 @@
 <?php $pageTitle = 'Naves'; ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
 
 <div class="page-header">
     <h2>Naves</h2>

@@ -2,25 +2,6 @@
 $esEdicion = !is_null($lote);
 $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url('lotes');
 ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
-<style>
-    .especie-badge {
-        display:inline-flex; align-items:center; gap:.4rem;
-        padding:.35rem .85rem; border-radius:20px; font-size:.82rem; font-weight:600;
-        background:#fce7f3; color:#9d174d;
-    }
-    .razas-wrap { display:flex; gap:.5rem; align-items:flex-end; }
-    .razas-wrap select { flex:1; }
-    .btn-nueva-raza {
-        padding:.6rem .85rem; background:#f3f4f6; border:1.5px solid #d1d5db;
-        border-radius:7px; font-size:.82rem; font-family:inherit; cursor:pointer;
-        white-space:nowrap; transition:background .15s;
-    }
-    .btn-nueva-raza:hover { background:#e5e7eb; }
-    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:500; align-items:center; justify-content:center; }
-    .modal-box { background:#fff; border-radius:12px; padding:1.75rem; width:100%; max-width:360px; box-shadow:0 8px 32px rgba(0,0,0,.2); }
-    .modal-box h3 { font-size:1rem; font-weight:600; margin-bottom:1.25rem; }
-</style>
 
 <div class="page-header">
     <h2><?= e($pageTitle) ?></h2>

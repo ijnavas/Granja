@@ -1,5 +1,4 @@
 <?php $pageTitle = 'Cuadras'; ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
 
 <div class="page-header">
     <h2>Cuadras</h2>

@@ -1,5 +1,4 @@
 <?php $pageTitle = 'Silos'; ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
 
 <div class="page-header">
     <h2>Silos de pienso</h2>

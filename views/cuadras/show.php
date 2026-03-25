@@ -4,54 +4,6 @@ $pct   = $cuadra['capacidad_maxima'] > 0
     : 0;
 $totalAnimales = array_sum(array_column($lotes, 'num_animales'));
 ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
-<style>
-    .cuadra-header {
-        background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 1px 6px rgba(0,0,0,.07);
-        padding: 1.5rem;
-        margin-bottom: 1.5rem;
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 1rem;
-        align-items: start;
-    }
-    .cuadra-meta { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-top: .75rem; }
-    .meta-item { font-size: .82rem; color: #6b7280; }
-    .meta-item strong { display: block; font-size: 1.1rem; color: #111827; font-weight: 600; }
-    .ocupacion-grande {
-        text-align: center;
-        min-width: 120px;
-    }
-    .pct-num { font-size: 2rem; font-weight: 700; color: #111827; line-height: 1; }
-    .pct-sub { font-size: .78rem; color: #9ca3af; }
-    .barra-grande { height: 8px; background: #e5e7eb; border-radius: 99px; margin: .5rem 0; }
-    .barra-grande-fill { height: 8px; border-radius: 99px; }
-
-    .lote-card {
-        background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 1px 6px rgba(0,0,0,.07);
-        padding: 1.25rem 1.5rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        margin-bottom: .75rem;
-    }
-    .lote-codigo { font-family: monospace; font-size: 1rem; font-weight: 700; color: #1d4ed8; }
-    .lote-info   { font-size: .82rem; color: #6b7280; margin-top: .2rem; }
-    .lote-animales { font-size: 1.5rem; font-weight: 700; color: #111827; text-align: right; }
-    .lote-animales span { display: block; font-size: .75rem; font-weight: 400; color: #9ca3af; }
-
-    .panel-asignar {
-        background: #fff;
-        border-radius: 10px;
-        box-shadow: 0 1px 6px rgba(0,0,0,.07);
-        padding: 1.5rem;
-    }
-</style>
 
 <div class="page-header">
     <h2>Cuadra: <?= e($cuadra['nombre']) ?></h2>

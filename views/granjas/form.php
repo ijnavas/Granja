@@ -5,72 +5,8 @@ $lat       = $granja['latitud']  ?? 40.4168;
 $lng       = $granja['longitud'] ?? -3.7038;
 $tieneCoords = !empty($granja['latitud']) && !empty($granja['longitud']);
 ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 
-<style>
-    #map {
-        height: 340px;
-        border-radius: 8px;
-        border: 1.5px solid #d1d5db;
-        cursor: crosshair;
-        z-index: 0;
-    }
-    .map-hint {
-        font-size: .78rem;
-        color: #6b7280;
-        margin-top: .4rem;
-        display: flex;
-        align-items: center;
-        gap: .4rem;
-    }
-    .coords-row {
-        display: grid;
-        grid-template-columns: 1fr 1fr auto;
-        gap: .75rem;
-        align-items: end;
-        margin-top: .75rem;
-    }
-    .coords-row input { background: #f9fafb; }
-    #btnBuscar {
-        padding: .6rem 1rem;
-        background: #f3f4f6;
-        border: 1.5px solid #d1d5db;
-        border-radius: 7px;
-        font-size: .875rem;
-        font-family: inherit;
-        cursor: pointer;
-        white-space: nowrap;
-        transition: background .15s;
-    }
-    #btnBuscar:hover { background: #e5e7eb; }
-    .search-row {
-        display: flex;
-        gap: .5rem;
-        margin-bottom: .75rem;
-    }
-    .search-row input {
-        flex: 1;
-        padding: .6rem .85rem;
-        border: 1.5px solid #d1d5db;
-        border-radius: 7px;
-        font-size: .875rem;
-        font-family: inherit;
-        outline: none;
-    }
-    .search-row input:focus { border-color: #1d4ed8; }
-    .search-row button {
-        padding: .6rem 1rem;
-        background: #1d4ed8;
-        color: #fff;
-        border: none;
-        border-radius: 7px;
-        font-size: .875rem;
-        font-family: inherit;
-        cursor: pointer;
-    }
-    .search-row button:hover { background: #1e40af; }
-</style>
 
 <div class="page-header">
     <h2><?= e($pageTitle) ?></h2>

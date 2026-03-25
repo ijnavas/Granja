@@ -2,7 +2,6 @@
 $esEdicion = !is_null($nave);
 $action    = $esEdicion ? base_url("naves/{$nave['id']}/actualizar") : base_url('naves');
 ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
 
 <div class="page-header">
     <h2><?= e($pageTitle) ?></h2>

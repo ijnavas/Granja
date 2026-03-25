@@ -2,7 +2,6 @@
 $esEdicion = !is_null($silo);
 $action    = $esEdicion ? base_url("silos/{$silo['id']}/actualizar") : base_url('silos');
 ?>
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
 
 <div class="page-header">
     <h2><?= e($pageTitle) ?></h2>

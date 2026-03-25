@@ -1,15 +1,3 @@
-<link rel="stylesheet" href="<?= base_url('css/crud.css') ?>">
-<style>
-    .detail-header { background:#fff; border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,.07); padding:1.75rem; margin-bottom:1.5rem; display:grid; grid-template-columns:1fr auto; gap:1.5rem; align-items:start; }
-    .detail-nombre { font-size:1.3rem; font-weight:700; color:#111827; margin-bottom:.25rem; }
-    .detail-sub    { font-size:.85rem; color:#6b7280; margin-bottom:.75rem; }
-    .detail-meta   { display:flex; flex-wrap:wrap; gap:1.5rem; }
-    .meta-item     { font-size:.82rem; color:#6b7280; }
-    .meta-item strong { display:block; font-size:1rem; font-weight:600; color:#111827; }
-    .totales-bar   { background:#fff; border-radius:10px; box-shadow:0 1px 6px rgba(0,0,0,.07); padding:1.25rem 1.5rem; margin-bottom:1.5rem; display:flex; gap:2rem; align-items:center; flex-wrap:wrap; }
-    .total-item    { font-size:.82rem; color:#6b7280; }
-    .total-item strong { display:block; font-size:1.4rem; font-weight:700; color:#111827; }
-</style>
 
 <div class="page-header">
     <h2>Detalle nave</h2>
