@@ -325,6 +325,14 @@
             <span class="nav-tooltip">Naves</span>
         </a>
 
+        <a href="<?= base_url('cuadras') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/cuadras') ? 'active' : '' ?>">
+            <span class="nav-icon">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>
+            </span>
+            <span class="nav-label">Cuadras</span>
+            <span class="nav-tooltip">Cuadras</span>
+        </a>
+
         <a href="<?= base_url('silos') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/silos') ? 'active' : '' ?>">
             <span class="nav-icon">
                 <svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="20" rx="2"/><path d="M8 6H4v14h4M16 6h4v14h-4"/></svg>

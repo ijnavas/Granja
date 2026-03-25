@@ -31,6 +31,7 @@ use App\Controllers\GranjaController;
 use App\Controllers\NaveController;
 use App\Controllers\SiloController;
 use App\Controllers\LoteController;
+use App\Controllers\CuadraController;
 
 Session::start();
 
@@ -80,5 +81,16 @@ $router->get('/lotes/{id}/editar',          [LoteController::class, 'edit']);
 $router->post('/lotes/{id}/actualizar',     [LoteController::class, 'update']);
 $router->post('/lotes/{id}/ajustar',        [LoteController::class, 'ajustar']);
 $router->post('/lotes/{id}/eliminar',       [LoteController::class, 'delete']);
+
+// Cuadras
+$router->get('/cuadras',                        [CuadraController::class, 'index']);
+$router->get('/cuadras/crear',                  [CuadraController::class, 'create']);
+$router->post('/cuadras',                       [CuadraController::class, 'store']);
+$router->get('/cuadras/{id}',                   [CuadraController::class, 'show']);
+$router->get('/cuadras/{id}/editar',            [CuadraController::class, 'edit']);
+$router->post('/cuadras/{id}/actualizar',       [CuadraController::class, 'update']);
+$router->post('/cuadras/{id}/eliminar',         [CuadraController::class, 'delete']);
+$router->post('/cuadras/{id}/asignar',          [CuadraController::class, 'asignarLote']);
+$router->post('/cuadras/{id}/retirar',          [CuadraController::class, 'retirarLote']);
 
 $router->dispatch();
