@@ -41,7 +41,8 @@ class Nave
     public function find(int $id, int $userId): ?array
     {
         $stmt = $this->db->prepare("
-            SELECT n.* FROM naves n
+            SELECT n.*, g.nombre AS granja_nombre, g.id AS granja_id
+            FROM naves n
             JOIN granjas g ON n.granja_id = g.id
             WHERE n.id = :id AND g.usuario_id = :uid
         ");
