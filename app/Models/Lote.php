@@ -159,7 +159,7 @@ class Lote
 
         // Buscar por palabras clave si hay tipo de producción
         if ($palabras) {
-            $stmt = $this->db->prepare("SELECT id FROM tipos_animal WHERE especie = :especie ORDER BY nombre");
+            $stmt = $this->db->prepare("SELECT id, nombre FROM tipos_animal WHERE especie = :especie ORDER BY nombre");
             $stmt->execute(['especie' => $especie]);
             $tipos = $stmt->fetchAll();
             foreach ($tipos as $t) {
