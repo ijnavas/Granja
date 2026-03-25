@@ -64,10 +64,31 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                         <span id="especieBadge" class="especie-badge" style="display:none"></span>
                         <span id="especieVacia" style="color:#9ca3af;font-size:.875rem">Selecciona una granja</span>
                     </div>
-                    <!-- Campo oculto para enviar especie -->
                     <input type="hidden" name="especie" id="especieHidden">
-                    <input type="hidden" name="tipo_animal_id" id="tipoAnimalHidden">
                 </div>
+            </div>
+
+            <div class="form-group">
+                <label>Tipo de animal *</label>
+                <select name="tipo_animal_id" id="tipoAnimalSelect" required>
+                    <option value="">— Selecciona tipo —</option>
+                    <?php
+                    $especieActual = '';
+                    foreach ($tipos as $t):
+                        if ($t['especie'] !== $especieActual):
+                            if ($especieActual) echo '</optgroup>';
+                            echo '<optgroup label="' . ucfirst($t['especie']) . '" data-especie="' . $t['especie'] . '">';
+                            $especieActual = $t['especie'];
+                        endif;
+                    ?>
+                        <option value="<?= $t['id'] ?>"
+                                data-especie="<?= e($t['especie']) ?>"
+                                <?= ($lote['tipo_animal_id'] ?? '') == $t['id'] ? 'selected' : '' ?>>
+                            <?= e($t['nombre']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                    <?php if ($especieActual) echo '</optgroup>'; ?>
+                </select>
             </div>
 
             <!-- Raza (solo porcino) -->
@@ -192,6 +213,18 @@ function actualizarEspecie(sel) {
     }
 
     document.getElementById('especieHidden').value = especie;
+
+    // Filtrar tipos de animal por especie
+    const tipoSel = document.getElementById('tipoAnimalSelect');
+    const opciones = tipoSel.querySelectorAll('option[data-especie]');
+    opciones.forEach(o => {
+        o.style.display = (!especie || o.dataset.especie === especie) ? '' : 'none';
+    });
+    // Seleccionar automáticamente si solo hay una opción visible
+    const visibles = Array.from(opciones).filter(o => o.style.display !== 'none');
+    if (visibles.length === 1) tipoSel.value = visibles[0].value;
+    else if (especie) tipoSel.value = '';
+
     const razaGroup = document.getElementById('razaGroup');
     razaGroup.style.display = especie === 'porcino' ? '' : 'none';
     actualizarCodigo();
