@@ -1,0 +1,182 @@
+/* crud.css — estilos compartidos para listados y formularios */
+
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.page-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #111827;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .5rem 1rem;
+    border-radius: 8px;
+    font-size: .875rem;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    border: none;
+    transition: all .15s;
+}
+
+.btn-primary   { background: #1d4ed8; color: #fff; }
+.btn-primary:hover { background: #1e40af; }
+.btn-secondary { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+.btn-secondary:hover { background: #e5e7eb; }
+.btn-danger    { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.btn-danger:hover { background: #fee2e2; }
+.btn-sm { padding: .3rem .65rem; font-size: .8rem; }
+
+.alert-flash {
+    padding: .75rem 1rem;
+    border-radius: 8px;
+    font-size: .875rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid transparent;
+}
+.alert-success { background: #f0fdf4; color: #166534; border-color: #bbf7d0; }
+.alert-error   { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+
+/* Tabla listado */
+.list-card {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.07);
+    overflow: hidden;
+}
+
+.list-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .875rem;
+}
+
+.list-table th {
+    text-align: left;
+    padding: .75rem 1rem;
+    background: #f9fafb;
+    color: #6b7280;
+    font-size: .75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.list-table td {
+    padding: .75rem 1rem;
+    border-bottom: 1px solid #f3f4f6;
+    color: #374151;
+    vertical-align: middle;
+}
+
+.list-table tr:last-child td { border-bottom: none; }
+.list-table tr:hover td { background: #fafafa; }
+
+.list-table .actions { display: flex; gap: .4rem; }
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #9ca3af;
+    font-size: .9rem;
+}
+
+/* Formulario */
+.form-card {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.07);
+    padding: 2rem;
+    max-width: 680px;
+}
+
+.form-grid { display: grid; gap: 1.1rem; }
+.form-grid-2 { grid-template-columns: 1fr 1fr; }
+.form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+@media (max-width: 600px) {
+    .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+}
+
+.form-group { display: flex; flex-direction: column; gap: .35rem; }
+
+.form-group label {
+    font-size: .8rem;
+    font-weight: 600;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    padding: .6rem .85rem;
+    border: 1.5px solid #d1d5db;
+    border-radius: 7px;
+    font-size: .9rem;
+    font-family: inherit;
+    color: #111827;
+    background: #fff;
+    transition: border-color .15s;
+    outline: none;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus { border-color: #1d4ed8; }
+
+.form-group textarea { resize: vertical; min-height: 80px; }
+
+.form-hint { font-size: .75rem; color: #9ca3af; }
+
+.form-section-title {
+    font-size: .75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: #6b7280;
+    padding-bottom: .5rem;
+    border-bottom: 1px solid #e5e7eb;
+    margin-bottom: .25rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: .75rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f3f4f6;
+    margin-top: 1rem;
+}
+
+/* Badge estado */
+.badge { display: inline-block; padding: .2rem .6rem; border-radius: 20px; font-size: .72rem; font-weight: 600; }
+.badge-activo   { background: #d1fae5; color: #065f46; }
+.badge-cerrado  { background: #f3f4f6; color: #6b7280; }
+.badge-porcino  { background: #fce7f3; color: #9d174d; }
+.badge-aviar    { background: #fffbeb; color: #92400e; }
+.badge-vacuno   { background: #dbeafe; color: #1e40af; }
+.badge-ovino    { background: #f0fdf4; color: #166534; }
+.badge-caprino  { background: #fef3c7; color: #78350f; }
+
+/* Barra stock silo */
+.stock-bar-wrap { background: #e5e7eb; border-radius: 99px; height: 6px; width: 100px; }
+.stock-bar-fill { height: 6px; border-radius: 99px; }
+.stock-ok   { background: #16a34a; }
+.stock-warn { background: #d97706; }
+.stock-low  { background: #dc2626; }
+
+/* Checkbox múltiple naves */
+.checkbox-list { display: flex; flex-direction: column; gap: .4rem; max-height: 180px; overflow-y: auto; border: 1.5px solid #d1d5db; border-radius: 7px; padding: .5rem .75rem; }
+.checkbox-list label { display: flex; align-items: center; gap: .5rem; font-size: .875rem; font-weight: 400; text-transform: none; letter-spacing: 0; cursor: pointer; }
+.checkbox-list input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; }
