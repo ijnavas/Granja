@@ -208,10 +208,35 @@ const initZoom = <?= $tieneCoords ? 14 : 6 ?>;
 
 const map = L.map('map').setView([initLat, initLng], initZoom);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+const capa_mapa = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19,
-}).addTo(map);
+});
+
+const capa_satelite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '© Esri — Esri, USGS, NOAA',
+    maxZoom: 19,
+});
+
+const capa_hibrido = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '',
+    maxZoom: 19,
+    opacity: 0.85,
+});
+
+const sateliteConNombres = L.layerGroup([capa_satelite, capa_hibrido]);
+
+capa_satelite.addTo(map);
+
+L.control.layers(
+    {
+        'Mapa':     capa_mapa,
+        'Satélite': capa_satelite,
+        'Híbrido':  sateliteConNombres,
+    },
+    {},
+    { position: 'topright', collapsed: false }
+).addTo(map);
 
 let marker = null;
 
