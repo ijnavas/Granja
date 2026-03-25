@@ -108,14 +108,18 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
             <div class="form-grid form-grid-3">
                 <div class="form-group">
                     <label>Nº animales *</label>
-                    <input type="number" name="num_animales" min="1" required
-                           value="<?= e($lote['num_animales'] ?? '') ?>" placeholder="200">
+                    <input type="number" name="num_animales" id="numAnimales" min="1" required
+                           value="<?= e($lote['num_animales'] ?? '') ?>"
+                           placeholder="200"
+                           oninput="calcularPesoIndividual()">
                 </div>
                 <div class="form-group">
                     <label>Peso medio entrada (kg)</label>
-                    <input type="number" name="peso_entrada_kg" step="0.001" min="0"
-                           value="<?= e($lote['peso_entrada_kg'] ?? '') ?>" placeholder="6.500">
-                    <span class="form-hint">Según tabla de crecimiento</span>
+                    <input type="number" name="peso_entrada_kg" id="pesoEntrada" step="0.001" min="0"
+                           value="<?= e($lote['peso_entrada_kg'] ?? '') ?>"
+                           placeholder="0.000"
+                           oninput="calcularPesoIndividual()">
+                    <span class="form-hint" id="pesoIndividualHint">Según tabla de crecimiento</span>
                 </div>
                 <div class="form-group">
                     <label>Fecha entrada granja</label>
@@ -219,6 +223,22 @@ function actualizarCodigo() {
     const codigo = 'L ' + week + '/' + year + (sufijo ? ' ' + sufijo : '');
     const preview = document.getElementById('codigoPreview');
     if (preview) preview.value = codigo;
+}
+
+function calcularPesoIndividual() {
+    const num   = parseFloat(document.getElementById('numAnimales').value) || 0;
+    const peso  = parseFloat(document.getElementById('pesoEntrada').value) || 0;
+    const hint  = document.getElementById('pesoIndividualHint');
+    if (num > 0 && peso > 0) {
+        const individual = (peso / num).toFixed(3);
+        hint.textContent = 'Peso individual: ' + individual + ' kg/animal';
+        hint.style.color = '#1d4ed8';
+        hint.style.fontWeight = '600';
+    } else {
+        hint.textContent = 'Según tabla de crecimiento';
+        hint.style.color = '';
+        hint.style.fontWeight = '';
+    }
 }
 
 function getISOWeek(d) {

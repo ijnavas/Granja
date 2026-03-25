@@ -64,21 +64,6 @@ class Lote
         return $sufijo ? "{$base} {$sufijo}" : $base;
     }
 
-    public function codigoExiste(string $codigo, ?int $exceptId = null): bool
-    {
-        $sql = "SELECT COUNT(*) FROM lotes WHERE codigo = :codigo";
-        $params = ['codigo' => $codigo];
-        if ($exceptId) {
-            $sql .= " AND id != :id";
-            $params['id'] = $exceptId;
-        }
-        return (int) $this->db->prepare($sql)->execute($params) && 
-               (int) $this->db->query("SELECT FOUND_ROWS()")->fetchColumn() >= 0
-               ? (bool) $this->db->prepare($sql)->execute($params) 
-               : false;
-        // Versión simple:
-    }
-
     public function codigoExisteSimple(string $codigo, ?int $exceptId = null): bool
     {
         $sql = "SELECT COUNT(*) FROM lotes WHERE codigo = :codigo";
