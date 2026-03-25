@@ -45,8 +45,8 @@ class Granja
     public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO granjas (usuario_id, nombre, codigo_rega, capacidad_max, direccion, municipio, provincia, codigo_postal, tipo_produccion, latitud, longitud)
-            VALUES (:usuario_id, :nombre, :codigo_rega, :capacidad_max, :direccion, :municipio, :provincia, :codigo_postal, :tipo_produccion, :latitud, :longitud)
+            INSERT INTO granjas (usuario_id, nombre, codigo_rega, capacidad_max, especie, direccion, municipio, provincia, codigo_postal, tipo_produccion, latitud, longitud)
+            VALUES (:usuario_id, :nombre, :codigo_rega, :capacidad_max, :especie, :direccion, :municipio, :provincia, :codigo_postal, :tipo_produccion, :latitud, :longitud)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();
@@ -59,6 +59,7 @@ class Granja
                 nombre          = :nombre,
                 codigo_rega     = :codigo_rega,
                 capacidad_max   = :capacidad_max,
+                especie         = :especie,
                 direccion       = :direccion,
                 municipio       = :municipio,
                 provincia       = :provincia,
@@ -84,7 +85,7 @@ class Granja
     public function selectOptions(int $userId): array
     {
         $stmt = $this->db->prepare("
-            SELECT id, nombre FROM granjas WHERE usuario_id = :uid AND activa = 1 ORDER BY nombre
+            SELECT id, nombre, especie FROM granjas WHERE usuario_id = :uid AND activa = 1 ORDER BY nombre
         ");
         $stmt->execute(['uid' => $userId]);
         return $stmt->fetchAll();

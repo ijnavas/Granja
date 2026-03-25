@@ -5,17 +5,23 @@ namespace App\Controllers;
 
 use App\Models\Lote;
 use App\Models\Nave;
+use App\Models\Granja;
+use App\Models\RazaPorcino;
 use App\Core\Session;
 
 class LoteController extends BaseController
 {
-    private Lote $model;
-    private Nave $naveModel;
+    private Lote        $model;
+    private Nave        $naveModel;
+    private Granja      $granjaModel;
+    private RazaPorcino $razaModel;
 
     public function __construct()
     {
-        $this->model     = new Lote();
-        $this->naveModel = new Nave();
+        $this->model       = new Lote();
+        $this->naveModel   = new Nave();
+        $this->granjaModel = new Granja();
+        $this->razaModel   = new RazaPorcino();
     }
 
     public function index(): void
@@ -32,7 +38,9 @@ class LoteController extends BaseController
         $this->view('lotes/form', [
             'lote'       => null,
             'naves'      => $this->naveModel->selectOptions($uid),
+            'granjas'    => $this->granjaModel->selectOptions($uid),
             'tipos'      => $this->model->tiposAnimal(),
+            'razas'      => $this->razaModel->allParaUsuario($uid),
             'pageTitle'  => 'Nuevo lote',
             'codigoAuto' => '',
             'error'      => Session::getFlash('error'),
@@ -53,14 +61,12 @@ class LoteController extends BaseController
             $this->redirect('lotes/crear');
         }
 
-        $codigo = Lote::generarCodigo($fechaNac);
+        $razaId  = $this->post('raza_id') ? (int)$this->post('raza_id') : null;
+        $codigo  = Lote::generarCodigo($fechaNac, $razaId ? $this->razaModel->sufijoCodigo($razaId) : null);
 
-        // Si ya existe ese código, añadir sufijo
         if ($this->model->codigoExisteSimple($codigo)) {
             $sufijo = 2;
-            while ($this->model->codigoExisteSimple($codigo . "-{$sufijo}")) {
-                $sufijo++;
-            }
+            while ($this->model->codigoExisteSimple($codigo . "-{$sufijo}")) $sufijo++;
             $codigo .= "-{$sufijo}";
         }
 
@@ -69,6 +75,7 @@ class LoteController extends BaseController
         $this->model->create([
             'nave_id'         => $naveId ? (int)$naveId : null,
             'tipo_animal_id'  => (int)$this->post('tipo_animal_id'),
+            'raza_id'         => $razaId,
             'codigo'          => $codigo,
             'num_animales'    => (int)$this->post('num_animales', 0),
             'peso_entrada_kg' => (float)$this->post('peso_entrada_kg', 0),
@@ -90,7 +97,9 @@ class LoteController extends BaseController
         $this->view('lotes/form', [
             'lote'       => $lote,
             'naves'      => $this->naveModel->selectOptions($uid),
+            'granjas'    => $this->granjaModel->selectOptions($uid),
             'tipos'      => $this->model->tiposAnimal(),
+            'razas'      => $this->razaModel->allParaUsuario($uid),
             'pageTitle'  => 'Editar lote ' . $lote['codigo'],
             'codigoAuto' => $lote['codigo'],
             'error'      => Session::getFlash('error'),
@@ -106,10 +115,10 @@ class LoteController extends BaseController
         }
 
         $naveId = $this->post('nave_id') ?: null;
-
         $this->model->update((int)$id, Session::get('usuario_id'), [
             'nave_id'         => $naveId ? (int)$naveId : null,
             'tipo_animal_id'  => (int)$this->post('tipo_animal_id'),
+            'raza_id'         => $this->post('raza_id') ? (int)$this->post('raza_id') : null,
             'num_animales'    => (int)$this->post('num_animales', 0),
             'peso_entrada_kg' => (float)$this->post('peso_entrada_kg', 0),
             'fecha_entrada'   => $this->postString('fecha_entrada'),
@@ -126,17 +135,30 @@ class LoteController extends BaseController
         if (!Session::validateCsrf($this->postString('csrf_token'))) {
             $this->redirect('lotes');
         }
-
         $cantidad = abs((int)$this->post('cantidad', 0));
-        $tipo     = $this->postString('tipo'); // añadir | reducir
-
+        $tipo     = $this->postString('tipo');
         if ($cantidad > 0 && in_array($tipo, ['añadir', 'reducir'])) {
             $this->model->ajustarAnimales((int)$id, $cantidad, $tipo);
             $accion = $tipo === 'añadir' ? 'añadidos' : 'reducidos';
             Session::flash('success', "{$cantidad} animales {$accion} correctamente.");
         }
-
         $this->redirect('lotes');
+    }
+
+    // ── Crear raza personalizada (AJAX) ──────────────────────────
+    public function crearRaza(): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $uid        = Session::get('usuario_id');
+        $nombre     = trim($_POST['nombre'] ?? '');
+        $porcentaje = trim($_POST['porcentaje'] ?? '');
+        if (strlen($nombre) < 2) {
+            echo json_encode(['ok' => false, 'msg' => 'Nombre demasiado corto']);
+            return;
+        }
+        $id = $this->razaModel->create($uid, $nombre, $porcentaje ?: null);
+        echo json_encode(['ok' => true, 'id' => $id, 'nombre' => capitalizar($nombre), 'porcentaje' => $porcentaje]);
     }
 
     public function delete(string $id): void

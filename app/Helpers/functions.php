@@ -90,10 +90,38 @@ function guest_only(): void
 }
 
 /**
- * Datos del usuario en sesión
+ * Rol del usuario en sesión
  */
-function auth_user(): ?array
+function auth_rol(): string
 {
+    return Session::get('usuario_rol', 'usuario');
+}
+
+function es_admin(): bool    { return auth_rol() === 'admin'; }
+function es_director(): bool { return in_array(auth_rol(), ['admin', 'director']); }
+
+/**
+ * Aborta con 403 si el usuario no tiene el rol mínimo requerido
+ */
+function require_rol(string $rolMinimo): void
+{
+    $jerarquia = ['usuario' => 1, 'director' => 2, 'admin' => 3];
+    $actual    = $jerarquia[auth_rol()] ?? 1;
+    $requerido = $jerarquia[$rolMinimo] ?? 1;
+
+    if ($actual < $requerido) {
+        http_response_code(403);
+        die('<h1 style="font-family:sans-serif;padding:2rem">403 — Sin permiso para realizar esta acción.</h1>');
+    }
+}
+
+/**
+ * Pone en mayúscula la primera letra de cada palabra en un string
+ */
+function capitalizar(string $texto): string
+{
+    return mb_convert_case(mb_strtolower(trim($texto)), MB_CASE_TITLE, 'UTF-8');
+}
     if (!Session::has('usuario_id')) return null;
     return [
         'id'     => Session::get('usuario_id'),

@@ -65,6 +65,7 @@ class AuthController extends BaseController
         Session::set('usuario_id',     $user['id']);
         Session::set('usuario_nombre', $user['nombre']);
         Session::set('usuario_email',  $user['email']);
+        Session::set('usuario_rol',    $user['rol'] ?? 'usuario');
 
         $this->redirect('dashboard');
     }

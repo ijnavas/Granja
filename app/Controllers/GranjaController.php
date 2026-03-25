@@ -22,6 +22,18 @@ class GranjaController extends BaseController
         $this->view('granjas/index', ['granjas' => $granjas, 'pageTitle' => 'Granjas']);
     }
 
+    public function show(string $id): void
+    {
+        auth_required();
+        $granja = $this->model->find((int)$id, Session::get('usuario_id'));
+        if (!$granja) $this->redirect('granjas');
+        $this->view('granjas/show', [
+            'granja'    => $granja,
+            'pageTitle' => e($granja['nombre']),
+            'success'   => Session::getFlash('success'),
+        ]);
+    }
+
     public function create(): void
     {
         auth_required();
@@ -39,27 +51,25 @@ class GranjaController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect('granjas/crear');
         }
-
-        $nombre = $this->postString('nombre');
+        $nombre = capitalizar($this->postString('nombre'));
         if (strlen($nombre) < 2) {
             Session::flash('error', 'El nombre es obligatorio.');
             $this->redirect('granjas/crear');
         }
-
         $this->model->create([
             'usuario_id'      => Session::get('usuario_id'),
             'nombre'          => $nombre,
             'codigo_rega'     => $this->postString('codigo_rega'),
             'capacidad_max'   => $this->post('capacidad_max') ? (int)$this->post('capacidad_max') : null,
-            'direccion'       => $this->postString('direccion'),
-            'municipio'       => $this->postString('municipio'),
-            'provincia'       => $this->postString('provincia'),
+            'especie'         => $this->postString('especie') ?: null,
+            'direccion'       => capitalizar($this->postString('direccion')),
+            'municipio'       => capitalizar($this->postString('municipio')),
+            'provincia'       => capitalizar($this->postString('provincia')),
             'codigo_postal'   => $this->postString('codigo_postal'),
             'tipo_produccion' => $this->postString('tipo_produccion'),
             'latitud'         => $this->post('latitud')  ? (float)$this->post('latitud')  : null,
             'longitud'        => $this->post('longitud') ? (float)$this->post('longitud') : null,
         ]);
-
         Session::flash('success', 'Granja creada correctamente.');
         $this->redirect('granjas');
     }
@@ -69,7 +79,6 @@ class GranjaController extends BaseController
         auth_required();
         $granja = $this->model->find((int)$id, Session::get('usuario_id'));
         if (!$granja) $this->redirect('granjas');
-
         $this->view('granjas/form', [
             'granja'    => $granja,
             'pageTitle' => 'Editar granja',
@@ -84,33 +93,32 @@ class GranjaController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect("granjas/{$id}/editar");
         }
-
-        $nombre = $this->postString('nombre');
+        $nombre = capitalizar($this->postString('nombre'));
         if (strlen($nombre) < 2) {
             Session::flash('error', 'El nombre es obligatorio.');
             $this->redirect("granjas/{$id}/editar");
         }
-
         $this->model->update((int)$id, Session::get('usuario_id'), [
             'nombre'          => $nombre,
             'codigo_rega'     => $this->postString('codigo_rega'),
             'capacidad_max'   => $this->post('capacidad_max') ? (int)$this->post('capacidad_max') : null,
-            'direccion'       => $this->postString('direccion'),
-            'municipio'       => $this->postString('municipio'),
-            'provincia'       => $this->postString('provincia'),
+            'especie'         => $this->postString('especie') ?: null,
+            'direccion'       => capitalizar($this->postString('direccion')),
+            'municipio'       => capitalizar($this->postString('municipio')),
+            'provincia'       => capitalizar($this->postString('provincia')),
             'codigo_postal'   => $this->postString('codigo_postal'),
             'tipo_produccion' => $this->postString('tipo_produccion'),
             'latitud'         => $this->post('latitud')  ? (float)$this->post('latitud')  : null,
             'longitud'        => $this->post('longitud') ? (float)$this->post('longitud') : null,
         ]);
-
         Session::flash('success', 'Granja actualizada correctamente.');
-        $this->redirect('granjas');
+        $this->redirect("granjas/{$id}");
     }
 
     public function delete(string $id): void
     {
         auth_required();
+        require_rol('admin');
         $this->model->delete((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Granja eliminada.');
         $this->redirect('granjas');

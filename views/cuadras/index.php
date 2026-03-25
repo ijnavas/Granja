@@ -35,7 +35,7 @@
 <?php else: ?>
     <table class="list-table">
         <thead>
-            <tr>
+            <tr style="cursor:pointer" onclick="window.location='<?= base_url("cuadras/{$c['id']}") ?>'">
                 <th>Cuadra</th>
                 <th>Nave</th>
                 <th>Granja</th>
@@ -52,7 +52,7 @@
                 $pct   = $c['capacidad_maxima'] > 0 ? round(($c['ocupacion_actual'] / $c['capacidad_maxima']) * 100) : 0;
                 $clase = $pct >= 90 ? 'stock-low' : ($pct >= 60 ? 'stock-warn' : 'stock-ok');
             ?>
-            <tr>
+            <tr style="cursor:pointer" onclick="window.location='<?= base_url("cuadras/{$c['id']}") ?>'">
                 <td>
                     <a href="<?= base_url("cuadras/{$c['id']}") ?>"
                        style="font-weight:600;color:#1d4ed8;text-decoration:none">

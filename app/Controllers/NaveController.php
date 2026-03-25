@@ -9,7 +9,7 @@ use App\Core\Session;
 
 class NaveController extends BaseController
 {
-    private Nave  $model;
+    private Nave   $model;
     private Granja $granjaModel;
 
     public function __construct()
@@ -23,7 +23,27 @@ class NaveController extends BaseController
         auth_required();
         $uid   = Session::get('usuario_id');
         $naves = $this->model->allByUsuario($uid);
-        $this->view('naves/index', ['naves' => $naves, 'pageTitle' => 'Naves']);
+        $totales = $this->model->totales($uid);
+        $this->view('naves/index', [
+            'naves'     => $naves,
+            'totales'   => $totales,
+            'pageTitle' => 'Naves',
+        ]);
+    }
+
+    public function show(string $id): void
+    {
+        auth_required();
+        $uid  = Session::get('usuario_id');
+        $nave = $this->model->find((int)$id, $uid);
+        if (!$nave) $this->redirect('naves');
+        $cuadras = $this->model->cuadrasDeNave((int)$id);
+        $this->view('naves/show', [
+            'nave'      => $nave,
+            'cuadras'   => $cuadras,
+            'pageTitle' => e($nave['nombre']),
+            'success'   => Session::getFlash('success'),
+        ]);
     }
 
     public function create(): void
@@ -45,13 +65,11 @@ class NaveController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect('naves/crear');
         }
-
-        $nombre = $this->postString('nombre');
+        $nombre = capitalizar($this->postString('nombre'));
         if (strlen($nombre) < 1 || !$this->post('granja_id')) {
             Session::flash('error', 'Nombre y granja son obligatorios.');
             $this->redirect('naves/crear');
         }
-
         $this->model->create([
             'granja_id'        => (int)$this->post('granja_id'),
             'nombre'           => $nombre,
@@ -62,7 +80,6 @@ class NaveController extends BaseController
             'largo_m'          => $this->post('largo_m') ?: null,
             'descripcion'      => $this->postString('descripcion'),
         ]);
-
         Session::flash('success', 'Nave creada correctamente.');
         $this->redirect('naves');
     }
@@ -73,7 +90,6 @@ class NaveController extends BaseController
         $uid  = Session::get('usuario_id');
         $nave = $this->model->find((int)$id, $uid);
         if (!$nave) $this->redirect('naves');
-
         $this->view('naves/form', [
             'nave'      => $nave,
             'granjas'   => $this->granjaModel->selectOptions($uid),
@@ -89,9 +105,8 @@ class NaveController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect("naves/{$id}/editar");
         }
-
         $this->model->update((int)$id, Session::get('usuario_id'), [
-            'nombre'           => $this->postString('nombre'),
+            'nombre'           => capitalizar($this->postString('nombre')),
             'especie'          => $this->postString('especie'),
             'capacidad_maxima' => (int)$this->post('capacidad_maxima', 0),
             'ancho_m'          => $this->post('ancho_m') ?: null,
@@ -99,14 +114,14 @@ class NaveController extends BaseController
             'largo_m'          => $this->post('largo_m') ?: null,
             'descripcion'      => $this->postString('descripcion'),
         ]);
-
         Session::flash('success', 'Nave actualizada.');
-        $this->redirect('naves');
+        $this->redirect("naves/{$id}");
     }
 
     public function delete(string $id): void
     {
         auth_required();
+        require_rol('director');
         $this->model->delete((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Nave eliminada.');
         $this->redirect('naves');

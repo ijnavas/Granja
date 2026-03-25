@@ -90,7 +90,39 @@ class Nave
         return $stmt->execute(['id' => $id, 'uid' => $userId]);
     }
 
-    public function selectOptions(int $userId, ?int $granjaId = null): array
+    public function totales(int $userId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT
+                COALESCE(SUM(n.capacidad_maxima), 0)           AS capacidad_total,
+                COALESCE(SUM(lotes_nave.ocupacion), 0)         AS ocupacion_total
+            FROM naves n
+            JOIN granjas g ON n.granja_id = g.id
+            LEFT JOIN (
+                SELECT nave_id, SUM(num_animales) AS ocupacion
+                FROM lotes WHERE estado = 'activo' GROUP BY nave_id
+            ) lotes_nave ON lotes_nave.nave_id = n.id
+            WHERE g.usuario_id = :uid AND n.activa = 1
+        ");
+        $stmt->execute(['uid' => $userId]);
+        return $stmt->fetch() ?: ['capacidad_total' => 0, 'ocupacion_total' => 0];
+    }
+
+    public function cuadrasDeNave(int $naveId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT c.*,
+                   COALESCE(SUM(cl.num_animales), 0) AS ocupacion_actual,
+                   COUNT(DISTINCT cl.lote_id)         AS num_lotes
+            FROM cuadras c
+            LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
+            WHERE c.nave_id = :nave_id AND c.activa = 1
+            GROUP BY c.id
+            ORDER BY c.nombre
+        ");
+        $stmt->execute(['nave_id' => $naveId]);
+        return $stmt->fetchAll();
+    }
     {
         $sql = "
             SELECT n.id, n.nombre, g.nombre AS granja_nombre

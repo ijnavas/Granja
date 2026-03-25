@@ -109,6 +109,17 @@ $tieneCoords = !empty($granja['latitud']) && !empty($granja['longitud']);
 
             <div class="form-grid form-grid-2">
                 <div class="form-group">
+                    <label>Especie principal *</label>
+                    <select name="especie" required>
+                        <option value="">— Selecciona especie —</option>
+                        <?php foreach (['porcino','aviar','vacuno','ovino','caprino','otro'] as $esp): ?>
+                            <option value="<?= $esp ?>" <?= ($granja['especie'] ?? '') === $esp ? 'selected' : '' ?>>
+                                <?= ucfirst($esp) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Tipo de producción</label>
                     <select name="tipo_produccion">
                         <option value="">— Sin especificar —</option>
@@ -119,12 +130,13 @@ $tieneCoords = !empty($granja['latitud']) && !empty($granja['longitud']);
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Capacidad máxima (animales)</label>
-                    <input type="number" name="capacidad_max" min="0"
-                           value="<?= e($granja['capacidad_max'] ?? '') ?>"
-                           placeholder="500">
-                </div>
+            </div>
+
+            <div class="form-group" style="max-width:220px">
+                <label>Capacidad máxima (animales)</label>
+                <input type="number" name="capacidad_max" min="0"
+                       value="<?= e($granja['capacidad_max'] ?? '') ?>"
+                       placeholder="500">
             </div>
 
             <!-- UBICACIÓN -->
@@ -279,4 +291,13 @@ function buscarDireccion() {
     })
     .catch(() => alert('Error al buscar. Comprueba tu conexión.'));
 }
+
+// Autocapitalizar primera letra en inputs de texto
+document.querySelectorAll('input[type=text]').forEach(input => {
+    input.addEventListener('blur', function() {
+        if (this.value.length > 0) {
+            this.value = this.value.charAt(0).toUpperCase() + this.value.slice(1);
+        }
+    });
+});
 </script>

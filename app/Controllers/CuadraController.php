@@ -21,7 +21,6 @@ class CuadraController extends BaseController
         $this->loteModel = new Lote();
     }
 
-    // ── Listado ──────────────────────────────────────────────────
     public function index(): void
     {
         auth_required();
@@ -29,37 +28,36 @@ class CuadraController extends BaseController
         $naveId  = isset($_GET['nave']) ? (int)$_GET['nave'] : null;
         $cuadras = $this->model->allByUsuario($uid, $naveId);
         $naves   = $this->naveModel->selectOptions($uid);
-
         $this->view('cuadras/index', [
-            'cuadras'       => $cuadras,
-            'naves'         => $naves,
-            'filtroNaveId'  => $naveId,
-            'pageTitle'     => 'Cuadras',
+            'cuadras'      => $cuadras,
+            'naves'        => $naves,
+            'filtroNaveId' => $naveId,
+            'pageTitle'    => 'Cuadras',
+            'success'      => Session::getFlash('success'),
         ]);
     }
 
-    // ── Detalle cuadra con sus lotes ─────────────────────────────
     public function show(string $id): void
     {
         auth_required();
         $uid    = Session::get('usuario_id');
         $cuadra = $this->model->find((int)$id, $uid);
         if (!$cuadra) $this->redirect('cuadras');
-
-        $lotes         = $this->model->lotesEnCuadra((int)$id);
-        $lotesDisponibles = $this->loteModel->allByUsuario($uid);
-
+        $lotes            = $this->model->lotesEnCuadra((int)$id);
+        $lotesDisponibles = array_filter(
+            $this->loteModel->allByUsuario($uid),
+            fn($l) => $l['estado'] === 'activo'
+        );
         $this->view('cuadras/show', [
             'cuadra'           => $cuadra,
             'lotes'            => $lotes,
-            'lotesDisponibles' => array_filter($lotesDisponibles, fn($l) => $l['estado'] === 'activo'),
+            'lotesDisponibles' => $lotesDisponibles,
             'pageTitle'        => 'Cuadra ' . $cuadra['nombre'],
             'success'          => Session::getFlash('success'),
             'error'            => Session::getFlash('error'),
         ]);
     }
 
-    // ── Crear ────────────────────────────────────────────────────
     public function create(): void
     {
         auth_required();
@@ -79,34 +77,82 @@ class CuadraController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect('cuadras/crear');
         }
-
         if (!$this->post('nave_id') || !$this->postString('nombre')) {
             Session::flash('error', 'Nombre y nave son obligatorios.');
             $this->redirect('cuadras/crear');
         }
-
         $this->model->create([
             'nave_id'          => (int)$this->post('nave_id'),
-            'nombre'           => $this->postString('nombre'),
+            'nombre'           => capitalizar($this->postString('nombre')),
             'capacidad_maxima' => (int)$this->post('capacidad_maxima', 0),
             'ancho_m'          => $this->post('ancho_m') ?: null,
             'alto_m'           => $this->post('alto_m')  ?: null,
             'largo_m'          => $this->post('largo_m') ?: null,
             'descripcion'      => $this->postString('descripcion'),
         ]);
-
         Session::flash('success', 'Cuadra creada correctamente.');
         $this->redirect('cuadras');
     }
 
-    // ── Editar ───────────────────────────────────────────────────
+    // ── Creación masiva ──────────────────────────────────────────
+    public function createMasiva(): void
+    {
+        auth_required();
+        $uid = Session::get('usuario_id');
+        $this->view('cuadras/masiva', [
+            'naves'     => $this->naveModel->selectOptions($uid),
+            'pageTitle' => 'Crear cuadras en lote',
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function storeMasiva(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('cuadras/masiva');
+        }
+
+        $naveId    = (int)$this->post('nave_id');
+        $cantidad  = (int)$this->post('cantidad', 0);
+        $prefijo   = capitalizar($this->postString('prefijo'));
+        $inicio    = (int)$this->post('inicio', 1);
+        $capacidad = (int)$this->post('capacidad_maxima', 0);
+        $ancho     = $this->post('ancho_m') ?: null;
+        $alto      = $this->post('alto_m')  ?: null;
+        $largo     = $this->post('largo_m') ?: null;
+        $ceros     = (int)$this->post('ceros', 0); // relleno de ceros: 01, 02...
+
+        if (!$naveId || $cantidad < 1 || $cantidad > 100) {
+            Session::flash('error', 'Nave obligatoria y cantidad entre 1 y 100.');
+            $this->redirect('cuadras/masiva');
+        }
+
+        for ($i = $inicio; $i < $inicio + $cantidad; $i++) {
+            $numero = $ceros > 0 ? str_pad((string)$i, $ceros, '0', STR_PAD_LEFT) : (string)$i;
+            $nombre = trim($prefijo . ' ' . $numero);
+            $this->model->create([
+                'nave_id'          => $naveId,
+                'nombre'           => $nombre,
+                'capacidad_maxima' => $capacidad,
+                'ancho_m'          => $ancho,
+                'alto_m'           => $alto,
+                'largo_m'          => $largo,
+                'descripcion'      => null,
+            ]);
+        }
+
+        Session::flash('success', "Se han creado {$cantidad} cuadras correctamente.");
+        $this->redirect('cuadras?nave=' . $naveId);
+    }
+
     public function edit(string $id): void
     {
         auth_required();
         $uid    = Session::get('usuario_id');
         $cuadra = $this->model->find((int)$id, $uid);
         if (!$cuadra) $this->redirect('cuadras');
-
         $this->view('cuadras/form', [
             'cuadra'    => $cuadra,
             'naves'     => $this->naveModel->selectOptions($uid),
@@ -122,31 +168,28 @@ class CuadraController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect("cuadras/{$id}/editar");
         }
-
         $this->model->update((int)$id, Session::get('usuario_id'), [
             'nave_id'          => (int)$this->post('nave_id'),
-            'nombre'           => $this->postString('nombre'),
+            'nombre'           => capitalizar($this->postString('nombre')),
             'capacidad_maxima' => (int)$this->post('capacidad_maxima', 0),
             'ancho_m'          => $this->post('ancho_m') ?: null,
             'alto_m'           => $this->post('alto_m')  ?: null,
             'largo_m'          => $this->post('largo_m') ?: null,
             'descripcion'      => $this->postString('descripcion'),
         ]);
-
         Session::flash('success', 'Cuadra actualizada.');
-        $this->redirect('cuadras');
+        $this->redirect("cuadras/{$id}");
     }
 
-    // ── Eliminar ─────────────────────────────────────────────────
     public function delete(string $id): void
     {
         auth_required();
+        require_rol('director');
         $this->model->delete((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Cuadra eliminada.');
         $this->redirect('cuadras');
     }
 
-    // ── Asignar lote a cuadra ────────────────────────────────────
     public function asignarLote(string $id): void
     {
         auth_required();
@@ -154,23 +197,19 @@ class CuadraController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect("cuadras/{$id}");
         }
-
         $loteId      = (int)$this->post('lote_id');
         $numAnimales = (int)$this->post('num_animales', 0);
         $fecha       = $this->postString('fecha_entrada') ?: date('Y-m-d');
         $obs         = $this->postString('observaciones');
-
         if (!$loteId || $numAnimales < 1) {
             Session::flash('error', 'Lote y número de animales son obligatorios.');
             $this->redirect("cuadras/{$id}");
         }
-
         $this->model->asignarLote((int)$id, $loteId, $numAnimales, $fecha, $obs);
         Session::flash('success', 'Lote asignado correctamente.');
         $this->redirect("cuadras/{$id}");
     }
 
-    // ── Retirar lote de cuadra ───────────────────────────────────
     public function retirarLote(string $id): void
     {
         auth_required();
@@ -178,7 +217,6 @@ class CuadraController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect("cuadras/{$id}");
         }
-
         $cuadraLoteId = (int)$this->post('cuadra_lote_id');
         if ($cuadraLoteId) {
             $this->model->retirarLote($cuadraLoteId);

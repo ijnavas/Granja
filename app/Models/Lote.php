@@ -52,15 +52,16 @@ class Lote
     }
 
     /**
-     * Genera código tipo L 26/17 a partir de fecha de nacimiento
-     * L YY/WW donde YY = año 2 dígitos, WW = semana ISO
+     * Genera código tipo L 26/17 o L 26/17 IB
+     * sufijo = 'IB', 'DU', etc. según la raza
      */
-    public static function generarCodigo(string $fechaNacimiento): string
+    public static function generarCodigo(string $fechaNacimiento, ?string $sufijo = null): string
     {
         $dt   = new \DateTime($fechaNacimiento);
-        $year = $dt->format('y');      // 2 dígitos
-        $week = $dt->format('W');      // semana ISO con cero inicial
-        return "L {$year}/{$week}";
+        $year = $dt->format('y');
+        $week = $dt->format('W');
+        $base = "L {$year}/{$week}";
+        return $sufijo ? "{$base} {$sufijo}" : $base;
     }
 
     public function codigoExiste(string $codigo, ?int $exceptId = null): bool
@@ -94,8 +95,8 @@ class Lote
     public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO lotes (nave_id, tipo_animal_id, codigo, num_animales, peso_entrada_kg, fecha_entrada, observaciones)
-            VALUES (:nave_id, :tipo_animal_id, :codigo, :num_animales, :peso_entrada_kg, :fecha_entrada, :observaciones)
+            INSERT INTO lotes (nave_id, tipo_animal_id, raza_id, codigo, num_animales, peso_entrada_kg, fecha_entrada, observaciones)
+            VALUES (:nave_id, :tipo_animal_id, :raza_id, :codigo, :num_animales, :peso_entrada_kg, :fecha_entrada, :observaciones)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();
@@ -109,6 +110,7 @@ class Lote
             LEFT JOIN granjas g ON n.granja_id = g.id
             SET l.nave_id         = :nave_id,
                 l.tipo_animal_id  = :tipo_animal_id,
+                l.raza_id         = :raza_id,
                 l.num_animales    = :num_animales,
                 l.peso_entrada_kg = :peso_entrada_kg,
                 l.fecha_entrada   = :fecha_entrada,

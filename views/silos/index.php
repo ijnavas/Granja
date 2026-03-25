@@ -16,7 +16,7 @@
 <?php else: ?>
     <table class="list-table">
         <thead>
-            <tr>
+            <tr style="cursor:pointer" onclick="window.location='<?= base_url("silos/{$s['id']}") ?>'">
                 <th>Silo</th>
                 <th>Granja</th>
                 <th>Stock actual</th>
@@ -33,7 +33,7 @@
                 $alerta = $s['stock_actual_kg'] <= $s['stock_minimo_kg'];
                 $clase  = $alerta ? 'stock-low' : ($pct < 30 ? 'stock-warn' : 'stock-ok');
             ?>
-            <tr>
+            <tr style="cursor:pointer" onclick="window.location='<?= base_url("silos/{$s['id']}") ?>'">
                 <td>
                     <strong><?= e($s['nombre']) ?></strong>
                     <?php if ($alerta): ?>
