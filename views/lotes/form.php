@@ -306,7 +306,7 @@ async function calcularValoracion() {
         return;
     }
 
-    const semana = Math.floor((new Date() - new Date(fechaNac.value)) / (7 * 24 * 3600 * 1000));
+    const semana = Math.ceil((new Date() - new Date(fechaNac.value)) / (7 * 24 * 3600 * 1000));
     const num    = parseInt(numEl.value) || 0;
 
     if (semana < 0 || num < 1) { panel.style.display = 'none'; return; }

@@ -24,7 +24,7 @@ class Lote
                    n.nombre   AS nave_nombre,
                    COALESCE(g.nombre, g2.nombre) AS granja_nombre,
                    DATEDIFF(CURDATE(), l.fecha_entrada) AS dias_en_granja,
-                   FLOOR(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7) AS semana_actual,
+                   CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7) AS semana_actual,
                    (SELECT p.peso_medio_kg FROM pesajes p WHERE p.lote_id = l.id ORDER BY p.fecha DESC LIMIT 1) AS ultimo_peso,
                    r.nombre AS raza_nombre,
                    r.identificador AS raza_identificador,
