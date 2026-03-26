@@ -351,14 +351,17 @@ class MovimientoController extends BaseController
                 if ($cantidad > $loteOrigen['num_animales']) {
                     throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote.");
                 }
-                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                // Descontar de cuadra origen si se especificó
+                // Restar animales del lote origen
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                // Restar de cuadra_lote del origen (el nuevo lote RE tendrá sus propias asignaciones)
                 if (!empty($data['cuadra_origen_id'])) {
                     $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
                        ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                     $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
                        ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                 }
+                // Crear sublote RE — crearSubLote copiará las cuadras proporcionales
                 $codigoBase = preg_replace('/ [A-Z]+$/', '', $loteOrigen['codigo']) . ' RE';
                 $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'reposicion', $uid);
                 $data['lote_destino_id'] = $nuevoId;
@@ -368,8 +371,8 @@ class MovimientoController extends BaseController
                 if ($cantidad > $loteOrigen['num_animales']) {
                     throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote RE.");
                 }
-                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                // Descontar de cuadra origen si se especificó
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
                 if (!empty($data['cuadra_origen_id'])) {
                     $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
                        ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
