@@ -195,7 +195,7 @@ class MovimientoController extends BaseController
     }
 
     // ── Lógica de efectos ────────────────────────────────────────
-    private function aplicarMovimiento(string $tipo, array $data, int $uid): void
+    private function aplicarMovimiento(string $tipo, array &$data, int $uid): void
     {
         $db         = \App\Core\Database::getInstance();
         $loteOrigen = $this->loteModel->find($data['lote_origen_id'], $uid);
@@ -206,20 +206,61 @@ class MovimientoController extends BaseController
         switch ($tipo) {
 
             case 'traslado_cuadra':
-                // Actualizar nave del lote
-                if ($data['cuadra_destino_id']) {
-                    $cuadra = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
-                    $cuadra->execute(['id' => $data['cuadra_destino_id']]);
-                    $naveId = $cuadra->fetchColumn();
-                    $db->prepare("UPDATE lotes SET nave_id = :nave WHERE id = :id")
-                       ->execute(['nave' => $naveId, 'id' => $data['lote_origen_id']]);
-                    // Actualizar cuadra_lote
-                    if ($data['cuadra_origen_id']) {
-                        $db->prepare("DELETE FROM cuadra_lote WHERE cuadra_id = :c AND lote_id = :l")
-                           ->execute(['c' => $data['cuadra_origen_id'], 'l' => $data['lote_origen_id']]);
+                if (!$data['cuadra_destino_id']) throw new \Exception('Selecciona una cuadra destino.');
+
+                // Restar animales de la cuadra origen
+                if ($data['cuadra_origen_id']) {
+                    $db->prepare("
+                        UPDATE cuadra_lote
+                        SET num_animales = GREATEST(0, num_animales - :n)
+                        WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1
+                    ")->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+
+                    // Si quedan 0, desactivar
+                    $db->prepare("
+                        UPDATE cuadra_lote SET activo = 0
+                        WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0
+                    ")->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                }
+
+                // Obtener nave de la cuadra destino y actualizar nave del lote
+                $naveDestino = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
+                $naveDestino->execute(['id' => $data['cuadra_destino_id']]);
+                $naveId = $naveDestino->fetchColumn();
+
+                // Añadir animales a la cuadra destino
+                $existeDestino = $db->prepare("
+                    SELECT id FROM cuadra_lote
+                    WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1
+                ");
+                $existeDestino->execute(['cid' => $data['cuadra_destino_id'], 'lid' => $data['lote_origen_id']]);
+                $clId = $existeDestino->fetchColumn();
+
+                if ($clId) {
+                    $db->prepare("
+                        UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1
+                        WHERE id = :id
+                    ")->execute(['n' => $cantidad, 'id' => $clId]);
+                } else {
+                    $db->prepare("
+                        INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada)
+                        VALUES (:cid, :lid, :n, CURDATE())
+                    ")->execute(['cid' => $data['cuadra_destino_id'], 'lid' => $data['lote_origen_id'], 'n' => $cantidad]);
+                }
+
+                // Solo actualizar nave del lote si ya no quedan animales en la nave origen
+                if ($naveId && $loteOrigen['nave_id'] && $naveId != $loteOrigen['nave_id']) {
+                    $stmtResto = $db->prepare("
+                        SELECT COALESCE(SUM(cl.num_animales), 0)
+                        FROM cuadra_lote cl
+                        JOIN cuadras c ON cl.cuadra_id = c.id
+                        WHERE cl.lote_id = :lid AND c.nave_id = :nid AND cl.activo = 1
+                    ");
+                    $stmtResto->execute(['lid' => $data['lote_origen_id'], 'nid' => $loteOrigen['nave_id']]);
+                    if ((int)$stmtResto->fetchColumn() === 0) {
+                        $db->prepare("UPDATE lotes SET nave_id = :nave WHERE id = :id")
+                           ->execute(['nave' => $naveId, 'id' => $data['lote_origen_id']]);
                     }
-                    $db->prepare("INSERT IGNORE INTO cuadra_lote (cuadra_id, lote_id, num_animales) VALUES (:c, :l, :n)")
-                       ->execute(['c' => $data['cuadra_destino_id'], 'l' => $data['lote_origen_id'], 'n' => $loteOrigen['num_animales']]);
                 }
                 break;
 
@@ -229,30 +270,30 @@ class MovimientoController extends BaseController
                 break;
 
             case 'entrada_reposicion':
-                // Reducir animales del lote origen
-                $db->prepare("UPDATE lotes SET num_animales = num_animales - :n WHERE id = :id")
+                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
                    ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                // Crear lote destino con sufijo RE
                 $codigoBase = preg_replace('/ [A-Z]+$/', '', $loteOrigen['codigo']) . ' RE';
                 $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'reposicion', $uid);
                 $data['lote_destino_id'] = $nuevoId;
                 break;
 
             case 'entrada_madres':
-                // Reducir del lote RE origen
-                $db->prepare("UPDATE lotes SET num_animales = num_animales - :n WHERE id = :id")
+                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
                    ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                // Crear lote madres con sufijo MA
                 $codigoBase = preg_replace('/ RE$/', '', $loteOrigen['codigo']) . ' MA';
                 $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'madre', $uid);
                 $data['lote_destino_id'] = $nuevoId;
                 break;
 
             case 'venta':
-                // Reducir animales del lote
-                $db->prepare("UPDATE lotes SET num_animales = num_animales - :n WHERE id = :id")
+                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
                    ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                // Si quedan 0 animales, cerrar lote
+                // Reducir también en cuadras
+                $db->prepare("
+                    UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n)
+                    WHERE lote_id = :lid AND activo = 1
+                ")->execute(['n' => $cantidad, 'lid' => $data['lote_origen_id']]);
+                // Cerrar lote si no quedan animales
                 $restantes = $db->prepare("SELECT num_animales FROM lotes WHERE id = :id");
                 $restantes->execute(['id' => $data['lote_origen_id']]);
                 if ((int)$restantes->fetchColumn() <= 0) {

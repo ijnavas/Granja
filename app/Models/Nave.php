@@ -19,10 +19,14 @@ class Nave
     {
         $sql = "
             SELECT n.*, g.nombre AS granja_nombre,
-                   COALESCE(SUM(l.num_animales), 0) AS ocupacion_actual
+                   COALESCE((
+                       SELECT SUM(cl.num_animales)
+                       FROM cuadras c
+                       JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
+                       WHERE c.nave_id = n.id
+                   ), 0) AS ocupacion_actual
             FROM naves n
             JOIN granjas g ON n.granja_id = g.id
-            LEFT JOIN lotes l ON l.nave_id = n.id AND l.estado = 'activo'
             WHERE g.usuario_id = :uid AND n.activa = 1
         ";
         $params = ['uid' => $userId];
