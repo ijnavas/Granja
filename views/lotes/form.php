@@ -95,15 +95,46 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
 
             <div class="form-group">
                 <label>Nave (opcional)</label>
-                <select name="nave_id" id="naveSelect">
+                <select name="nave_id" id="naveSelect" onchange="cargarCuadrasDistribucion(this.value)">
                     <option value="">— Sin asignar aún —</option>
                     <?php foreach ($naves as $n): ?>
-                        <option value="<?= $n['id'] ?>" <?= ($lote['nave_id'] ?? '') == $n['id'] ? 'selected' : '' ?>>
+                        <option value="<?= $n['id'] ?>"
+                                data-granja="<?= e($n['granja_nombre']) ?>"
+                                <?= ($lote['nave_id'] ?? '') == $n['id'] ? 'selected' : '' ?>>
                             <?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
             </div>
+
+            <!-- Panel distribución en cuadras -->
+            <div id="distribucionPanel" style="display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:1.25rem;margin-top:.25rem">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+                    <span style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#374151">
+                        Distribución en cuadras
+                    </span>
+                    <div style="display:flex;align-items:center;gap:.75rem">
+                        <label style="font-size:.82rem;color:#6b7280;font-weight:400;text-transform:none;letter-spacing:0">
+                            Animales por cuadra:
+                        </label>
+                        <input type="number" id="animalesPorCuadra" min="1" placeholder="Auto"
+                               style="width:80px;padding:.35rem .6rem;border:1.5px solid #d1d5db;border-radius:6px;font-size:.875rem;font-family:inherit"
+                               oninput="recalcularDistribucion()">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="repartirIgual()">Repartir igual</button>
+                    </div>
+                </div>
+
+                <div style="font-size:.78rem;color:#6b7280;margin-bottom:.75rem">
+                    Desmarca las cuadras que no quieras usar. Los animales se reparten en orden hasta completar.
+                </div>
+
+                <div id="cuadrasGrid" style="display:grid;gap:.4rem"></div>
+
+                <div id="distribucionResumen" style="margin-top:.75rem;padding:.6rem .85rem;background:#fff;border-radius:6px;border:1px solid #e5e7eb;font-size:.82rem;color:#374151"></div>
+            </div>
+
+            <!-- Campos ocultos para asignación de cuadras -->
+            <div id="cuadrasHidden"></div>
 
             <div class="form-section-title" style="margin-top:.5rem">Datos de entrada</div>
 
@@ -199,6 +230,7 @@ const granjas = <?= json_encode(array_values($granjas)) ?>;
 const navesPorGranja = {};
 const tipos = <?= json_encode(array_values($tipos)) ?>;
 const tiposPorGranja = <?= json_encode($tiposPorGranja) ?>;
+const cuadrasAsig = <?= json_encode($cuadrasAsig ?? []) ?>;
 
 function actualizarEspecie(sel) {
     const opt      = sel.options[sel.selectedIndex];
@@ -374,9 +406,15 @@ document.querySelectorAll('input[type=text], textarea').forEach(el => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    actualizarCodigo();
     const granjasel = document.getElementById('granjaSelect');
     if (granjasel && granjasel.value) actualizarEspecie(granjasel);
+
+    // En creación generar código inicial; en edición también actualizar si cambia
+    actualizarCodigo();
+
+    // Cargar cuadras si hay nave preseleccionada (edición)
+    const navesel = document.getElementById('naveSelect');
+    if (navesel && navesel.value) cargarCuadrasDistribucion(navesel.value);
 
     // Detectar edición manual del código
     const codigoManual = document.getElementById('codigoManual');
@@ -384,9 +422,8 @@ document.addEventListener('DOMContentLoaded', () => {
         codigoManual.addEventListener('input', () => {
             codigoManual.dataset.editado = 'true';
         });
-        <?php if ($esEdicion && !empty($lote['codigo'])): ?>
-        codigoManual.dataset.editado = 'true';
-        <?php endif; ?>
+        // En edición solo marcamos como editado si el usuario toca el campo
+        // NO lo marcamos al cargar la página
     }
 
     // Si solo hay una granja, ocultar el selector
@@ -405,5 +442,112 @@ document.addEventListener('DOMContentLoaded', () => {
         displayTipo.style.display = '';
     }
     <?php endif; ?>
+});
+
+// ── Distribución en cuadras ──────────────────────────────────
+let cuadrasData = [];
+
+async function cargarCuadrasDistribucion(naveId) {
+    const panel = document.getElementById('distribucionPanel');
+    if (!naveId) { panel.style.display = 'none'; cuadrasData = []; return; }
+
+    const res  = await fetch(`<?= base_url('movimientos/cuadras') ?>?nave_id=${naveId}`);
+    cuadrasData = await res.json();
+
+    if (!cuadrasData.length) { panel.style.display = 'none'; return; }
+
+    panel.style.display = '';
+    renderCuadras();
+    recalcularDistribucion();
+}
+
+function renderCuadras() {
+    const grid = document.getElementById('cuadrasGrid');
+    grid.innerHTML = '';
+    cuadrasData.forEach((c, i) => {
+        const yaAsignado = cuadrasAsig[c.id] ?? null;
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:#fff;border-radius:6px;border:1px solid #e5e7eb';
+        div.innerHTML = `
+            <input type="checkbox" id="cuadra_chk_${i}" ${yaAsignado !== null ? 'checked' : 'checked'}
+                   style="width:16px;height:16px;cursor:pointer"
+                   onchange="recalcularDistribucion()">
+            <label for="cuadra_chk_${i}" style="flex:1;font-size:.875rem;font-weight:500;cursor:pointer;margin:0">
+                ${c.nombre}
+                <span style="font-size:.75rem;color:#9ca3af;font-weight:400"> · Cap. ${c.capacidad_maxima || '—'}</span>
+                ${c.lotes ? `<span style="font-size:.75rem;color:#d97706;font-weight:400"> · ${c.lotes}</span>` : ''}
+            </label>
+            <span id="cuadra_asig_${i}" style="font-size:.875rem;font-weight:600;color:#1d4ed8;min-width:40px;text-align:right">
+                ${yaAsignado !== null ? yaAsignado : '—'}
+            </span>
+        `;
+        grid.appendChild(div);
+    });
+}
+
+function recalcularDistribucion() {
+    const numAnimales = parseInt(document.getElementById('numAnimales').value) || 0;
+    const porCuadra   = parseInt(document.getElementById('animalesPorCuadra').value) || 0;
+
+    const seleccionadas = cuadrasData
+        .map((c, i) => ({ ...c, idx: i }))
+        .filter((c, i) => document.getElementById(`cuadra_chk_${i}`)?.checked);
+
+    if (!seleccionadas.length || !numAnimales) {
+        document.getElementById('distribucionResumen').textContent = 'Introduce el número de animales para calcular la distribución.';
+        actualizarCamposOcultos([]);
+        return;
+    }
+
+    let restantes = numAnimales;
+    const asignaciones = [];
+
+    seleccionadas.forEach(c => {
+        if (restantes <= 0) {
+            document.getElementById(`cuadra_asig_${c.idx}`).textContent = '0';
+            document.getElementById(`cuadra_asig_${c.idx}`).style.color = '#9ca3af';
+            return;
+        }
+        const cap = porCuadra || (c.capacidad_maxima || 9999);
+        const asig = Math.min(restantes, cap);
+        restantes -= asig;
+        asignaciones.push({ cuadra_id: c.id, cantidad: asig });
+        document.getElementById(`cuadra_asig_${c.idx}`).textContent = asig;
+        document.getElementById(`cuadra_asig_${c.idx}`).style.color = asig > 0 ? '#1d4ed8' : '#9ca3af';
+    });
+
+    const resumen = document.getElementById('distribucionResumen');
+    if (restantes > 0) {
+        resumen.innerHTML = `<span style="color:#dc2626">⚠ Faltan ${restantes} animales por asignar — añade más cuadras o aumenta la capacidad</span>`;
+    } else {
+        const usadas = asignaciones.filter(a => a.cantidad > 0).length;
+        resumen.innerHTML = `<span style="color:#16a34a">✓ ${numAnimales} animales distribuidos en ${usadas} cuadra${usadas !== 1 ? 's' : ''}</span>`;
+    }
+
+    actualizarCamposOcultos(asignaciones);
+}
+
+function actualizarCamposOcultos(asignaciones) {
+    const container = document.getElementById('cuadrasHidden');
+    container.innerHTML = '';
+    asignaciones.forEach(a => {
+        container.innerHTML += `
+            <input type="hidden" name="cuadras_asig_id[]"  value="${a.cuadra_id}">
+            <input type="hidden" name="cuadras_asig_num[]" value="${a.cantidad}">
+        `;
+    });
+}
+
+function repartirIgual() {
+    const numAnimales   = parseInt(document.getElementById('numAnimales').value) || 0;
+    const seleccionadas = cuadrasData.filter((c, i) => document.getElementById(`cuadra_chk_${i}`)?.checked);
+    if (!seleccionadas.length || !numAnimales) return;
+    const porCuadra = Math.ceil(numAnimales / seleccionadas.length);
+    document.getElementById('animalesPorCuadra').value = porCuadra;
+    recalcularDistribucion();
+}
+
+document.getElementById('numAnimales')?.addEventListener('input', () => {
+    if (cuadrasData.length) recalcularDistribucion();
 });
 </script>

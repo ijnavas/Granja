@@ -56,6 +56,7 @@ class LoteController extends BaseController
             'tipos'                => $this->model->tiposAnimal(),
             'tiposPorGranja'       => $tiposPorGranja,
             'razas'                => $this->razaModel->allParaUsuario($uid),
+            'cuadrasAsig'          => [],
             'pageTitle'            => 'Nuevo lote',
             'codigoAuto'           => '',
             'error'                => Session::getFlash('error'),
@@ -102,6 +103,21 @@ class LoteController extends BaseController
             'observaciones'    => $this->postString('observaciones'),
         ]);
 
+        $loteId = \App\Core\Database::getInstance()->lastInsertId();
+
+        // Asignar cuadras si se distribuyó
+        $cuadrasIds  = $_POST['cuadras_asig_id']  ?? [];
+        $cuadrasNums = $_POST['cuadras_asig_num'] ?? [];
+        if (!empty($cuadrasIds)) {
+            $cuadraModel = new \App\Models\Cuadra();
+            foreach ($cuadrasIds as $i => $cuadraId) {
+                $num = (int)($cuadrasNums[$i] ?? 0);
+                if ($num > 0) {
+                    $cuadraModel->asignarLote((int)$cuadraId, (int)$loteId, $num, date('Y-m-d'));
+                }
+            }
+        }
+
         Session::flash('success', "Lote <strong>{$codigo}</strong> creado correctamente.");
         $this->redirect('lotes');
     }
@@ -121,6 +137,11 @@ class LoteController extends BaseController
             }
         }
 
+        // Cuadras ya asignadas al lote
+        $cuadraModel    = new \App\Models\Cuadra();
+        $cuadrasDelLote = $cuadraModel->cuadrasDelLote((int)$id);
+        $cuadrasAsig    = array_column($cuadrasDelLote, 'num_animales', 'cuadra_id');
+
         $this->view('lotes/form', [
             'lote'                 => $lote,
             'naves'                => $this->naveModel->selectOptions($uid),
@@ -129,6 +150,7 @@ class LoteController extends BaseController
             'tipos'                => $this->model->tiposAnimal(),
             'tiposPorGranja'       => $tiposPorGranja,
             'razas'                => $this->razaModel->allParaUsuario($uid),
+            'cuadrasAsig'          => $cuadrasAsig,
             'pageTitle'            => 'Editar lote ' . $lote['codigo'],
             'codigoAuto'           => $lote['codigo'],
             'error'                => Session::getFlash('error'),
