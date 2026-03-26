@@ -363,7 +363,7 @@ class MovimientoController extends BaseController
                 }
                 // Crear sublote RE — crearSubLote copiará las cuadras proporcionales
                 $codigoBase = preg_replace('/ [A-Z]+$/', '', $loteOrigen['codigo']) . ' RE';
-                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'reposicion', $uid);
+                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'reposicion', $uid, $data['cuadra_origen_id'] ?? null);
                 $data['lote_destino_id'] = $nuevoId;
                 break;
 
@@ -380,7 +380,7 @@ class MovimientoController extends BaseController
                        ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                 }
                 $codigoBase = preg_replace('/ RE$/', '', $loteOrigen['codigo']) . ' MA';
-                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'madre', $uid);
+                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'madre', $uid, $data['cuadra_origen_id'] ?? null);
                 $data['lote_destino_id'] = $nuevoId;
                 break;
 
@@ -417,10 +417,9 @@ class MovimientoController extends BaseController
         }
     }
 
-    private function crearSubLote(array $origen, string $codigo, int $numAnimales, string $estadoAnimal, int $uid): int
+    private function crearSubLote(array $origen, string $codigo, int $numAnimales, string $estadoAnimal, int $uid, ?int $cuadraOrigenId = null): int
     {
         $db = \App\Core\Database::getInstance();
-        // Evitar código duplicado
         $check = $db->prepare("SELECT COUNT(*) FROM lotes WHERE codigo = :c");
         $check->execute(['c' => $codigo]);
         if ((int)$check->fetchColumn() > 0) {
@@ -447,39 +446,13 @@ class MovimientoController extends BaseController
         ]);
         $nuevoId = (int) $db->lastInsertId();
 
-        // Copiar asignaciones de cuadra_lote del lote origen al nuevo lote
-        // proporcionalmente según los animales que salen de cada cuadra
-        $cuadrasOrigen = $db->prepare("
-            SELECT cuadra_id, num_animales FROM cuadra_lote
-            WHERE lote_id = :lid AND activo = 1 AND num_animales > 0
-            ORDER BY num_animales DESC
-        ");
-        $cuadrasOrigen->execute(['lid' => $origen['id']]);
-        $cuadras = $cuadrasOrigen->fetchAll();
-
-        if ($cuadras) {
-            $totalOrigen = array_sum(array_column($cuadras, 'num_animales'));
-            $restante = $numAnimales;
-
-            foreach ($cuadras as $i => $cl) {
-                if ($restante <= 0) break;
-                // Último: asigna el resto
-                $esUltima = ($i === count($cuadras) - 1);
-                $prop = $esUltima
-                    ? $restante
-                    : (int)round(($cl['num_animales'] / $totalOrigen) * $numAnimales);
-                $prop = min($prop, $restante);
-                if ($prop <= 0) continue;
-
-                $db->prepare("
-                    INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada)
-                    VALUES (:cid, :lid, :n, CURDATE())
-                ")->execute(['cid' => $cl['cuadra_id'], 'lid' => $nuevoId, 'n' => $prop]);
-
-                $restante -= $prop;
-            }
+        // Asignar solo a la cuadra origen especificada
+        if ($cuadraOrigenId) {
+            $db->prepare("
+                INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada)
+                VALUES (:cid, :lid, :n, CURDATE())
+            ")->execute(['cid' => $cuadraOrigenId, 'lid' => $nuevoId, 'n' => $numAnimales]);
         }
 
         return $nuevoId;
     }
-}
