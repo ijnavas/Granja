@@ -182,12 +182,14 @@ class MovimientoController extends BaseController
         if (!$naveId) { echo json_encode([]); return; }
 
         $stmt = \App\Core\Database::getInstance()->prepare("
-            SELECT c.id, c.nombre,
+            SELECT c.id, c.nombre, c.capacidad_maxima,
                    GROUP_CONCAT(DISTINCT l.codigo SEPARATOR ', ') AS lotes
             FROM cuadras c
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id
+                AND cl.activo = 1
+                AND cl.num_animales > 0
             LEFT JOIN lotes l ON cl.lote_id = l.id AND l.estado = 'activo'
-            WHERE c.nave_id = :nave_id
+            WHERE c.nave_id = :nave_id AND c.activa = 1
             GROUP BY c.id
             ORDER BY c.nombre
         ");
@@ -206,8 +208,12 @@ class MovimientoController extends BaseController
         $stmt = \App\Core\Database::getInstance()->prepare("
             SELECT l.id, l.codigo, cl.num_animales
             FROM lotes l
-            JOIN cuadra_lote cl ON cl.lote_id = l.id AND cl.cuadra_id = :cuadra_id
+            JOIN cuadra_lote cl ON cl.lote_id = l.id
+                AND cl.cuadra_id = :cuadra_id
+                AND cl.activo = 1
+                AND cl.num_animales > 0
             WHERE l.estado = 'activo'
+            ORDER BY l.codigo
         ");
         $stmt->execute(['cuadra_id' => $cuadraId]);
         echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
