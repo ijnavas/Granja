@@ -5,17 +5,20 @@ namespace App\Controllers;
 
 use App\Models\RazaPorcino;
 use App\Models\TablaCrecimiento;
+use App\Models\EstadoAnimal;
 use App\Core\Session;
 
 class ConfigController extends BaseController
 {
-    private RazaPorcino     $razaModel;
+    private RazaPorcino      $razaModel;
     private TablaCrecimiento $tablaModel;
+    private EstadoAnimal     $estadoModel;
 
     public function __construct()
     {
-        $this->razaModel  = new RazaPorcino();
-        $this->tablaModel = new TablaCrecimiento();
+        $this->razaModel   = new RazaPorcino();
+        $this->tablaModel  = new TablaCrecimiento();
+        $this->estadoModel = new EstadoAnimal();
     }
 
     // ── Panel principal ──────────────────────────────────────────
@@ -221,6 +224,73 @@ class ConfigController extends BaseController
         $this->tablaModel->delete((int)$id);
         Session::flash('success', 'Tabla eliminada.');
         $this->redirect('configuracion/tablas');
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // ESTADOS DE ANIMAL
+    // ════════════════════════════════════════════════════════════
+    public function estados(): void
+    {
+        auth_required();
+        require_rol('admin');
+        $this->view('config/estados', [
+            'estados'   => $this->estadoModel->all(),
+            'pageTitle' => 'Configuración — Estados',
+            'success'   => Session::getFlash('success'),
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function crearEstado(): void
+    {
+        auth_required();
+        require_rol('admin');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('configuracion/estados');
+        }
+        $nombre = capitalizar($this->postString('nombre'));
+        $codigo = strtolower(trim($this->postString('codigo')));
+        if (!$nombre || !$codigo) {
+            Session::flash('error', 'Nombre y código son obligatorios.');
+            $this->redirect('configuracion/estados');
+        }
+        $this->estadoModel->create($nombre, $codigo);
+        Session::flash('success', "Estado \"{$nombre}\" creado.");
+        $this->redirect('configuracion/estados');
+    }
+
+    public function editarEstado(string $id): void
+    {
+        auth_required();
+        require_rol('admin');
+        $estado = $this->estadoModel->find((int)$id);
+        if (!$estado) $this->redirect('configuracion/estados');
+        $this->view('config/estado_form', [
+            'estado'    => $estado,
+            'pageTitle' => 'Editar estado',
+        ]);
+    }
+
+    public function actualizarEstado(string $id): void
+    {
+        auth_required();
+        require_rol('admin');
+        $this->estadoModel->update(
+            (int)$id,
+            capitalizar($this->postString('nombre')),
+            $this->postString('codigo')
+        );
+        Session::flash('success', 'Estado actualizado.');
+        $this->redirect('configuracion/estados');
+    }
+
+    public function toggleEstado(string $id): void
+    {
+        auth_required();
+        require_rol('admin');
+        $this->estadoModel->toggleActivo((int)$id);
+        $this->redirect('configuracion/estados');
     }
 
     private function guardarLineas(int $tablaId): void

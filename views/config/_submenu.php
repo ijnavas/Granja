@@ -10,4 +10,8 @@ $seccion = $seccionConfig ?? 'razas';
        class="btn <?= $seccion === 'tablas' ? 'btn-primary' : 'btn-secondary' ?>">
         Tablas de crecimiento
     </a>
+    <a href="<?= base_url('configuracion/estados') ?>"
+       class="btn <?= $seccion === 'estados' ? 'btn-primary' : 'btn-secondary' ?>">
+        Estados animal
+    </a>
 </div>

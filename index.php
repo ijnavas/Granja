@@ -33,6 +33,7 @@ use App\Controllers\SiloController;
 use App\Controllers\LoteController;
 use App\Controllers\CuadraController;
 
+use App\Controllers\MovimientoController;
 use App\Controllers\ConfigController;
 
 Session::start();
@@ -102,14 +103,26 @@ $router->post('/cuadras/{id}/eliminar',         [CuadraController::class, 'delet
 $router->post('/cuadras/{id}/asignar',          [CuadraController::class, 'asignarLote']);
 $router->post('/cuadras/{id}/retirar',          [CuadraController::class, 'retirarLote']);
 
-// Configuración (solo admin)
+// Movimientos
+$router->get('/movimientos',                        [MovimientoController::class, 'index']);
+$router->get('/movimientos/crear',                  [MovimientoController::class, 'create']);
+$router->post('/movimientos',                       [MovimientoController::class, 'store']);
+$router->get('/movimientos/cuadras',                [MovimientoController::class, 'cuadrasPorNave']);
+$router->get('/movimientos/lotes-cuadra',           [MovimientoController::class, 'lotesPorCuadra']);
+$router->get('/movimientos/{id}/editar',            [MovimientoController::class, 'edit']);
+$router->post('/movimientos/{id}/actualizar',       [MovimientoController::class, 'update']);
+$router->post('/movimientos/{id}/eliminar',         [MovimientoController::class, 'delete']);
 $router->get('/configuracion',                              [ConfigController::class, 'index']);
 $router->get('/configuracion/razas',                        [ConfigController::class, 'razas']);
 $router->post('/configuracion/razas',                       [ConfigController::class, 'crearRaza']);
 $router->get('/configuracion/razas/{id}/editar',            [ConfigController::class, 'editarRaza']);
 $router->post('/configuracion/razas/{id}/actualizar',       [ConfigController::class, 'actualizarRaza']);
 $router->post('/configuracion/razas/{id}/eliminar',         [ConfigController::class, 'eliminarRaza']);
-$router->get('/configuracion/tablas',                       [ConfigController::class, 'tablas']);
+$router->get('/configuracion/estados',                      [ConfigController::class, 'estados']);
+$router->post('/configuracion/estados',                     [ConfigController::class, 'crearEstado']);
+$router->get('/configuracion/estados/{id}/editar',          [ConfigController::class, 'editarEstado']);
+$router->post('/configuracion/estados/{id}/actualizar',     [ConfigController::class, 'actualizarEstado']);
+$router->post('/configuracion/estados/{id}/toggle',         [ConfigController::class, 'toggleEstado']);
 $router->get('/configuracion/tablas/crear',                 [ConfigController::class, 'crearTabla']);
 $router->post('/configuracion/tablas',                      [ConfigController::class, 'storeTabla']);
 $router->get('/configuracion/tablas/{id}/editar',           [ConfigController::class, 'editarTabla']);
