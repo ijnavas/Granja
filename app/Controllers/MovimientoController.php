@@ -283,11 +283,60 @@ class MovimientoController extends BaseController
         if (!$loteOrigen) throw new \Exception('Lote de origen no encontrado.');
 
         $cantidad = $data['num_animales'];
+        if ($cantidad < 1) throw new \Exception('La cantidad debe ser mayor que 0.');
 
         switch ($tipo) {
 
             case 'traslado_cuadra':
                 if (!$data['cuadra_destino_id']) throw new \Exception('Selecciona una cuadra destino.');
+                if (!$data['cuadra_origen_id'])  throw new \Exception('Selecciona una cuadra origen.');
+
+                // Validar que hay suficientes animales en la cuadra origen
+                $stmtCheck = $db->prepare("
+                    SELECT COALESCE(num_animales, 0) FROM cuadra_lote
+                    WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1 LIMIT 1
+                ");
+                $stmtCheck->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                $enCuadra = (int)$stmtCheck->fetchColumn();
+                if ($cantidad > $enCuadra) {
+                    throw new \Exception("Solo hay {$enCuadra} animales del lote en esa cuadra. No puedes trasladar {$cantidad}.");
+                }
+
+                // Validar capacidad de cuadra destino
+                $stmtCap = $db->prepare("
+                    SELECT c.capacidad_maxima,
+                           COALESCE(SUM(cl.num_animales), 0) AS ocupados
+                    FROM cuadras c
+                    LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
+                    WHERE c.id = :id GROUP BY c.id
+                ");
+                $stmtCap->execute(['id' => $data['cuadra_destino_id']]);
+                $cuadraDestino = $stmtCap->fetch();
+                if ($cuadraDestino && $cuadraDestino['capacidad_maxima']) {
+                    $libre = $cuadraDestino['capacidad_maxima'] - $cuadraDestino['ocupados'];
+                    if ($cantidad > $libre) {
+                        throw new \Exception("La cuadra destino solo tiene {$libre} plazas libres (capacidad {$cuadraDestino['capacidad_maxima']}, ocupadas {$cuadraDestino['ocupados']}).");
+                    }
+                }
+                break;
+
+            case 'entrada_cebo':
+                // Sin restricción de cantidad — todo el lote
+                break;
+
+            case 'entrada_reposicion':
+            case 'venta':
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote. No puedes mover {$cantidad}.");
+                }
+                break;
+
+            case 'entrada_madres':
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote RE. No puedes mover {$cantidad}.");
+                }
+                break;
+        }
 
                 // Restar animales de la cuadra origen
                 if ($data['cuadra_origen_id']) {
