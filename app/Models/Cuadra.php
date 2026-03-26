@@ -150,10 +150,10 @@ class Cuadra
     // ── Asignar animales de un lote a una cuadra ─────────────────
     public function asignarLote(int $cuadraId, int $loteId, int $numAnimales, string $fechaEntrada, ?string $obs = null): int
     {
-        // Si ya existe una asignación activa, actualiza
+        // Si ya existe (activo o inactivo), actualiza
         $stmt = $this->db->prepare("
             SELECT id FROM cuadra_lote
-            WHERE cuadra_id = :cuadra_id AND lote_id = :lote_id AND activo = 1
+            WHERE cuadra_id = :cuadra_id AND lote_id = :lote_id
             LIMIT 1
         ");
         $stmt->execute(['cuadra_id' => $cuadraId, 'lote_id' => $loteId]);
@@ -161,7 +161,7 @@ class Cuadra
 
         if ($existing) {
             $this->db->prepare("
-                UPDATE cuadra_lote SET num_animales = :n, observaciones = :obs WHERE id = :id
+                UPDATE cuadra_lote SET num_animales = :n, activo = 1, observaciones = :obs WHERE id = :id
             ")->execute(['n' => $numAnimales, 'obs' => $obs, 'id' => $existing]);
             return (int) $existing;
         }

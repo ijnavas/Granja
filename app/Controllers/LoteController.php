@@ -182,6 +182,24 @@ class LoteController extends BaseController
             'observaciones'    => $this->postString('observaciones'),
         ]);
 
+        // Sync cuadras: borrar asignaciones anteriores y crear las nuevas
+        $cuadrasIds  = $_POST['cuadras_asig_id']  ?? [];
+        $cuadrasNums = $_POST['cuadras_asig_num'] ?? [];
+        if (!empty($cuadrasIds)) {
+            $db = \App\Core\Database::getInstance();
+            // Borrar asignaciones activas del lote
+            $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE lote_id = :lid")
+               ->execute(['lid' => (int)$id]);
+            // Crear las nuevas
+            $cuadraModel = new \App\Models\Cuadra();
+            foreach ($cuadrasIds as $i => $cuadraId) {
+                $num = (int)($cuadrasNums[$i] ?? 0);
+                if ($num > 0) {
+                    $cuadraModel->asignarLote((int)$cuadraId, (int)$id, $num, date('Y-m-d'));
+                }
+            }
+        }
+
         Session::flash('success', 'Lote actualizado.');
         $this->redirect('lotes');
     }
