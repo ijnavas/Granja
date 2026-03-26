@@ -30,12 +30,12 @@
         </thead>
         <tbody>
             <?php foreach ($tablas as $t): ?>
-            <tr>
+            <tr style="cursor:pointer" onclick="window.location='<?= base_url("configuracion/tablas/{$t['id']}/editar") ?>'">
                 <td><strong><?= e($t['nombre']) ?></strong></td>
                 <td><?= $t['num_semanas'] ?></td>
                 <td style="font-size:.82rem;color:#6b7280"><?= e($t['razas'] ?? '—') ?></td>
                 <td style="font-size:.82rem;color:#6b7280"><?= e($t['descripcion'] ?? '—') ?></td>
-                <td>
+                <td onclick="event.stopPropagation()">
                     <div class="actions">
                         <a href="<?= base_url("configuracion/tablas/{$t['id']}/editar") ?>" class="btn btn-secondary btn-sm">Editar</a>
                         <form method="POST" action="<?= base_url("configuracion/tablas/{$t['id']}/eliminar") ?>"

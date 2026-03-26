@@ -20,7 +20,7 @@ class TablaCrecimiento
         $stmt = $this->db->prepare("
             SELECT t.*,
                    COUNT(DISTINCT l.semana) AS num_semanas,
-                   GROUP_CONCAT(r.nombre ORDER BY r.nombre SEPARATOR ', ') AS razas
+                   GROUP_CONCAT(DISTINCT r.nombre ORDER BY r.nombre SEPARATOR ', ') AS razas
             FROM tablas_crecimiento t
             LEFT JOIN tablas_crecimiento_lineas l ON l.tabla_id = t.id
             LEFT JOIN tabla_raza tr ON tr.tabla_id = t.id
