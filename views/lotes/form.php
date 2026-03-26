@@ -474,8 +474,9 @@ function renderCuadras() {
             <input type="number" id="cuadra_num_${i}" min="0"
                    value="${yaAsignado !== null ? yaAsignado : ''}"
                    placeholder="0"
+                   data-fijado="false"
                    style="width:70px;padding:.35rem .5rem;border:1.5px solid #d1d5db;border-radius:6px;font-size:.875rem;font-family:inherit;text-align:right"
-                   oninput="alEditarCuadra()">
+                   oninput="alEditarCuadra(${i})">
         `;
         grid.appendChild(div);
     });
@@ -485,8 +486,7 @@ function alDesmarcar(idx) {
     const chk = document.getElementById(`cuadra_chk_${idx}`);
     const num = document.getElementById(`cuadra_num_${idx}`);
     if (!chk.checked) {
-        // Guardar valor anterior y poner a 0
-        num.dataset.prev = num.value;
+        num.dataset.fijado = 'false';
         num.value = '0';
         num.disabled = true;
         num.style.background = '#f3f4f6';
@@ -495,39 +495,60 @@ function alDesmarcar(idx) {
         num.disabled = false;
         num.style.background = '';
         num.style.color = '';
-        num.value = num.dataset.prev || '';
+        num.value = '';
+        num.dataset.fijado = 'false';
     }
-    recalcularResumen();
+    redistribuirLibres();
 }
 
-function alEditarCuadra() {
-    recalcularResumen();
+function alEditarCuadra(idx) {
+    const num = document.getElementById(`cuadra_num_${idx}`);
+    num.dataset.fijado = num.value !== '' ? 'true' : 'false';
+    redistribuirLibres();
 }
 
-function recalcularDistribucion() {
-    const numAnimales = parseInt(document.getElementById('numAnimales').value) || 0;
-    if (!numAnimales || !cuadrasData.length) return;
+function redistribuirLibres() {
+    const total = parseInt(document.getElementById('numAnimales').value) || 0;
+    if (!total) { recalcularResumen(); return; }
 
-    const seleccionadas = cuadrasData
-        .map((c, i) => ({ ...c, idx: i }))
-        .filter((c, i) => document.getElementById(`cuadra_chk_${i}`)?.checked);
+    let fijados = 0;
+    const libres = [];
 
-    if (!seleccionadas.length) return;
-
-    let restantes = numAnimales;
-    seleccionadas.forEach(c => {
-        const numEl = document.getElementById(`cuadra_num_${c.idx}`);
-        if (restantes <= 0) {
-            numEl.value = '0';
-            return;
+    cuadrasData.forEach((c, i) => {
+        const chk = document.getElementById(`cuadra_chk_${i}`);
+        const num = document.getElementById(`cuadra_num_${i}`);
+        if (!chk?.checked) return;
+        if (num.dataset.fijado === 'true') {
+            fijados += parseInt(num.value) || 0;
+        } else {
+            libres.push({ idx: i, cap: c.capacidad_maxima || 9999 });
         }
-        const cap  = c.capacidad_maxima || 9999;
+    });
+
+    const porCuadraFijo = parseInt(document.getElementById('animalesPorCuadra').value) || 0;
+    let restantes = Math.max(0, total - fijados);
+
+    libres.forEach(c => {
+        const numEl = document.getElementById(`cuadra_num_${c.idx}`);
+        if (restantes <= 0) { numEl.value = '0'; return; }
+        const cap  = porCuadraFijo || c.cap;
         const asig = Math.min(restantes, cap);
         restantes -= asig;
         numEl.value = asig;
     });
 
     recalcularResumen();
+}
+
+function recalcularDistribucion() {
+    cuadrasData.forEach((c, i) => {
+        const num = document.getElementById(`cuadra_num_${i}`);
+        if (num && !num.disabled) {
+            num.dataset.fijado = 'false';
+            num.value = '';
+        }
+    });
+    redistribuirLibres();
 }
 
 function recalcularResumen() {
@@ -546,36 +567,37 @@ function recalcularResumen() {
 
     const resumen = document.getElementById('distribucionResumen');
     const diff = numAnimales - totalAsignado;
-    if (diff > 0) {
-        resumen.innerHTML = `<span style="color:#d97706">⚠ Faltan <strong>${diff}</strong> animales por asignar (${totalAsignado} de ${numAnimales})</span>`;
+    if (!numAnimales) { resumen.innerHTML = ''; }
+    else if (diff > 0) {
+        resumen.innerHTML = `<span style="color:#d97706">⚠ Faltan <strong>${diff}</strong> animales (${totalAsignado} de ${numAnimales})</span>`;
     } else if (diff < 0) {
         resumen.innerHTML = `<span style="color:#dc2626">⚠ Exceso de <strong>${Math.abs(diff)}</strong> animales (${totalAsignado} de ${numAnimales})</span>`;
-    } else if (totalAsignado > 0) {
-        resumen.innerHTML = `<span style="color:#16a34a">✓ ${totalAsignado} animales distribuidos en ${asignaciones.length} cuadra${asignaciones.length !== 1 ? 's' : ''}</span>`;
     } else {
-        resumen.innerHTML = '';
+        resumen.innerHTML = `<span style="color:#16a34a">✓ ${totalAsignado} animales distribuidos en ${asignaciones.length} cuadra${asignaciones.length !== 1 ? 's' : ''}</span>`;
     }
 
     actualizarCamposOcultos(asignaciones);
 }
 
-function repartirIgual() {
-    const numAnimales   = parseInt(document.getElementById('numAnimales').value) || 0;
-    const porCuadraFijo = parseInt(document.getElementById('animalesPorCuadra').value) || 0;
-    const seleccionadas = cuadrasData.filter((c, i) => document.getElementById(`cuadra_chk_${i}`)?.checked);
-    if (!seleccionadas.length || !numAnimales) return;
-
-    let restantes = numAnimales;
-    seleccionadas.forEach((c, si) => {
-        const idx   = cuadrasData.indexOf(c);
-        const numEl = document.getElementById(`cuadra_num_${idx}`);
-        if (restantes <= 0) { numEl.value = '0'; return; }
-        const cap  = porCuadraFijo || c.capacidad_maxima || 9999;
-        const asig = Math.min(restantes, cap);
-        restantes -= asig;
-        numEl.value = asig;
+function actualizarCamposOcultos(asignaciones) {
+    const container = document.getElementById('cuadrasHidden');
+    container.innerHTML = '';
+    asignaciones.forEach(a => {
+        container.innerHTML += `
+            <input type="hidden" name="cuadras_asig_id[]"  value="${a.cuadra_id}">
+            <input type="hidden" name="cuadras_asig_num[]" value="${a.cantidad}">
+        `;
     });
+}
 
-    recalcularResumen();
+function repartirIgual() {
+    cuadrasData.forEach((c, i) => {
+        const num = document.getElementById(`cuadra_num_${i}`);
+        if (num && !num.disabled) {
+            num.dataset.fijado = 'false';
+            num.value = '';
+        }
+    });
+    redistribuirLibres();
 }
 </script>
