@@ -89,15 +89,16 @@ class LoteController extends BaseController
         $granjaId = $this->post('granja_id') ?: null;
 
         $this->model->create([
-            'nave_id'         => $naveId ? (int)$naveId : null,
-            'granja_id'       => $granjaId ? (int)$granjaId : null,
-            'tipo_animal_id'  => (int)$this->post('tipo_animal_id'),
-            'raza_id'         => $razaId,
-            'codigo'          => $codigo,
-            'num_animales'    => (int)$this->post('num_animales', 0),
-            'peso_entrada_kg' => (float)$this->post('peso_entrada_kg', 0),
-            'fecha_entrada'   => $this->postString('fecha_entrada') ?: date('Y-m-d'),
-            'observaciones'   => $this->postString('observaciones'),
+            'nave_id'          => $naveId ? (int)$naveId : null,
+            'granja_id'        => $granjaId ? (int)$granjaId : null,
+            'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
+            'raza_id'          => $razaId,
+            'codigo'           => $codigo,
+            'num_animales'     => (int)$this->post('num_animales', 0),
+            'peso_entrada_kg'  => (float)$this->post('peso_entrada_kg', 0),
+            'fecha_entrada'    => $this->postString('fecha_entrada') ?: date('Y-m-d'),
+            'fecha_nacimiento' => $fechaNac,
+            'observaciones'    => $this->postString('observaciones'),
         ]);
 
         Session::flash('success', "Lote <strong>{$codigo}</strong> creado correctamente.");
@@ -145,14 +146,15 @@ class LoteController extends BaseController
         $granjaId = $this->post('granja_id') ?: null;
 
         $this->model->update((int)$id, Session::get('usuario_id'), [
-            'nave_id'         => $naveId ? (int)$naveId : null,
-            'granja_id'       => $granjaId ? (int)$granjaId : null,
-            'tipo_animal_id'  => (int)$this->post('tipo_animal_id'),
-            'raza_id'         => $this->post('raza_id') ? (int)$this->post('raza_id') : null,
-            'num_animales'    => (int)$this->post('num_animales', 0),
-            'peso_entrada_kg' => (float)$this->post('peso_entrada_kg', 0),
-            'fecha_entrada'   => $this->postString('fecha_entrada'),
-            'observaciones'   => $this->postString('observaciones'),
+            'nave_id'          => $naveId ? (int)$naveId : null,
+            'granja_id'        => $granjaId ? (int)$granjaId : null,
+            'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
+            'raza_id'          => $this->post('raza_id') ? (int)$this->post('raza_id') : null,
+            'num_animales'     => (int)$this->post('num_animales', 0),
+            'peso_entrada_kg'  => (float)$this->post('peso_entrada_kg', 0),
+            'fecha_entrada'    => $this->postString('fecha_entrada'),
+            'fecha_nacimiento' => $this->postString('fecha_nacimiento') ?: null,
+            'observaciones'    => $this->postString('observaciones'),
         ]);
 
         Session::flash('success', 'Lote actualizado.');

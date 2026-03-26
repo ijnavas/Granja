@@ -24,12 +24,24 @@ class Lote
                    n.nombre   AS nave_nombre,
                    COALESCE(g.nombre, g2.nombre) AS granja_nombre,
                    DATEDIFF(CURDATE(), l.fecha_entrada) AS dias_en_granja,
-                   (SELECT p.peso_medio_kg FROM pesajes p WHERE p.lote_id = l.id ORDER BY p.fecha DESC LIMIT 1) AS ultimo_peso
+                   FLOOR(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7) AS semana_actual,
+                   (SELECT p.peso_medio_kg FROM pesajes p WHERE p.lote_id = l.id ORDER BY p.fecha DESC LIMIT 1) AS ultimo_peso,
+                   r.nombre AS raza_nombre,
+                   r.identificador AS raza_identificador,
+                   tcl.peso_kg AS peso_tabla,
+                   tcl.coste_eur AS coste_tabla,
+                   tcl.consumo_acumulado_g AS consumo_tabla
             FROM lotes l
             JOIN tipos_animal ta ON l.tipo_animal_id = ta.id
-            LEFT JOIN naves n  ON l.nave_id   = n.id
-            LEFT JOIN granjas g ON n.granja_id = g.id
+            LEFT JOIN naves n   ON l.nave_id    = n.id
+            LEFT JOIN granjas g ON n.granja_id  = g.id
             LEFT JOIN granjas g2 ON l.granja_id = g2.id
+            LEFT JOIN razas_porcino r ON l.raza_id = r.id
+            LEFT JOIN tabla_raza tr ON tr.raza_id = r.id
+            LEFT JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
+            LEFT JOIN tablas_crecimiento_lineas tcl
+                ON tcl.tabla_id = tc.id
+                AND tcl.semana = FLOOR(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
             WHERE (g.usuario_id = :uid OR g2.usuario_id = :uid2)
             ORDER BY l.estado, l.fecha_entrada DESC
         ");
@@ -85,8 +97,8 @@ class Lote
     public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO lotes (nave_id, granja_id, tipo_animal_id, raza_id, codigo, num_animales, peso_entrada_kg, fecha_entrada, observaciones)
-            VALUES (:nave_id, :granja_id, :tipo_animal_id, :raza_id, :codigo, :num_animales, :peso_entrada_kg, :fecha_entrada, :observaciones)
+            INSERT INTO lotes (nave_id, granja_id, tipo_animal_id, raza_id, codigo, num_animales, peso_entrada_kg, fecha_entrada, fecha_nacimiento, observaciones)
+            VALUES (:nave_id, :granja_id, :tipo_animal_id, :raza_id, :codigo, :num_animales, :peso_entrada_kg, :fecha_entrada, :fecha_nacimiento, :observaciones)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();
@@ -98,14 +110,15 @@ class Lote
             UPDATE lotes l
             LEFT JOIN naves n ON l.nave_id = n.id
             LEFT JOIN granjas g ON n.granja_id = g.id
-            SET l.nave_id         = :nave_id,
-                l.granja_id       = :granja_id,
-                l.tipo_animal_id  = :tipo_animal_id,
-                l.raza_id         = :raza_id,
-                l.num_animales    = :num_animales,
-                l.peso_entrada_kg = :peso_entrada_kg,
-                l.fecha_entrada   = :fecha_entrada,
-                l.observaciones   = :observaciones
+            SET l.nave_id          = :nave_id,
+                l.granja_id        = :granja_id,
+                l.tipo_animal_id   = :tipo_animal_id,
+                l.raza_id          = :raza_id,
+                l.num_animales     = :num_animales,
+                l.peso_entrada_kg  = :peso_entrada_kg,
+                l.fecha_entrada    = :fecha_entrada,
+                l.fecha_nacimiento = :fecha_nacimiento,
+                l.observaciones    = :observaciones
             WHERE l.id = :id AND (g.usuario_id = :usuario_id OR l.nave_id IS NULL)
         ");
         $data['id'] = $id;
