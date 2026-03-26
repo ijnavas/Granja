@@ -159,6 +159,9 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                         Distribución en cuadras
                     </span>
                     <div style="display:flex;align-items:center;gap:.5rem">
+                        <label style="font-size:.82rem;color:#6b7280;white-space:nowrap">Por cuadra:</label>
+                        <input type="number" id="animalesPorCuadra" min="1" placeholder="Auto"
+                               style="width:75px;padding:.35rem .5rem;border:1.5px solid #d1d5db;border-radius:6px;font-size:.875rem;font-family:inherit">
                         <button type="button" class="btn btn-secondary btn-sm" onclick="repartirIgual()">Repartir igual</button>
                     </div>
                 </div>
@@ -558,13 +561,21 @@ function recalcularResumen() {
 
 function repartirIgual() {
     const numAnimales   = parseInt(document.getElementById('numAnimales').value) || 0;
+    const porCuadraFijo = parseInt(document.getElementById('animalesPorCuadra').value) || 0;
     const seleccionadas = cuadrasData.filter((c, i) => document.getElementById(`cuadra_chk_${i}`)?.checked);
     if (!seleccionadas.length || !numAnimales) return;
-    // Limpiar valores anteriores
-    cuadrasData.forEach((c, i) => {
-        const numEl = document.getElementById(`cuadra_num_${i}`);
-        if (numEl) numEl.value = '';
+
+    let restantes = numAnimales;
+    seleccionadas.forEach((c, si) => {
+        const idx   = cuadrasData.indexOf(c);
+        const numEl = document.getElementById(`cuadra_num_${idx}`);
+        if (restantes <= 0) { numEl.value = '0'; return; }
+        const cap  = porCuadraFijo || c.capacidad_maxima || 9999;
+        const asig = Math.min(restantes, cap);
+        restantes -= asig;
+        numEl.value = asig;
     });
-    recalcularDistribucion();
+
+    recalcularResumen();
 }
 </script>
