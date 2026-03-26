@@ -247,13 +247,21 @@ function aplicarImportacion() {
     // Limpiar filas existentes
     document.getElementById('lineasBody').innerHTML = '';
 
-    datosImport.forEach(fila => {
-        const semana  = parseInt(fila[0]) || 0;
+    let filasSaltadas = 0;
+    datosImport.forEach((fila, idx) => {
+        // Saltar filas de cabecera (primera columna no numérica)
+        const primerVal = fila[0]?.replace(',', '.').trim();
+        if (isNaN(parseFloat(primerVal)) || primerVal === '') {
+            filasSaltadas++;
+            return;
+        }
+
+        const semana = parseInt(primerVal) || 0;
         if (semana < 1) return;
 
         let peso = '', consumo = '', coste = '';
         for (const [col, campo] of Object.entries(mapa)) {
-            const val = (fila[col] || '').replace(',', '.');
+            const val = (fila[parseInt(col)] || '').replace(',', '.').trim();
             if (campo === 'peso_kg')    peso    = val;
             if (campo === 'consumo_g')  consumo = val;
             if (campo === 'coste_eur')  coste   = val;
@@ -271,9 +279,17 @@ function aplicarImportacion() {
     });
 
     actualizarContador();
-    toggleImport();
+
+    const total = document.getElementById('lineasBody').querySelectorAll('tr').length;
+    document.getElementById('previewInfo').textContent = '';
+
+    // Cerrar panel
+    document.getElementById('importPanel').style.display = 'none';
     document.getElementById('pasteArea').value = '';
     document.getElementById('mapeoColumnas').style.display = 'none';
-    nextSemana = datosImport.length + 1;
+    nextSemana = total + 1;
+
+    // Scroll a la tabla
+    document.getElementById('tablaLineas').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 </script>
