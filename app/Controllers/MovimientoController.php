@@ -376,10 +376,15 @@ class MovimientoController extends BaseController
                     $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
                        ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                 }
-                // Buscar si ya existe un lote RE para este lote origen
-                $codigoRE = preg_replace('/ [A-Z]{2}(-\d+)?$/', '', trim($loteOrigen['codigo'])) . ' RE';
-                $stmtRE = $db->prepare("SELECT id, estado FROM lotes WHERE codigo LIKE :codigo AND granja_id = :gid ORDER BY id DESC LIMIT 1");
-                $stmtRE->execute(['codigo' => $codigoRE . '%', 'gid' => $loteOrigen['granja_id']]);
+                // Código RE = parte base del código sin identificador de raza
+                // L 13/26 IB → L 13/26 RE
+                $codigoRE = preg_replace('/^(L \d+\/\d+).*$/', '$1 RE', trim($loteOrigen['codigo']));
+
+                // Buscar si ya existe un lote RE activo con ese código exacto
+                $stmtRE = $db->prepare("
+                    SELECT id FROM lotes WHERE codigo = :codigo AND estado = 'activo' LIMIT 1
+                ");
+                $stmtRE->execute(['codigo' => $codigoRE]);
                 $loteREExistente = $stmtRE->fetch();
 
                 if ($loteREExistente && $loteREExistente['estado'] !== 'cerrado') {
@@ -468,11 +473,6 @@ class MovimientoController extends BaseController
     private function crearSubLote(array $origen, string $codigo, int $numAnimales, string $estadoAnimal, int $uid, ?int $cuadraOrigenId = null): int
     {
         $db = \App\Core\Database::getInstance();
-        $check = $db->prepare("SELECT COUNT(*) FROM lotes WHERE codigo = :c");
-        $check->execute(['c' => $codigo]);
-        if ((int)$check->fetchColumn() > 0) {
-            $codigo .= '-' . date('mdH');
-        }
 
         $stmt = $db->prepare("
             INSERT INTO lotes (granja_id, nave_id, tipo_animal_id, raza_id, codigo, num_animales,
