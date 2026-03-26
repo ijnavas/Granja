@@ -122,8 +122,10 @@ class MovimientoController extends BaseController
             $this->redirect("movimientos/{$id}/editar");
         }
 
-        $uid  = Session::get('usuario_id');
-        $tipo = $this->postString('tipo');
+        $uid       = Session::get('usuario_id');
+        $tipo      = $this->postString('tipo');
+        $movActual = $this->model->find((int)$id);
+        if (!$movActual) $this->redirect('movimientos');
 
         $data = [
             'tipo'              => $tipo,
@@ -132,12 +134,21 @@ class MovimientoController extends BaseController
             'lote_destino_id'   => $this->post('lote_destino_id')   ?: null,
             'cuadra_origen_id'  => $this->post('cuadra_origen_id')  ?: null,
             'cuadra_destino_id' => $this->post('cuadra_destino_id') ?: null,
-            'num_animales'          => (int)$this->post('num_animales'),
+            'num_animales'      => (int)$this->post('num_animales'),
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
             'tipo_venta'        => $this->post('tipo_venta')        ?: null,
             'observaciones'     => $this->postString('observaciones'),
         ];
+
+        // Revertir efecto anterior y aplicar el nuevo
+        try {
+            $this->revertirMovimiento($movActual, $uid);
+            $this->aplicarMovimiento($tipo, $data, $uid);
+        } catch (\Exception $e) {
+            Session::flash('error', $e->getMessage());
+            $this->redirect("movimientos/{$id}/editar");
+        }
 
         $this->model->update((int)$id, $data, $uid);
         Session::flash('success', 'Movimiento actualizado.');
@@ -195,6 +206,62 @@ class MovimientoController extends BaseController
     }
 
     // ── Lógica de efectos ────────────────────────────────────────
+    private function revertirMovimiento(array $mov, int $uid): void
+    {
+        $db       = \App\Core\Database::getInstance();
+        $cantidad = (int)$mov['num_animales'];
+
+        switch ($mov['tipo']) {
+
+            case 'traslado_cuadra':
+                // Devolver animales a la cuadra origen
+                if ($mov['cuadra_origen_id'] && $mov['lote_origen_id']) {
+                    $stmt = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1");
+                    $stmt->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                    $clId = $stmt->fetchColumn();
+                    if ($clId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE id = :id")
+                           ->execute(['n' => $cantidad, 'id' => $clId]);
+                    } else {
+                        $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid, :lid, :n, CURDATE())")
+                           ->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id'], 'n' => $cantidad]);
+                    }
+                }
+                // Quitar animales de la cuadra destino
+                if ($mov['cuadra_destino_id'] && $mov['lote_origen_id']) {
+                    $db->prepare("
+                        UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n)
+                        WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1
+                    ")->execute(['n' => $cantidad, 'cid' => $mov['cuadra_destino_id'], 'lid' => $mov['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0")
+                       ->execute(['cid' => $mov['cuadra_destino_id'], 'lid' => $mov['lote_origen_id']]);
+                }
+                break;
+
+            case 'venta':
+                // Devolver animales al lote
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                break;
+
+            case 'entrada_cebo':
+                $db->prepare("UPDATE lotes SET estado_animal = 'lechon' WHERE id = :id")
+                   ->execute(['id' => $mov['lote_origen_id']]);
+                break;
+
+            case 'entrada_reposicion':
+            case 'entrada_madres':
+                // Devolver animales al lote origen y cerrar el lote destino creado
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                if ($mov['lote_destino_id']) {
+                    $db->prepare("UPDATE lotes SET estado = 'cerrado' WHERE id = :id")
+                       ->execute(['id' => $mov['lote_destino_id']]);
+                }
+                break;
+        }
+    }
+
     private function aplicarMovimiento(string $tipo, array &$data, int $uid): void
     {
         $db         = \App\Core\Database::getInstance();
