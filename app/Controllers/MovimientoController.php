@@ -385,8 +385,26 @@ class MovimientoController extends BaseController
                 if ($cantidad > $loteOrigen['num_animales']) {
                     throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote.");
                 }
+                // Validar animales en cuadra origen si se especificó
+                if (!empty($data['cuadra_origen_id'])) {
+                    $stmtCheck = $db->prepare("SELECT COALESCE(num_animales,0) FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1 LIMIT 1");
+                    $stmtCheck->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $enCuadra = (int)$stmtCheck->fetchColumn();
+                    if ($cantidad > $enCuadra) {
+                        throw new \Exception("Solo hay {$enCuadra} animales del lote en esa cuadra.");
+                    }
+                }
                 $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE lote_id=:lid AND activo=1")->execute(['n' => $cantidad, 'lid' => $data['lote_origen_id']]);
+                // Descontar de cuadra origen
+                if (!empty($data['cuadra_origen_id'])) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                       ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                       ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                } else {
+                    // Sin cuadra específica, descontar proporcionalmente de todas
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE lote_id=:lid AND activo=1")->execute(['n' => $cantidad, 'lid' => $data['lote_origen_id']]);
+                }
                 $restantes = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
                 $restantes->execute(['id' => $data['lote_origen_id']]);
                 if ((int)$restantes->fetchColumn() <= 0) {
@@ -424,6 +442,41 @@ class MovimientoController extends BaseController
             'estado_animal'   => $estadoAnimal,
             'observaciones'   => "Creado desde lote {$origen['codigo']}",
         ]);
-        return (int) $db->lastInsertId();
+        $nuevoId = (int) $db->lastInsertId();
+
+        // Copiar asignaciones de cuadra_lote del lote origen al nuevo lote
+        // proporcionalmente según los animales que salen de cada cuadra
+        $cuadrasOrigen = $db->prepare("
+            SELECT cuadra_id, num_animales FROM cuadra_lote
+            WHERE lote_id = :lid AND activo = 1 AND num_animales > 0
+            ORDER BY num_animales DESC
+        ");
+        $cuadrasOrigen->execute(['lid' => $origen['id']]);
+        $cuadras = $cuadrasOrigen->fetchAll();
+
+        if ($cuadras) {
+            $totalOrigen = array_sum(array_column($cuadras, 'num_animales'));
+            $restante = $numAnimales;
+
+            foreach ($cuadras as $i => $cl) {
+                if ($restante <= 0) break;
+                // Último: asigna el resto
+                $esUltima = ($i === count($cuadras) - 1);
+                $prop = $esUltima
+                    ? $restante
+                    : (int)round(($cl['num_animales'] / $totalOrigen) * $numAnimales);
+                $prop = min($prop, $restante);
+                if ($prop <= 0) continue;
+
+                $db->prepare("
+                    INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada)
+                    VALUES (:cid, :lid, :n, CURDATE())
+                ")->execute(['cid' => $cl['cuadra_id'], 'lid' => $nuevoId, 'n' => $prop]);
+
+                $restante -= $prop;
+            }
+        }
+
+        return $nuevoId;
     }
 }
