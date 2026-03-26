@@ -55,7 +55,7 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
             </div>
             <div class="form-group">
                 <label>Cantidad de animales *</label>
-                <input type="number" name="cantidad" min="1" required
+                <input type="number" name="num_animales" min="1" required
                        value="<?= e($movimiento['cantidad'] ?? '') ?>"
                        placeholder="Nº de animales">
             </div>

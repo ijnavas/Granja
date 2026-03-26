@@ -74,10 +74,10 @@ class Movimiento
         $stmt = $this->db->prepare("
             INSERT INTO movimientos
                 (tipo, fecha, lote_origen_id, lote_destino_id, cuadra_origen_id, cuadra_destino_id,
-                 cantidad, peso_canal_kg, precio_eur, tipo_venta, observaciones, usuario_id)
+                 num_animales, peso_canal_kg, precio_eur, tipo_venta, observaciones, usuario_id)
             VALUES
                 (:tipo, :fecha, :lote_origen_id, :lote_destino_id, :cuadra_origen_id, :cuadra_destino_id,
-                 :cantidad, :peso_canal_kg, :precio_eur, :tipo_venta, :observaciones, :usuario_id)
+                 :num_animales, :peso_canal_kg, :precio_eur, :tipo_venta, :observaciones, :usuario_id)
         ");
         $data['usuario_id'] = $userId;
         $stmt->execute($data);
@@ -98,7 +98,7 @@ class Movimiento
                 lote_destino_id   = :lote_destino_id,
                 cuadra_origen_id  = :cuadra_origen_id,
                 cuadra_destino_id = :cuadra_destino_id,
-                cantidad          = :cantidad,
+                num_animales          = :num_animales,
                 peso_canal_kg     = :peso_canal_kg,
                 precio_eur        = :precio_eur,
                 tipo_venta        = :tipo_venta,

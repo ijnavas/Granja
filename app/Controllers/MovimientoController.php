@@ -74,7 +74,7 @@ class MovimientoController extends BaseController
             'lote_destino_id'   => $this->post('lote_destino_id')   ?: null,
             'cuadra_origen_id'  => $this->post('cuadra_origen_id')  ?: null,
             'cuadra_destino_id' => $this->post('cuadra_destino_id') ?: null,
-            'cantidad'          => (int)$this->post('cantidad'),
+            'num_animales'          => (int)$this->post('num_animales'),
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
             'tipo_venta'        => $this->post('tipo_venta')        ?: null,
@@ -132,7 +132,7 @@ class MovimientoController extends BaseController
             'lote_destino_id'   => $this->post('lote_destino_id')   ?: null,
             'cuadra_origen_id'  => $this->post('cuadra_origen_id')  ?: null,
             'cuadra_destino_id' => $this->post('cuadra_destino_id') ?: null,
-            'cantidad'          => (int)$this->post('cantidad'),
+            'num_animales'          => (int)$this->post('num_animales'),
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
             'tipo_venta'        => $this->post('tipo_venta')        ?: null,
@@ -201,7 +201,7 @@ class MovimientoController extends BaseController
         $loteOrigen = $this->loteModel->find($data['lote_origen_id'], $uid);
         if (!$loteOrigen) throw new \Exception('Lote de origen no encontrado.');
 
-        $cantidad = $data['cantidad'];
+        $cantidad = $data['num_animales'];
 
         switch ($tipo) {
 
