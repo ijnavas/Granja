@@ -63,7 +63,7 @@ $etiquetas = [
                         <span style="color:#d1d5db">—</span>
                     <?php endif; ?>
                 </td>
-                <td><?= number_format($m['cantidad']) ?></td>
+                <td><?= number_format($m['num_animales']) ?></td>
                 <td style="font-size:.82rem;color:#6b7280">
                     <?php if ($m['tipo'] === 'venta'): ?>
                         <?= $m['tipo_venta'] === 'matadero' ? '🏭 Matadero' : '👤 Tercero' ?>
