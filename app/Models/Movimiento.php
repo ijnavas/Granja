@@ -71,15 +71,17 @@ class Movimiento
     // ── Crear ────────────────────────────────────────────────────
     public function create(array $data, int $userId): int
     {
+        $data['usuario_id'] = $userId;
+        $data['lote_id']    = $data['lote_origen_id'];
+
         $stmt = $this->db->prepare("
             INSERT INTO movimientos
                 (lote_id, tipo, fecha, lote_origen_id, lote_destino_id, cuadra_origen_id, cuadra_destino_id,
                  num_animales, peso_canal_kg, precio_eur, tipo_venta, observaciones, usuario_id)
             VALUES
-                (:lote_origen_id, :tipo, :fecha, :lote_origen_id, :lote_destino_id, :cuadra_origen_id, :cuadra_destino_id,
+                (:lote_id, :tipo, :fecha, :lote_origen_id, :lote_destino_id, :cuadra_origen_id, :cuadra_destino_id,
                  :num_animales, :peso_canal_kg, :precio_eur, :tipo_venta, :observaciones, :usuario_id)
         ");
-        $data['usuario_id'] = $userId;
         $stmt->execute($data);
         $id = (int) $this->db->lastInsertId();
         $this->registrarHistorial($id, 'crear', null, $data, $userId);
