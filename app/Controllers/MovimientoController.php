@@ -291,144 +291,92 @@ class MovimientoController extends BaseController
                 if (!$data['cuadra_destino_id']) throw new \Exception('Selecciona una cuadra destino.');
                 if (!$data['cuadra_origen_id'])  throw new \Exception('Selecciona una cuadra origen.');
 
-                // Validar que hay suficientes animales en la cuadra origen
-                $stmtCheck = $db->prepare("
-                    SELECT COALESCE(num_animales, 0) FROM cuadra_lote
-                    WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1 LIMIT 1
-                ");
+                // Validar animales en cuadra origen
+                $stmtCheck = $db->prepare("SELECT COALESCE(num_animales,0) FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1 LIMIT 1");
                 $stmtCheck->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                 $enCuadra = (int)$stmtCheck->fetchColumn();
                 if ($cantidad > $enCuadra) {
                     throw new \Exception("Solo hay {$enCuadra} animales del lote en esa cuadra. No puedes trasladar {$cantidad}.");
                 }
 
-                // Validar capacidad de cuadra destino
-                $stmtCap = $db->prepare("
-                    SELECT c.capacidad_maxima,
-                           COALESCE(SUM(cl.num_animales), 0) AS ocupados
-                    FROM cuadras c
-                    LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
-                    WHERE c.id = :id GROUP BY c.id
-                ");
+                // Validar capacidad cuadra destino
+                $stmtCap = $db->prepare("SELECT c.capacidad_maxima, COALESCE(SUM(cl.num_animales),0) AS ocupados FROM cuadras c LEFT JOIN cuadra_lote cl ON cl.cuadra_id=c.id AND cl.activo=1 WHERE c.id=:id GROUP BY c.id");
                 $stmtCap->execute(['id' => $data['cuadra_destino_id']]);
                 $cuadraDestino = $stmtCap->fetch();
                 if ($cuadraDestino && $cuadraDestino['capacidad_maxima']) {
                     $libre = $cuadraDestino['capacidad_maxima'] - $cuadraDestino['ocupados'];
                     if ($cantidad > $libre) {
-                        throw new \Exception("La cuadra destino solo tiene {$libre} plazas libres (capacidad {$cuadraDestino['capacidad_maxima']}, ocupadas {$cuadraDestino['ocupados']}).");
+                        throw new \Exception("La cuadra destino solo tiene {$libre} plazas libres.");
                     }
                 }
-                break;
 
-            case 'entrada_cebo':
-                // Sin restricción de cantidad — todo el lote
-                break;
+                // Restar de cuadra origen
+                $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                   ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                   ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
 
-            case 'entrada_reposicion':
-            case 'venta':
-                if ($cantidad > $loteOrigen['num_animales']) {
-                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote. No puedes mover {$cantidad}.");
-                }
-                break;
+                // Obtener nave destino
+                $stmtNave = $db->prepare("SELECT nave_id FROM cuadras WHERE id=:id");
+                $stmtNave->execute(['id' => $data['cuadra_destino_id']]);
+                $naveId = $stmtNave->fetchColumn();
 
-            case 'entrada_madres':
-                if ($cantidad > $loteOrigen['num_animales']) {
-                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote RE. No puedes mover {$cantidad}.");
-                }
-                break;
-        }
-
-                // Restar animales de la cuadra origen
-                if ($data['cuadra_origen_id']) {
-                    $db->prepare("
-                        UPDATE cuadra_lote
-                        SET num_animales = GREATEST(0, num_animales - :n)
-                        WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1
-                    ")->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
-
-                    // Si quedan 0, desactivar
-                    $db->prepare("
-                        UPDATE cuadra_lote SET activo = 0
-                        WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0
-                    ")->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
-                }
-
-                // Obtener nave de la cuadra destino y actualizar nave del lote
-                $naveDestino = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
-                $naveDestino->execute(['id' => $data['cuadra_destino_id']]);
-                $naveId = $naveDestino->fetchColumn();
-
-                // Añadir animales a la cuadra destino
-                $existeDestino = $db->prepare("
-                    SELECT id FROM cuadra_lote
-                    WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1
-                ");
-                $existeDestino->execute(['cid' => $data['cuadra_destino_id'], 'lid' => $data['lote_origen_id']]);
-                $clId = $existeDestino->fetchColumn();
-
+                // Sumar en cuadra destino
+                $stmtExiste = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid LIMIT 1");
+                $stmtExiste->execute(['cid' => $data['cuadra_destino_id'], 'lid' => $data['lote_origen_id']]);
+                $clId = $stmtExiste->fetchColumn();
                 if ($clId) {
-                    $db->prepare("
-                        UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1
-                        WHERE id = :id
-                    ")->execute(['n' => $cantidad, 'id' => $clId]);
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=num_animales+:n, activo=1 WHERE id=:id")
+                       ->execute(['n' => $cantidad, 'id' => $clId]);
                 } else {
-                    $db->prepare("
-                        INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada)
-                        VALUES (:cid, :lid, :n, CURDATE())
-                    ")->execute(['cid' => $data['cuadra_destino_id'], 'lid' => $data['lote_origen_id'], 'n' => $cantidad]);
+                    $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid,:lid,:n,CURDATE())")
+                       ->execute(['cid' => $data['cuadra_destino_id'], 'lid' => $data['lote_origen_id'], 'n' => $cantidad]);
                 }
 
-                // Solo actualizar nave del lote si ya no quedan animales en la nave origen
+                // Actualizar nave del lote solo si no quedan animales en nave origen
                 if ($naveId && $loteOrigen['nave_id'] && $naveId != $loteOrigen['nave_id']) {
-                    $stmtResto = $db->prepare("
-                        SELECT COALESCE(SUM(cl.num_animales), 0)
-                        FROM cuadra_lote cl
-                        JOIN cuadras c ON cl.cuadra_id = c.id
-                        WHERE cl.lote_id = :lid AND c.nave_id = :nid AND cl.activo = 1
-                    ");
+                    $stmtResto = $db->prepare("SELECT COALESCE(SUM(cl.num_animales),0) FROM cuadra_lote cl JOIN cuadras c ON cl.cuadra_id=c.id WHERE cl.lote_id=:lid AND c.nave_id=:nid AND cl.activo=1");
                     $stmtResto->execute(['lid' => $data['lote_origen_id'], 'nid' => $loteOrigen['nave_id']]);
                     if ((int)$stmtResto->fetchColumn() === 0) {
-                        $db->prepare("UPDATE lotes SET nave_id = :nave WHERE id = :id")
-                           ->execute(['nave' => $naveId, 'id' => $data['lote_origen_id']]);
+                        $db->prepare("UPDATE lotes SET nave_id=:nave WHERE id=:id")->execute(['nave' => $naveId, 'id' => $data['lote_origen_id']]);
                     }
                 }
                 break;
 
             case 'entrada_cebo':
-                $db->prepare("UPDATE lotes SET estado_animal = 'cebo' WHERE id = :id")
-                   ->execute(['id' => $data['lote_origen_id']]);
+                $db->prepare("UPDATE lotes SET estado_animal='cebo' WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
                 break;
 
             case 'entrada_reposicion':
-                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
-                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote.");
+                }
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
                 $codigoBase = preg_replace('/ [A-Z]+$/', '', $loteOrigen['codigo']) . ' RE';
                 $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'reposicion', $uid);
                 $data['lote_destino_id'] = $nuevoId;
                 break;
 
             case 'entrada_madres':
-                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
-                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote RE.");
+                }
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
                 $codigoBase = preg_replace('/ RE$/', '', $loteOrigen['codigo']) . ' MA';
                 $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'madre', $uid);
                 $data['lote_destino_id'] = $nuevoId;
                 break;
 
             case 'venta':
-                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
-                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                // Reducir también en cuadras
-                $db->prepare("
-                    UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n)
-                    WHERE lote_id = :lid AND activo = 1
-                ")->execute(['n' => $cantidad, 'lid' => $data['lote_origen_id']]);
-                // Cerrar lote si no quedan animales
-                $restantes = $db->prepare("SELECT num_animales FROM lotes WHERE id = :id");
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote.");
+                }
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE lote_id=:lid AND activo=1")->execute(['n' => $cantidad, 'lid' => $data['lote_origen_id']]);
+                $restantes = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
                 $restantes->execute(['id' => $data['lote_origen_id']]);
                 if ((int)$restantes->fetchColumn() <= 0) {
-                    $db->prepare("UPDATE lotes SET estado = 'cerrado' WHERE id = :id")
-                       ->execute(['id' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE lotes SET estado='cerrado' WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
                 }
                 break;
         }
