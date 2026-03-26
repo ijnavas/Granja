@@ -77,7 +77,8 @@ class LoteController extends BaseController
         }
 
         $razaId  = $this->post('raza_id') ? (int)$this->post('raza_id') : null;
-        $codigo  = Lote::generarCodigo($fechaNac, $razaId ? $this->razaModel->sufijoCodigo($razaId) : null);
+        $codigoManual = trim($this->postString('codigo_manual'));
+        $codigo = !empty($codigoManual) ? $codigoManual : Lote::generarCodigo($fechaNac, $razaId ? $this->razaModel->sufijoCodigo($razaId) : null);
 
         if ($this->model->codigoExisteSimple($codigo)) {
             $sufijo = 2;
@@ -144,15 +145,17 @@ class LoteController extends BaseController
 
         $naveId   = $this->post('nave_id') ?: null;
         $granjaId = $this->post('granja_id') ?: null;
+        $codigoManual = trim($this->postString('codigo_manual'));
 
         $this->model->update((int)$id, Session::get('usuario_id'), [
             'nave_id'          => $naveId ? (int)$naveId : null,
             'granja_id'        => $granjaId ? (int)$granjaId : null,
             'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
             'raza_id'          => $this->post('raza_id') ? (int)$this->post('raza_id') : null,
+            'codigo'           => !empty($codigoManual) ? $codigoManual : null,
             'num_animales'     => (int)$this->post('num_animales', 0),
             'peso_entrada_kg'  => (float)$this->post('peso_entrada_kg', 0),
-            'fecha_entrada'    => $this->postString('fecha_entrada'),
+            'fecha_entrada'    => date('Y-m-d'),
             'fecha_nacimiento' => $this->postString('fecha_nacimiento') ?: null,
             'observaciones'    => $this->postString('observaciones'),
         ]);

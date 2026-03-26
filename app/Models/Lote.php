@@ -106,11 +106,13 @@ class Lote
 
     public function update(int $id, int $userId, array $data): bool
     {
+        $setCodigo = !empty($data['codigo']) ? 'l.codigo = :codigo,' : '';
         $stmt = $this->db->prepare("
             UPDATE lotes l
             LEFT JOIN naves n ON l.nave_id = n.id
             LEFT JOIN granjas g ON n.granja_id = g.id
-            SET l.nave_id          = :nave_id,
+            SET {$setCodigo}
+                l.nave_id          = :nave_id,
                 l.granja_id        = :granja_id,
                 l.tipo_animal_id   = :tipo_animal_id,
                 l.raza_id          = :raza_id,
@@ -119,8 +121,9 @@ class Lote
                 l.fecha_entrada    = :fecha_entrada,
                 l.fecha_nacimiento = :fecha_nacimiento,
                 l.observaciones    = :observaciones
-            WHERE l.id = :id AND (g.usuario_id = :usuario_id OR l.nave_id IS NULL)
+            WHERE l.id = :id AND (g.usuario_id = :usuario_id OR l.nave_id IS NULL OR l.granja_id IS NOT NULL)
         ");
+        if (empty($data['codigo'])) unset($data['codigo']);
         $data['id'] = $id;
         $data['usuario_id'] = $userId;
         return $stmt->execute($data);

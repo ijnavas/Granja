@@ -19,28 +19,22 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
         <div class="form-grid">
             <div class="form-section-title">Identificación</div>
 
-            <?php if (!$esEdicion): ?>
             <div class="form-grid form-grid-2">
                 <div class="form-group">
                     <label>Fecha de nacimiento *</label>
                     <input type="date" name="fecha_nacimiento" id="fechaNac" required
-                           value="<?= date('Y-m-d') ?>"
+                           value="<?= e($lote['fecha_nacimiento'] ?? date('Y-m-d')) ?>"
                            onchange="actualizarCodigo(); calcularValoracion()">
                 </div>
                 <div class="form-group">
-                    <label>Código generado</label>
-                    <input type="text" id="codigoPreview" disabled
-                           style="background:#f9fafb;font-family:monospace;font-weight:700;color:#1d4ed8;font-size:1rem">
-                    <span class="form-hint">Se genera automáticamente</span>
+                    <label>Código del lote</label>
+                    <input type="text" name="codigo_manual" id="codigoManual"
+                           value="<?= e($lote['codigo'] ?? '') ?>"
+                           style="font-family:monospace;font-weight:700;color:#1d4ed8;font-size:1rem"
+                           placeholder="L 13/26 IB">
+                    <span class="form-hint">Se genera automáticamente pero puedes editarlo</span>
                 </div>
             </div>
-            <?php else: ?>
-            <div class="form-group" style="max-width:220px">
-                <label>Código</label>
-                <input type="text" value="<?= e($lote['codigo']) ?>" disabled
-                       style="background:#f9fafb;font-family:monospace;font-weight:700;color:#1d4ed8;font-size:1rem">
-            </div>
-            <?php endif; ?>
 
             <div class="form-section-title" style="margin-top:.5rem">Granja y especie</div>
 
@@ -113,7 +107,7 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
 
             <div class="form-section-title" style="margin-top:.5rem">Datos de entrada</div>
 
-            <div class="form-grid form-grid-3">
+            <div class="form-grid form-grid-2">
                 <div class="form-group">
                     <label>Nº animales *</label>
                     <input type="number" name="num_animales" id="numAnimales" min="1" required
@@ -128,11 +122,6 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                            placeholder="0.000"
                            oninput="calcularPesoIndividual()">
                     <span class="form-hint" id="pesoIndividualHint">Según tabla de crecimiento</span>
-                </div>
-                <div class="form-group">
-                    <label>Fecha entrada granja</label>
-                    <input type="date" name="fecha_entrada"
-                           value="<?= e($lote['fecha_entrada'] ?? date('Y-m-d')) ?>">
                 </div>
             </div>
 
@@ -274,9 +263,12 @@ function actualizarCodigo() {
         sufijo = (opt.dataset.identificador || '').trim().toUpperCase();
     }
 
-    const codigo = 'L ' + week + '/' + year + (sufijo ? ' ' + sufijo : '');
-    const preview = document.getElementById('codigoPreview');
-    if (preview) preview.value = codigo;
+    const codigo  = 'L ' + week + '/' + year + (sufijo ? ' ' + sufijo : '');
+    const manual  = document.getElementById('codigoManual');
+    // Solo actualizar si está vacío o si el usuario no lo ha modificado manualmente
+    if (manual && (!manual.dataset.editado || manual.dataset.editado === 'false')) {
+        manual.value = codigo;
+    }
 }
 
 function calcularPesoIndividual() {
@@ -386,9 +378,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const granjasel = document.getElementById('granjaSelect');
     if (granjasel && granjasel.value) actualizarEspecie(granjasel);
 
-    // Si solo hay una granja, ocultar el selector (ya está preseleccionada)
+    // Detectar edición manual del código
+    const codigoManual = document.getElementById('codigoManual');
+    if (codigoManual) {
+        codigoManual.addEventListener('input', () => {
+            codigoManual.dataset.editado = 'true';
+        });
+        <?php if ($esEdicion && !empty($lote['codigo'])): ?>
+        codigoManual.dataset.editado = 'true';
+        <?php endif; ?>
+    }
+
+    // Si solo hay una granja, ocultar el selector
     <?php if (!$esEdicion && count($granjas) === 1): ?>
-    granjasel.closest('.form-group').style.display = 'none';
+    if (granjasel) granjasel.closest('.form-group').style.display = 'none';
     <?php endif; ?>
 
     // En edición, mostrar el tipo animal actual
