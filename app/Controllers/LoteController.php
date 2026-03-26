@@ -213,6 +213,8 @@ class LoteController extends BaseController
             'consumo' => $row['consumo_acumulado_g'],
         ]);
     }
+
+    public function crearRaza(): void
     {
         auth_required();
         header('Content-Type: application/json');
