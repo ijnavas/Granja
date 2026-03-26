@@ -178,7 +178,41 @@ class LoteController extends BaseController
     }
 
     // ── Crear raza personalizada (AJAX) ──────────────────────────
-    public function crearRaza(): void
+    public function tablaSemana(): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $razaId = (int)($_GET['raza_id'] ?? 0);
+        $semana = (int)($_GET['semana']  ?? 0);
+
+        if (!$razaId || $semana < 0) {
+            echo json_encode(['ok' => false]);
+            return;
+        }
+
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT tcl.peso_kg, tcl.coste_eur, tcl.consumo_acumulado_g
+            FROM tabla_raza tr
+            JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
+            JOIN tablas_crecimiento_lineas tcl ON tcl.tabla_id = tc.id AND tcl.semana = :semana
+            WHERE tr.raza_id = :raza_id
+            LIMIT 1
+        ");
+        $stmt->execute(['raza_id' => $razaId, 'semana' => $semana]);
+        $row = $stmt->fetch();
+
+        if (!$row) {
+            echo json_encode(['ok' => false]);
+            return;
+        }
+
+        echo json_encode([
+            'ok'      => true,
+            'peso'    => $row['peso_kg'],
+            'coste'   => $row['coste_eur'],
+            'consumo' => $row['consumo_acumulado_g'],
+        ]);
+    }
     {
         auth_required();
         header('Content-Type: application/json');

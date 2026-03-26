@@ -25,7 +25,7 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                     <label>Fecha de nacimiento *</label>
                     <input type="date" name="fecha_nacimiento" id="fechaNac" required
                            value="<?= date('Y-m-d') ?>"
-                           onchange="actualizarCodigo()">
+                           onchange="actualizarCodigo(); calcularValoracion()">
                 </div>
                 <div class="form-group">
                     <label>Código generado</label>
@@ -82,7 +82,7 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
             <div class="form-group" id="razaGroup" style="display:none">
                 <label>Raza porcina</label>
                 <div class="razas-wrap">
-                    <select name="raza_id" id="razaSelect" onchange="actualizarCodigo()">
+                    <select name="raza_id" id="razaSelect" onchange="actualizarCodigo(); calcularValoracion()">
                         <option value="">— Sin especificar raza —</option>
                         <?php foreach ($razas as $r): ?>
                             <option value="<?= $r['id'] ?>"
@@ -119,7 +119,7 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                     <input type="number" name="num_animales" id="numAnimales" min="1" required
                            value="<?= e($lote['num_animales'] ?? '') ?>"
                            placeholder="200"
-                           oninput="calcularPesoIndividual()">
+                           oninput="calcularPesoIndividual(); calcularValoracion()">
                 </div>
                 <div class="form-group">
                     <label>Peso medio entrada (kg)</label>
@@ -133,6 +133,31 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                     <label>Fecha entrada granja</label>
                     <input type="date" name="fecha_entrada"
                            value="<?= e($lote['fecha_entrada'] ?? date('Y-m-d')) ?>">
+                </div>
+            </div>
+
+            <!-- Valoración estimada del lote -->
+            <div id="valoracionPanel" style="display:none;background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:1rem 1.25rem;margin-top:.5rem">
+                <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#166534;margin-bottom:.5rem">
+                    Valoración estimada del lote (semana actual)
+                </div>
+                <div style="display:flex;gap:2rem;flex-wrap:wrap">
+                    <div>
+                        <div style="font-size:1.5rem;font-weight:700;color:#166534" id="valorTotal">—</div>
+                        <div style="font-size:.78rem;color:#15803d">Valor total del lote</div>
+                    </div>
+                    <div>
+                        <div style="font-size:1.1rem;font-weight:600;color:#166534" id="valorPorAnimal">—</div>
+                        <div style="font-size:.78rem;color:#15803d">Por animal</div>
+                    </div>
+                    <div>
+                        <div style="font-size:1.1rem;font-weight:600;color:#166534" id="semanaTabla">—</div>
+                        <div style="font-size:.78rem;color:#15803d">Semana desde destete</div>
+                    </div>
+                    <div>
+                        <div style="font-size:1.1rem;font-weight:600;color:#166534" id="pesoTablaDisplay">—</div>
+                        <div style="font-size:.78rem;color:#15803d">Peso tabla (kg)</div>
+                    </div>
                 </div>
             </div>
 
@@ -267,6 +292,41 @@ function calcularPesoIndividual() {
         hint.textContent = 'Según tabla de crecimiento';
         hint.style.color = '';
         hint.style.fontWeight = '';
+    }
+}
+
+async function calcularValoracion() {
+    const razaSel  = document.getElementById('razaSelect');
+    const fechaNac = document.getElementById('fechaNac');
+    const numEl    = document.getElementById('numAnimales');
+    const panel    = document.getElementById('valoracionPanel');
+
+    if (!razaSel || !razaSel.value || !fechaNac || !fechaNac.value || !numEl || !numEl.value) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    const semana = Math.floor((new Date() - new Date(fechaNac.value)) / (7 * 24 * 3600 * 1000));
+    const num    = parseInt(numEl.value) || 0;
+
+    if (semana < 0 || num < 1) { panel.style.display = 'none'; return; }
+
+    try {
+        const res  = await fetch(`<?= base_url('lotes/tabla-semana') ?>?raza_id=${razaSel.value}&semana=${semana}`);
+        const data = await res.json();
+
+        if (data.ok && data.coste) {
+            const total = (data.coste * num).toFixed(2);
+            document.getElementById('valorTotal').textContent       = parseFloat(total).toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €';
+            document.getElementById('valorPorAnimal').textContent   = parseFloat(data.coste).toFixed(2) + ' €';
+            document.getElementById('semanaTabla').textContent      = 'S' + semana;
+            document.getElementById('pesoTablaDisplay').textContent = data.peso ? parseFloat(data.peso).toFixed(3) + ' kg' : '—';
+            panel.style.display = '';
+        } else {
+            panel.style.display = 'none';
+        }
+    } catch(e) {
+        panel.style.display = 'none';
     }
 }
 
