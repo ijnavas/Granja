@@ -209,21 +209,26 @@ function analizarPegado() {
     grid.innerHTML = '';
     grid.style.gridTemplateColumns = `repeat(${Math.min(numCols, 5)}, 1fr)`;
 
-    const opciones = ['— ignorar —', 'peso_kg', 'consumo_g', 'coste_eur'];
-    const etiquetas = ['Semana (fija)', 'Peso (kg)', 'Consumo acum. (g)', 'Coste (€)'];
-    const defaults  = ['semana', 'peso_kg', 'consumo_g', 'coste_eur'];
+    const opciones  = ['— ignorar —', 'peso_kg', 'consumo_g', 'coste_eur'];
+    const etiquetas = ['— Ignorar —', 'Peso (kg)', 'Consumo acum. (g)', 'Coste (€)'];
+    // Orden por defecto: semana, coste, peso, consumo
+    const defaults  = ['semana', 'coste_eur', 'peso_kg', 'consumo_g'];
 
     for (let i = 0; i < numCols; i++) {
         const div = document.createElement('div');
         div.style.cssText = 'display:flex;flex-direction:column;gap:.25rem';
 
-        const ejemplo = datosImport.slice(0, 3).map(f => f[i] || '').join(', ');
+        const ejemplo = datosImport.filter(f => {
+            const v = f[0]?.replace(',','.').trim();
+            return !isNaN(parseFloat(v)) && v !== '';
+        }).slice(0, 3).map(f => f[i] || '').join(', ');
+
         div.innerHTML = `
             <label style="font-size:.75rem;font-weight:600;color:#6b7280">Col ${i+1}: ${ejemplo}...</label>
             <select id="col_${i}" style="padding:.4rem .6rem;border:1.5px solid #d1d5db;border-radius:6px;font-size:.82rem;font-family:inherit">
                 ${i === 0
                     ? '<option value="semana" selected>Semana (automático)</option>'
-                    : opciones.map((o, oi) => `<option value="${o}" ${defaults[i] === o ? 'selected' : ''}>${etiquetas[oi] || o}</option>`).join('')
+                    : opciones.map((o, oi) => `<option value="${o}" ${defaults[i] === o ? 'selected' : ''}>${etiquetas[oi]}</option>`).join('')
                 }
             </select>
         `;
