@@ -8,6 +8,7 @@ use App\Models\Lote;
 use App\Models\Nave;
 use App\Models\Cuadra;
 use App\Core\Session;
+use PDO;
 
 class MovimientoController extends BaseController
 {
