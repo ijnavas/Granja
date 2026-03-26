@@ -386,23 +386,24 @@ class MovimientoController extends BaseController
                 if ($cantidad > $loteOrigen['num_animales']) {
                     throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote RE.");
                 }
-                // Si son todos los animales, cambiar estado del lote RE a madre
-                if ($cantidad === $loteOrigen['num_animales']) {
-                    $db->prepare("UPDATE lotes SET estado_animal = 'madre' WHERE id = :id")
-                       ->execute(['id' => $data['lote_origen_id']]);
-                } else {
-                    // Si es parcial, restar animales del lote RE
-                    $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
-                       ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                    // Descontar de cuadra origen si se especificó
-                    if (!empty($data['cuadra_origen_id'])) {
-                        $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n) WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1")
-                           ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
-                        $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0")
-                           ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
-                    }
+                // Restar animales del lote RE siempre
+                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                // Descontar de cuadra origen si se especificó
+                if (!empty($data['cuadra_origen_id'])) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n) WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1")
+                       ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0")
+                       ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                 }
-                // No se crea lote destino — el lote RE pasa a ser de madres
+                // Si el lote RE queda vacío, cerrarlo
+                $restantesRE = $db->prepare("SELECT num_animales FROM lotes WHERE id = :id");
+                $restantesRE->execute(['id' => $data['lote_origen_id']]);
+                if ((int)$restantesRE->fetchColumn() <= 0) {
+                    $db->prepare("UPDATE lotes SET estado = 'cerrado' WHERE id = :id")
+                       ->execute(['id' => $data['lote_origen_id']]);
+                }
+                // No se crea lote destino
                 $data['lote_destino_id'] = $data['lote_origen_id'];
                 break;
 
