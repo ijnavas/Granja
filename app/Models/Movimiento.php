@@ -117,10 +117,10 @@ class Movimiento
     public function delete(int $id, int $userId): bool
     {
         $antes = $this->find($id);
-        $stmt  = $this->db->prepare("DELETE FROM movimientos WHERE id = :id");
-        $ok    = $stmt->execute(['id' => $id]);
-        if ($ok) $this->registrarHistorial($id, 'eliminar', $antes, null, $userId);
-        return $ok;
+        // Registrar historial ANTES de borrar (el CASCADE lo eliminaría después)
+        $this->registrarHistorial($id, 'eliminar', $antes, null, $userId);
+        $stmt = $this->db->prepare("DELETE FROM movimientos WHERE id = :id");
+        return $stmt->execute(['id' => $id]);
     }
 
     // ── Historial ────────────────────────────────────────────────

@@ -160,8 +160,16 @@ class MovimientoController extends BaseController
     {
         auth_required();
         $uid = Session::get('usuario_id');
+        $mov = $this->model->find((int)$id);
+        if ($mov) {
+            try {
+                $this->revertirMovimiento($mov, $uid);
+            } catch (\Exception $e) {
+                // Si no se puede revertir, eliminar igualmente pero avisar
+            }
+        }
         $this->model->delete((int)$id, $uid);
-        Session::flash('success', 'Movimiento eliminado.');
+        Session::flash('success', 'Movimiento eliminado y efecto revertido.');
         $this->redirect('movimientos');
     }
 
