@@ -56,7 +56,7 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
             <div class="form-group">
                 <label>Cantidad de animales *</label>
                 <input type="number" name="num_animales" min="1" required
-                       value="<?= e($movimiento['cantidad'] ?? '') ?>"
+                       value="<?= e($movimiento['num_animales'] ?? '') ?>"
                        placeholder="Nº de animales">
             </div>
         </div>
@@ -249,7 +249,7 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
 <?php endif; ?>
 
 <script>
-async function cargarCuadras(naveId, selectId, loteSelectId) {
+async function cargarCuadras(naveId, selectId, loteSelectId, valorSeleccionado = null) {
     const sel = document.getElementById(selectId);
     sel.innerHTML = '<option value="">Cargando...</option>';
     if (!naveId) { sel.innerHTML = '<option value="">— Cuadra —</option>'; return; }
@@ -260,7 +260,8 @@ async function cargarCuadras(naveId, selectId, loteSelectId) {
     sel.innerHTML = '<option value="">— Cuadra —</option>';
     data.forEach(c => {
         const info = c.lotes ? ` (${c.lotes})` : '';
-        sel.innerHTML += `<option value="${c.id}">${c.nombre}${info}</option>`;
+        const selected = valorSeleccionado && c.id == valorSeleccionado ? 'selected' : '';
+        sel.innerHTML += `<option value="${c.id}" ${selected}>${c.nombre}${info}</option>`;
     });
 
     if (loteSelectId) {
@@ -268,7 +269,7 @@ async function cargarCuadras(naveId, selectId, loteSelectId) {
     }
 }
 
-async function cargarLotesDeCuadra(cuadraId, loteSelectId) {
+async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = null) {
     const sel = document.getElementById(loteSelectId);
     sel.innerHTML = '<option value="">Cargando...</option>';
     if (!cuadraId) { sel.innerHTML = '<option value="">— Lote —</option>'; return; }
@@ -278,8 +279,44 @@ async function cargarLotesDeCuadra(cuadraId, loteSelectId) {
 
     sel.innerHTML = '<option value="">— Lote —</option>';
     data.forEach(l => {
-        sel.innerHTML += `<option value="${l.id}">${l.codigo} (${l.num_animales} animales)</option>`;
+        const selected = valorSeleccionado && l.id == valorSeleccionado ? 'selected' : '';
+        sel.innerHTML += `<option value="${l.id}" ${selected}>${l.codigo} (${l.num_animales} animales)</option>`;
     });
-    if (data.length === 1) sel.value = data[0].id;
+    if (!valorSeleccionado && data.length === 1) sel.value = data[0].id;
 }
+
+<?php if ($esEdicion && $tipoActual === 'traslado_cuadra' && $movimiento): ?>
+// Precargar datos del movimiento en edición
+document.addEventListener('DOMContentLoaded', async () => {
+    <?php
+    // Necesitamos la nave de la cuadra origen y destino
+    $db = \App\Core\Database::getInstance();
+    $naveOrigen = null;
+    $naveDestino = null;
+    if ($movimiento['cuadra_origen_id']) {
+        $s = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
+        $s->execute(['id' => $movimiento['cuadra_origen_id']]);
+        $naveOrigen = $s->fetchColumn();
+    }
+    if ($movimiento['cuadra_destino_id']) {
+        $s = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
+        $s->execute(['id' => $movimiento['cuadra_destino_id']]);
+        $naveDestino = $s->fetchColumn();
+    }
+    ?>
+
+    <?php if ($naveOrigen): ?>
+    document.getElementById('naveOrigen').value = <?= $naveOrigen ?>;
+    await cargarCuadras(<?= $naveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= $movimiento['cuadra_origen_id'] ?? 'null' ?>);
+    <?php if ($movimiento['cuadra_origen_id']): ?>
+    await cargarLotesDeCuadra(<?= $movimiento['cuadra_origen_id'] ?>, 'loteOrigen', <?= $movimiento['lote_origen_id'] ?? 'null' ?>);
+    <?php endif; ?>
+    <?php endif; ?>
+
+    <?php if ($naveDestino): ?>
+    document.getElementById('naveDestino').value = <?= $naveDestino ?>;
+    await cargarCuadras(<?= $naveDestino ?>, 'cuadraDestino', null, <?= $movimiento['cuadra_destino_id'] ?? 'null' ?>);
+    <?php endif; ?>
+});
+<?php endif; ?>
 </script>
