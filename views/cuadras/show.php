@@ -108,35 +108,3 @@ $totalAnimales = array_sum(array_column($lotes, 'num_animales'));
 <?php endif; ?>
 
 <!-- Panel asignar lote -->
-<div class="panel-asignar" style="margin-top:1.5rem">
-    <div class="form-section-title" style="margin-bottom:1rem">Asignar lote a esta cuadra</div>
-    <form method="POST" action="<?= base_url("cuadras/{$cuadra['id']}/asignar") ?>">
-        <?= csrf_field() ?>
-        <div style="display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:.75rem;align-items:end">
-            <div class="form-group">
-                <label>Lote</label>
-                <select name="lote_id" required>
-                    <option value="">— Selecciona lote —</option>
-                    <?php foreach ($lotesDisponibles as $l): ?>
-                        <option value="<?= $l['id'] ?>">
-                            <?= e($l['codigo']) ?> · <?= e($l['tipo_animal_nombre']) ?> · <?= number_format($l['num_animales']) ?> animales
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Nº animales</label>
-                <input type="number" name="num_animales" min="1" required placeholder="0">
-            </div>
-            <div class="form-group">
-                <label>Fecha entrada</label>
-                <input type="date" name="fecha_entrada" value="<?= date('Y-m-d') ?>">
-            </div>
-            <button type="submit" class="btn btn-primary" style="margin-bottom:0">Asignar</button>
-        </div>
-        <div class="form-group" style="margin-top:.75rem">
-            <label>Observaciones (opcional)</label>
-            <input type="text" name="observaciones" placeholder="Notas sobre esta asignación...">
-        </div>
-    </form>
-</div>
