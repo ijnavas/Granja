@@ -43,6 +43,7 @@ class Lote
                 ON tcl.tabla_id = tc.id
                 AND tcl.semana = FLOOR(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
             WHERE (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+            AND l.estado = 'activo'
             ORDER BY l.estado, l.fecha_nacimiento ASC
         ");
         $stmt->execute(['uid' => $userId, 'uid2' => $userId]);

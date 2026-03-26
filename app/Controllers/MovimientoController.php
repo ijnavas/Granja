@@ -369,17 +369,42 @@ class MovimientoController extends BaseController
                 // Restar animales del lote origen
                 $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")
                    ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
-                // Restar de cuadra_lote del origen (el nuevo lote RE tendrá sus propias asignaciones)
+                // Restar de cuadra origen
                 if (!empty($data['cuadra_origen_id'])) {
                     $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
                        ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                     $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
                        ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                 }
-                // Crear sublote RE — crearSubLote copiará las cuadras proporcionales
-                $codigoBase = preg_replace('/ [A-Z]+$/', '', $loteOrigen['codigo']) . ' RE';
-                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'reposicion', $uid, !empty($data['cuadra_origen_id']) ? (int)$data['cuadra_origen_id'] : null);
-                $data['lote_destino_id'] = $nuevoId;
+                // Buscar si ya existe un lote RE para este lote origen
+                $codigoRE = preg_replace('/ [A-Z]{2}(-\d+)?$/', '', trim($loteOrigen['codigo'])) . ' RE';
+                $stmtRE = $db->prepare("SELECT id, estado FROM lotes WHERE codigo LIKE :codigo AND granja_id = :gid ORDER BY id DESC LIMIT 1");
+                $stmtRE->execute(['codigo' => $codigoRE . '%', 'gid' => $loteOrigen['granja_id']]);
+                $loteREExistente = $stmtRE->fetch();
+
+                if ($loteREExistente && $loteREExistente['estado'] !== 'cerrado') {
+                    // Sumar al lote RE existente
+                    $db->prepare("UPDATE lotes SET num_animales = num_animales + :n WHERE id = :id")
+                       ->execute(['n' => $cantidad, 'id' => $loteREExistente['id']]);
+                    // Añadir a cuadra origen en el lote RE
+                    if (!empty($data['cuadra_origen_id'])) {
+                        $stmtCL = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid LIMIT 1");
+                        $stmtCL->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $loteREExistente['id']]);
+                        $clId = $stmtCL->fetchColumn();
+                        if ($clId) {
+                            $db->prepare("UPDATE cuadra_lote SET num_animales=num_animales+:n, activo=1 WHERE id=:id")
+                               ->execute(['n' => $cantidad, 'id' => $clId]);
+                        } else {
+                            $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid,:lid,:n,CURDATE())")
+                               ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $loteREExistente['id'], 'n' => $cantidad]);
+                        }
+                    }
+                    $data['lote_destino_id'] = $loteREExistente['id'];
+                } else {
+                    // Crear nuevo lote RE
+                    $nuevoId = $this->crearSubLote($loteOrigen, $codigoRE, $cantidad, 'reposicion', $uid, !empty($data['cuadra_origen_id']) ? (int)$data['cuadra_origen_id'] : null);
+                    $data['lote_destino_id'] = $nuevoId;
+                }
                 break;
 
             case 'entrada_madres':
