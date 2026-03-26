@@ -363,7 +363,7 @@ class MovimientoController extends BaseController
                 }
                 // Crear sublote RE — crearSubLote copiará las cuadras proporcionales
                 $codigoBase = preg_replace('/ [A-Z]+$/', '', $loteOrigen['codigo']) . ' RE';
-                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'reposicion', $uid, $data['cuadra_origen_id'] ?? null);
+                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'reposicion', $uid, !empty($data['cuadra_origen_id']) ? (int)$data['cuadra_origen_id'] : null);
                 $data['lote_destino_id'] = $nuevoId;
                 break;
 
@@ -380,7 +380,7 @@ class MovimientoController extends BaseController
                        ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
                 }
                 $codigoBase = preg_replace('/ RE$/', '', $loteOrigen['codigo']) . ' MA';
-                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'madre', $uid, $data['cuadra_origen_id'] ?? null);
+                $nuevoId = $this->crearSubLote($loteOrigen, $codigoBase, $cantidad, 'madre', $uid, !empty($data['cuadra_origen_id']) ? (int)$data['cuadra_origen_id'] : null);
                 $data['lote_destino_id'] = $nuevoId;
                 break;
 
