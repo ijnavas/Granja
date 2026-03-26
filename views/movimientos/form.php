@@ -133,37 +133,61 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
              ENTRADA REPOSICIÓN
         ════════════════════════════════════════════════════════ -->
         <?php elseif ($tipoActual === 'entrada_reposicion'): ?>
-        <div class="form-section-title">Lote de origen</div>
-        <div class="form-group">
-            <label>Lote de lechones *</label>
-            <select name="lote_origen_id" required>
-                <option value="">— Selecciona lote —</option>
-                <?php foreach ($lotes as $l): ?>
-                    <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
-                        <?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?> animales)
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <span class="form-hint">Se creará un nuevo lote con sufijo <strong>RE</strong> con los animales indicados</span>
+        <div class="form-section-title">Origen</div>
+        <div class="form-grid form-grid-3">
+            <div class="form-group">
+                <label>Nave origen</label>
+                <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
+                    <option value="">— Nave —</option>
+                    <?php foreach ($naves as $n): ?>
+                        <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Cuadra origen</label>
+                <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
+                    <option value="">— Cuadra —</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Lote *</label>
+                <select id="loteOrigen" name="lote_origen_id" required>
+                    <option value="">— Lote —</option>
+                </select>
+            </div>
         </div>
+        <span class="form-hint">Se creará un nuevo lote con sufijo <strong>RE</strong> con los animales indicados</span>
 
         <!-- ═══════════════════════════════════════════════════
              ENTRADA MADRES
         ════════════════════════════════════════════════════════ -->
         <?php elseif ($tipoActual === 'entrada_madres'): ?>
         <div class="form-section-title">Lote de reposición de origen</div>
-        <div class="form-group">
-            <label>Lote de reposición (RE) *</label>
-            <select name="lote_origen_id" required>
-                <option value="">— Selecciona lote RE —</option>
-                <?php foreach ($lotesReposicion as $l): ?>
-                    <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
-                        <?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?> animales)
-                    </option>
-                <?php endforeach; ?>
-            </select>
-            <span class="form-hint">Se creará un nuevo lote con sufijo <strong>MA</strong></span>
+        <div class="form-grid form-grid-3">
+            <div class="form-group">
+                <label>Nave origen</label>
+                <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
+                    <option value="">— Nave —</option>
+                    <?php foreach ($naves as $n): ?>
+                        <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Cuadra origen</label>
+                <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen', null, true)">
+                    <option value="">— Cuadra —</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Lote RE *</label>
+                <select id="loteOrigen" name="lote_origen_id" required>
+                    <option value="">— Lote RE —</option>
+                </select>
+            </div>
         </div>
+        <span class="form-hint">Solo se muestran lotes con sufijo <strong>RE</strong>. Se creará un nuevo lote <strong>MA</strong></span>
 
         <!-- ═══════════════════════════════════════════════════
              VENTA
@@ -269,15 +293,18 @@ async function cargarCuadras(naveId, selectId, loteSelectId, valorSeleccionado =
     }
 }
 
-async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = null) {
+async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = null, soloRE = false) {
     const sel = document.getElementById(loteSelectId);
     sel.innerHTML = '<option value="">Cargando...</option>';
     if (!cuadraId) { sel.innerHTML = '<option value="">— Lote —</option>'; return; }
 
     const res  = await fetch(`<?= base_url('movimientos/lotes-cuadra') ?>?cuadra_id=${cuadraId}`);
-    const data = await res.json();
+    let data = await res.json();
 
-    sel.innerHTML = '<option value="">— Lote —</option>';
+    // Filtrar solo lotes RE si se pide
+    if (soloRE) data = data.filter(l => l.codigo.trim().endsWith('RE'));
+
+    sel.innerHTML = soloRE ? '<option value="">— Lote RE —</option>' : '<option value="">— Lote —</option>';
     data.forEach(l => {
         const selected = valorSeleccionado && l.id == valorSeleccionado ? 'selected' : '';
         sel.innerHTML += `<option value="${l.id}" ${selected}>${l.codigo} (${l.num_animales} animales)</option>`;
