@@ -109,7 +109,7 @@ class MovimientoController extends BaseController
             'tipo'            => $mov['tipo'],
             'lotes'           => $this->loteModel->allByUsuario($uid),
             'naves'           => $this->naveModel->allByUsuario($uid),
-            'lotesReposicion' => array_filter($this->loteModel->allByUsuario($uid), fn($l) => str_ends_with(trim($l['codigo']), 'RE')),
+            'lotesReposicion' => array_values(array_filter($this->loteModel->allByUsuario($uid), function($l) { return substr(trim($l['codigo']), -2) === 'RE'; })),
             'estados'         => $this->model->estadosAnimal(),
             'historial'       => $this->model->historial((int)$id),
             'pageTitle'       => 'Editar movimiento',
