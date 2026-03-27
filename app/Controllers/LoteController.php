@@ -3,65 +3,56 @@ declare(strict_types=1);
 
 namespace App\Controllers;
 
+use App\Models\Movimiento;
 use App\Models\Lote;
 use App\Models\Nave;
-use App\Models\Granja;
-use App\Models\RazaPorcino;
+use App\Models\Cuadra;
 use App\Core\Session;
+use PDO;
 
-class LoteController extends BaseController
+class MovimientoController extends BaseController
 {
-    private Lote        $model;
-    private Nave        $naveModel;
-    private Granja      $granjaModel;
-    private RazaPorcino $razaModel;
+    private Movimiento $model;
+    private Lote       $loteModel;
+    private Nave       $naveModel;
+    private Cuadra     $cuadraModel;
 
     public function __construct()
     {
-        $this->model       = new Lote();
+        $this->model       = new Movimiento();
+        $this->loteModel   = new Lote();
         $this->naveModel   = new Nave();
-        $this->granjaModel = new Granja();
-        $this->razaModel   = new RazaPorcino();
+        $this->cuadraModel = new Cuadra();
     }
 
+    // ── Listado ──────────────────────────────────────────────────
     public function index(): void
     {
         auth_required();
-        $lotes = $this->model->allByUsuario(Session::get('usuario_id'));
-        $this->view('lotes/index', ['lotes' => $lotes, 'pageTitle' => 'Lotes']);
+        $uid = Session::get('usuario_id');
+        $this->view('movimientos/index', [
+            'movimientos' => $this->model->allByUsuario($uid),
+            'pageTitle'   => 'Movimientos',
+            'success'     => Session::getFlash('success'),
+            'error'       => Session::getFlash('error'),
+        ]);
     }
 
+    // ── Crear ────────────────────────────────────────────────────
     public function create(): void
     {
         auth_required();
-        $uid = Session::get('usuario_id');
+        $uid  = Session::get('usuario_id');
+        $tipo = $_GET['tipo'] ?? 'traslado_cuadra';
 
-        $granjas = $this->granjaModel->selectOptions($uid);
-
-        // Preseleccionar granja si solo hay una
-        $granjaPreseleccionada = count($granjas) === 1 ? $granjas[0]['id'] : null;
-
-        $tiposPorGranja = [];
-        foreach ($granjas as $g) {
-            if ($g['especie']) {
-                $tiposPorGranja[$g['id']] = $this->model->tipoAnimalParaGranja($g['especie'], $g['tipo_produccion'] ?? null);
-            }
-        }
-
-        $this->view('lotes/form', [
-            'lote'                 => null,
-            'naves'                => $this->naveModel->selectOptions($uid),
-            'granjas'              => $granjas,
-            'granjaPreseleccionada'=> $granjaPreseleccionada,
-            'tipos'                => $this->model->tiposAnimal(),
-            'tiposPorGranja'       => $tiposPorGranja,
-            'razas'                => $this->razaModel->allParaUsuario($uid),
-            'cuadrasAsig'          => [],
-            'cuadrasDelLote'       => [],
-            'historialMovimientos' => [],
-            'pageTitle'            => 'Nuevo lote',
-            'codigoAuto'           => '',
-            'error'                => Session::getFlash('error'),
+        $this->view('movimientos/form', [
+            'movimiento' => null,
+            'tipo'       => $tipo,
+            'lotes'      => $this->loteModel->allByUsuario($uid),
+            'naves'      => $this->naveModel->allByUsuario($uid),
+            'estados'    => $this->model->estadosAnimal(),
+            'pageTitle'  => 'Nuevo movimiento',
+            'error'      => Session::getFlash('error'),
         ]);
     }
 
@@ -70,120 +61,59 @@ class LoteController extends BaseController
         auth_required();
         if (!Session::validateCsrf($this->postString('csrf_token'))) {
             Session::flash('error', 'Token inválido.');
-            $this->redirect('lotes/crear');
+            $this->redirect('movimientos/crear');
         }
 
-        $fechaNac = $this->postString('fecha_nacimiento');
-        if (!$fechaNac) {
-            Session::flash('error', 'La fecha de nacimiento es obligatoria.');
-            $this->redirect('lotes/crear');
+        $uid  = Session::get('usuario_id');
+        $tipo = $this->postString('tipo');
+
+        $data = [
+            'tipo'              => $tipo,
+            'fecha'             => $this->postString('fecha') ?: date('Y-m-d'),
+            'lote_origen_id'    => (int)$this->post('lote_origen_id'),
+            'lote_destino_id'   => $this->post('lote_destino_id')   ?: null,
+            'cuadra_origen_id'  => $this->post('cuadra_origen_id')  ?: null,
+            'cuadra_destino_id' => $this->post('cuadra_destino_id') ?: null,
+            'num_animales'          => (int)$this->post('num_animales'),
+            'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
+            'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
+            'tipo_venta'        => $this->post('tipo_venta')        ?: null,
+            'observaciones'     => $this->postString('observaciones'),
+        ];
+
+        // Aplicar efectos del movimiento
+        try {
+            $this->aplicarMovimiento($tipo, $data, $uid);
+        } catch (\Exception $e) {
+            Session::flash('error', $e->getMessage());
+            $this->redirect('movimientos/crear?tipo=' . $tipo);
         }
 
-        $razaId  = $this->post('raza_id') ? (int)$this->post('raza_id') : null;
-        $codigoManual = trim($this->postString('codigo_manual'));
-        $codigo = !empty($codigoManual) ? $codigoManual : Lote::generarCodigo($fechaNac, $razaId ? $this->razaModel->sufijoCodigo($razaId) : null);
-
-        if ($this->model->codigoExisteSimple($codigo)) {
-            $sufijo = 2;
-            while ($this->model->codigoExisteSimple($codigo . "-{$sufijo}")) $sufijo++;
-            $codigo .= "-{$sufijo}";
-        }
-
-        $naveId   = $this->post('nave_id') ?: null;
-        $granjaId = $this->post('granja_id') ?: null;
-
-        $this->model->create([
-            'nave_id'          => $naveId ? (int)$naveId : null,
-            'granja_id'        => $granjaId ? (int)$granjaId : null,
-            'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
-            'raza_id'          => $razaId,
-            'codigo'           => $codigo,
-            'num_animales'     => (int)$this->post('num_animales', 0),
-            'peso_entrada_kg'  => (float)$this->post('peso_entrada_kg', 0),
-            'fecha_entrada'    => $this->postString('fecha_entrada') ?: date('Y-m-d'),
-            'fecha_nacimiento' => $fechaNac,
-            'observaciones'    => $this->postString('observaciones'),
-        ]);
-
-        $loteId = \App\Core\Database::getInstance()->lastInsertId();
-
-        // Asignar cuadras si se distribuyó
-        $cuadrasIds  = $_POST['cuadras_asig_id']  ?? [];
-        $cuadrasNums = $_POST['cuadras_asig_num'] ?? [];
-        if (!empty($cuadrasIds)) {
-            $cuadraModel = new \App\Models\Cuadra();
-            foreach ($cuadrasIds as $i => $cuadraId) {
-                $num = (int)($cuadrasNums[$i] ?? 0);
-                if ($num > 0) {
-                    $cuadraModel->asignarLote((int)$cuadraId, (int)$loteId, $num, date('Y-m-d'));
-                }
-            }
-        }
-
-        Session::flash('success', "Lote <strong>{$codigo}</strong> creado correctamente.");
-        $this->redirect('lotes');
+        $this->model->create($data, $uid);
+        Session::flash('success', 'Movimiento registrado correctamente.');
+        $this->redirect('movimientos');
     }
 
+    // ── Editar ───────────────────────────────────────────────────
     public function edit(string $id): void
     {
         auth_required();
-        $uid  = Session::get('usuario_id');
-        $lote = $this->model->find((int)$id, $uid);
-        if (!$lote) $this->redirect('lotes');
+        $uid = Session::get('usuario_id');
+        $mov = $this->model->find((int)$id);
+        if (!$mov) $this->redirect('movimientos');
 
-        $granjas = $this->granjaModel->selectOptions($uid);
-        $tiposPorGranja = [];
-        foreach ($granjas as $g) {
-            if ($g['especie']) {
-                $tiposPorGranja[$g['id']] = $this->model->tipoAnimalParaGranja($g['especie'], $g['tipo_produccion'] ?? null);
-            }
-        }
-
-        // Cuadras ya asignadas al lote
-        $cuadraModel    = new \App\Models\Cuadra();
-        $cuadrasDelLote = $cuadraModel->cuadrasDelLote((int)$id);
-        $cuadrasAsig    = array_column($cuadrasDelLote, 'num_animales', 'cuadra_id');
-
-        // Historial de movimientos del lote
-        $db = \App\Core\Database::getInstance();
-        $stmtMov = $db->prepare("
-            SELECT m.*, m.fecha,
-                   lo.codigo AS lote_origen_codigo,
-                   ld.codigo AS lote_destino_codigo,
-                   co.nombre AS cuadra_origen_nombre,
-                   cd.nombre AS cuadra_destino_nombre,
-                   no.nombre AS nave_origen_nombre,
-                   nd.nombre AS nave_destino_nombre,
-                   u.nombre  AS usuario_nombre
-            FROM movimientos m
-            JOIN lotes lo ON m.lote_origen_id = lo.id
-            LEFT JOIN lotes ld   ON m.lote_destino_id  = ld.id
-            LEFT JOIN cuadras co ON m.cuadra_origen_id  = co.id
-            LEFT JOIN cuadras cd ON m.cuadra_destino_id = cd.id
-            LEFT JOIN naves no   ON co.nave_id = no.id
-            LEFT JOIN naves nd   ON cd.nave_id = nd.id
-            JOIN usuarios u ON m.usuario_id = u.id
-            WHERE m.lote_origen_id = :id OR m.lote_destino_id = :id2
-            ORDER BY m.fecha DESC, m.created_at DESC
-            LIMIT 20
-        ");
-        $stmtMov->execute(['id' => (int)$id, 'id2' => (int)$id]);
-        $historialMovimientos = $stmtMov->fetchAll();
-
-        $this->view('lotes/form', [
-            'lote'                 => $lote,
-            'naves'                => $this->naveModel->selectOptions($uid),
-            'granjas'              => $granjas,
-            'granjaPreseleccionada'=> null,
-            'tipos'                => $this->model->tiposAnimal(),
-            'tiposPorGranja'       => $tiposPorGranja,
-            'razas'                => $this->razaModel->allParaUsuario($uid),
-            'cuadrasAsig'          => $cuadrasAsig,
-            'cuadrasDelLote'       => $cuadrasDelLote,
-            'historialMovimientos' => $historialMovimientos,
-            'pageTitle'            => 'Editar lote ' . $lote['codigo'],
-            'codigoAuto'           => $lote['codigo'],
-            'error'                => Session::getFlash('error'),
+        $this->view('movimientos/form', [
+            'movimiento'      => $mov,
+            'esEdicion'       => true,
+            'tipoActual'      => $mov['tipo'],
+            'tipo'            => $mov['tipo'],
+            'lotes'           => $this->loteModel->allByUsuario($uid),
+            'naves'           => $this->naveModel->allByUsuario($uid),
+            'lotesReposicion' => array_filter($this->loteModel->allByUsuario($uid), fn($l) => str_ends_with(trim($l['codigo']), 'RE')),
+            'estados'         => $this->model->estadosAnimal(),
+            'historial'       => $this->model->historial((int)$id),
+            'pageTitle'       => 'Editar movimiento',
+            'error'           => Session::getFlash('error'),
         ]);
     }
 
@@ -192,136 +122,390 @@ class LoteController extends BaseController
         auth_required();
         if (!Session::validateCsrf($this->postString('csrf_token'))) {
             Session::flash('error', 'Token inválido.');
-            $this->redirect("lotes/{$id}/editar");
+            $this->redirect("movimientos/{$id}/editar");
         }
 
-        $naveId   = $this->post('nave_id') ?: null;
-        $granjaId = $this->post('granja_id') ?: null;
-        $codigoManual = trim($this->postString('codigo_manual'));
+        $uid       = Session::get('usuario_id');
+        $tipo      = $this->postString('tipo');
+        $movActual = $this->model->find((int)$id);
+        if (!$movActual) $this->redirect('movimientos');
 
-        $this->model->update((int)$id, Session::get('usuario_id'), [
-            'nave_id'          => $naveId ? (int)$naveId : null,
-            'granja_id'        => $granjaId ? (int)$granjaId : null,
-            'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
-            'raza_id'          => $this->post('raza_id') ? (int)$this->post('raza_id') : null,
-            'codigo'           => !empty($codigoManual) ? $codigoManual : null,
-            'num_animales'     => (int)$this->post('num_animales', 0),
-            'peso_entrada_kg'  => (float)$this->post('peso_entrada_kg', 0),
-            'fecha_entrada'    => date('Y-m-d'),
-            'fecha_nacimiento' => $this->postString('fecha_nacimiento') ?: null,
-            'observaciones'    => $this->postString('observaciones'),
-        ]);
+        $data = [
+            'tipo'              => $tipo,
+            'fecha'             => $this->postString('fecha') ?: date('Y-m-d'),
+            'lote_origen_id'    => (int)$this->post('lote_origen_id'),
+            'lote_destino_id'   => $this->post('lote_destino_id')   ?: null,
+            'cuadra_origen_id'  => $this->post('cuadra_origen_id')  ?: null,
+            'cuadra_destino_id' => $this->post('cuadra_destino_id') ?: null,
+            'num_animales'      => (int)$this->post('num_animales'),
+            'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
+            'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
+            'tipo_venta'        => $this->post('tipo_venta')        ?: null,
+            'observaciones'     => $this->postString('observaciones'),
+        ];
 
-        // Sync cuadras: borrar asignaciones anteriores y crear las nuevas
-        $cuadrasIds  = $_POST['cuadras_asig_id']  ?? [];
-        $cuadrasNums = $_POST['cuadras_asig_num'] ?? [];
-        if (!empty($cuadrasIds)) {
-            $db = \App\Core\Database::getInstance();
-            // Borrar asignaciones activas del lote
-            $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE lote_id = :lid")
-               ->execute(['lid' => (int)$id]);
-            // Crear las nuevas
-            $cuadraModel = new \App\Models\Cuadra();
-            foreach ($cuadrasIds as $i => $cuadraId) {
-                $num = (int)($cuadrasNums[$i] ?? 0);
-                if ($num > 0) {
-                    $cuadraModel->asignarLote((int)$cuadraId, (int)$id, $num, date('Y-m-d'));
-                }
-            }
+        // Revertir efecto anterior y aplicar el nuevo
+        try {
+            $this->revertirMovimiento($movActual, $uid);
+            $this->aplicarMovimiento($tipo, $data, $uid);
+        } catch (\Exception $e) {
+            Session::flash('error', $e->getMessage());
+            $this->redirect("movimientos/{$id}/editar");
         }
 
-        Session::flash('success', 'Lote actualizado.');
-        $this->redirect('lotes');
+        $this->model->update((int)$id, $data, $uid);
+        Session::flash('success', 'Movimiento actualizado.');
+        $this->redirect('movimientos');
     }
 
-    public function ajustar(string $id): void
-    {
-        auth_required();
-        if (!Session::validateCsrf($this->postString('csrf_token'))) {
-            $this->redirect('lotes');
-        }
-        $cantidad = abs((int)$this->post('cantidad', 0));
-        $tipo     = $this->postString('tipo');
-        if ($cantidad > 0 && in_array($tipo, ['añadir', 'reducir'])) {
-            $this->model->ajustarAnimales((int)$id, $cantidad, $tipo);
-            $accion = $tipo === 'añadir' ? 'añadidos' : 'reducidos';
-            Session::flash('success', "{$cantidad} animales {$accion} correctamente.");
-        }
-        $this->redirect('lotes');
-    }
-
-    // ── Crear raza personalizada (AJAX) ──────────────────────────
-    public function tablaSemana(): void
-    {
-        auth_required();
-        header('Content-Type: application/json');
-        $razaId = (int)($_GET['raza_id'] ?? 0);
-        $semana = (int)($_GET['semana']  ?? 0);
-
-        if (!$razaId || $semana < 0) {
-            echo json_encode(['ok' => false]);
-            return;
-        }
-
-        $stmt = \App\Core\Database::getInstance()->prepare("
-            SELECT tcl.peso_kg, tcl.coste_eur, tcl.consumo_acumulado_g
-            FROM tabla_raza tr
-            JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
-            JOIN tablas_crecimiento_lineas tcl ON tcl.tabla_id = tc.id AND tcl.semana = :semana
-            WHERE tr.raza_id = :raza_id
-            LIMIT 1
-        ");
-        $stmt->execute(['raza_id' => $razaId, 'semana' => $semana]);
-        $row = $stmt->fetch();
-
-        if (!$row) {
-            echo json_encode(['ok' => false]);
-            return;
-        }
-
-        echo json_encode([
-            'ok'      => true,
-            'peso'    => $row['peso_kg'],
-            'coste'   => $row['coste_eur'],
-            'consumo' => $row['consumo_acumulado_g'],
-        ]);
-    }
-
-    public function crearRaza(): void
-    {
-        auth_required();
-        header('Content-Type: application/json');
-        $uid           = Session::get('usuario_id');
-        $nombre        = trim($_POST['nombre'] ?? '');
-        $porcentaje    = trim($_POST['porcentaje'] ?? '');
-        $identificador = strtoupper(trim($_POST['identificador'] ?? ''));
-
-        if (strlen($nombre) < 2) {
-            echo json_encode(['ok' => false, 'msg' => 'Nombre demasiado corto']);
-            return;
-        }
-
-        $id = $this->razaModel->create([
-            'usuario_id'    => $uid,
-            'nombre'        => capitalizar($nombre),
-            'porcentaje'    => $porcentaje ?: null,
-            'identificador' => $identificador ?: null,
-        ]);
-
-        echo json_encode([
-            'ok'            => true,
-            'id'            => $id,
-            'nombre'        => capitalizar($nombre),
-            'porcentaje'    => $porcentaje ?: null,
-            'identificador' => $identificador ?: null,
-        ]);
-    }
-
+    // ── Eliminar ─────────────────────────────────────────────────
     public function delete(string $id): void
     {
         auth_required();
-        $this->model->delete((int)$id, Session::get('usuario_id'));
-        Session::flash('success', 'Lote cerrado.');
-        $this->redirect('lotes');
+        $uid = Session::get('usuario_id');
+        $mov = $this->model->find((int)$id);
+        if ($mov) {
+            try {
+                $this->revertirMovimiento($mov, $uid);
+            } catch (\Exception $e) {
+                // Si no se puede revertir, eliminar igualmente pero avisar
+            }
+        }
+        $this->model->delete((int)$id, $uid);
+        Session::flash('success', 'Movimiento eliminado y efecto revertido.');
+        $this->redirect('movimientos');
+    }
+
+    // ── API AJAX: cuadras de una nave ────────────────────────────
+    public function cuadrasPorNave(): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $naveId = (int)($_GET['nave_id'] ?? 0);
+        if (!$naveId) { echo json_encode([]); return; }
+
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT c.id, c.nombre, c.capacidad_maxima,
+                   GROUP_CONCAT(DISTINCT l.codigo SEPARATOR ', ') AS lotes
+            FROM cuadras c
+            LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id
+                AND cl.activo = 1
+                AND cl.num_animales > 0
+            LEFT JOIN lotes l ON cl.lote_id = l.id AND l.estado = 'activo'
+            WHERE c.nave_id = :nave_id AND c.activa = 1
+            GROUP BY c.id
+            ORDER BY c.nombre
+        ");
+        $stmt->execute(['nave_id' => $naveId]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    // ── API AJAX: lotes de una cuadra ────────────────────────────
+    public function lotesPorCuadra(): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $cuadraId = (int)($_GET['cuadra_id'] ?? 0);
+        if (!$cuadraId) { echo json_encode([]); return; }
+
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT l.id, l.codigo, cl.num_animales
+            FROM lotes l
+            JOIN cuadra_lote cl ON cl.lote_id = l.id
+                AND cl.cuadra_id = :cuadra_id
+                AND cl.activo = 1
+                AND cl.num_animales > 0
+            WHERE l.estado = 'activo'
+            ORDER BY l.codigo
+        ");
+        $stmt->execute(['cuadra_id' => $cuadraId]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    // ── Lógica de efectos ────────────────────────────────────────
+    private function revertirMovimiento(array $mov, int $uid): void
+    {
+        $db       = \App\Core\Database::getInstance();
+        $cantidad = (int)$mov['num_animales'];
+
+        switch ($mov['tipo']) {
+
+            case 'traslado_cuadra':
+                // Devolver animales a la cuadra origen
+                if ($mov['cuadra_origen_id'] && $mov['lote_origen_id']) {
+                    $stmt = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1");
+                    $stmt->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                    $clId = $stmt->fetchColumn();
+                    if ($clId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE id = :id")
+                           ->execute(['n' => $cantidad, 'id' => $clId]);
+                    } else {
+                        $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid, :lid, :n, CURDATE())")
+                           ->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id'], 'n' => $cantidad]);
+                    }
+                }
+                // Quitar animales de la cuadra destino
+                if ($mov['cuadra_destino_id'] && $mov['lote_origen_id']) {
+                    $db->prepare("
+                        UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n)
+                        WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1
+                    ")->execute(['n' => $cantidad, 'cid' => $mov['cuadra_destino_id'], 'lid' => $mov['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0")
+                       ->execute(['cid' => $mov['cuadra_destino_id'], 'lid' => $mov['lote_origen_id']]);
+                }
+                break;
+
+            case 'venta':
+                // Devolver animales al lote
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                break;
+
+            case 'entrada_cebo':
+                $db->prepare("UPDATE lotes SET estado_animal = 'lechon' WHERE id = :id")
+                   ->execute(['id' => $mov['lote_origen_id']]);
+                break;
+
+            case 'entrada_reposicion':
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                if ($mov['lote_destino_id'] && $mov['lote_destino_id'] !== $mov['lote_origen_id']) {
+                    $db->prepare("UPDATE lotes SET estado = 'cerrado' WHERE id = :id")
+                       ->execute(['id' => $mov['lote_destino_id']]);
+                }
+                if ($mov['cuadra_origen_id']) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE cuadra_id = :cid AND lote_id = :lid")
+                       ->execute(['n' => $cantidad, 'cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                }
+                break;
+
+            case 'entrada_madres':
+                // Revertir estado del lote RE a reposicion
+                $db->prepare("UPDATE lotes SET estado_animal = 'reposicion' WHERE id = :id")
+                   ->execute(['id' => $mov['lote_origen_id']]);
+                // Si fue parcial, devolver animales
+                if ($mov['lote_destino_id'] === $mov['lote_origen_id']) {
+                    // Restaurar animales si fue parcial (se restaron)
+                    // El historial guarda la cantidad, la restauramos
+                    $db->prepare("UPDATE lotes SET num_animales = num_animales + :n WHERE id = :id AND estado_animal = 'reposicion'")
+                       ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                }
+                break;
+        }
+    }
+
+    private function aplicarMovimiento(string $tipo, array &$data, int $uid): void
+    {
+        $db         = \App\Core\Database::getInstance();
+        $loteOrigen = $this->loteModel->find($data['lote_origen_id'], $uid);
+        if (!$loteOrigen) throw new \Exception('Lote de origen no encontrado.');
+
+        $cantidad = $data['num_animales'];
+        if ($cantidad < 1) throw new \Exception('La cantidad debe ser mayor que 0.');
+
+        switch ($tipo) {
+
+            case 'traslado_cuadra':
+                if (!$data['cuadra_destino_id']) throw new \Exception('Selecciona una cuadra destino.');
+                if (!$data['cuadra_origen_id'])  throw new \Exception('Selecciona una cuadra origen.');
+
+                // Validar animales en cuadra origen
+                $stmtCheck = $db->prepare("SELECT COALESCE(num_animales,0) FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1 LIMIT 1");
+                $stmtCheck->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                $enCuadra = (int)$stmtCheck->fetchColumn();
+                if ($cantidad > $enCuadra) {
+                    throw new \Exception("Solo hay {$enCuadra} animales del lote en esa cuadra. No puedes trasladar {$cantidad}.");
+                }
+
+                // Validar capacidad cuadra destino
+                $stmtCap = $db->prepare("SELECT c.capacidad_maxima, COALESCE(SUM(cl.num_animales),0) AS ocupados FROM cuadras c LEFT JOIN cuadra_lote cl ON cl.cuadra_id=c.id AND cl.activo=1 WHERE c.id=:id GROUP BY c.id");
+                $stmtCap->execute(['id' => $data['cuadra_destino_id']]);
+                $cuadraDestino = $stmtCap->fetch();
+                if ($cuadraDestino && $cuadraDestino['capacidad_maxima']) {
+                    $libre = $cuadraDestino['capacidad_maxima'] - $cuadraDestino['ocupados'];
+                    if ($cantidad > $libre) {
+                        throw new \Exception("La cuadra destino solo tiene {$libre} plazas libres.");
+                    }
+                }
+
+                // Restar de cuadra origen
+                $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                   ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                   ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+
+                // Obtener nave destino
+                $stmtNave = $db->prepare("SELECT nave_id FROM cuadras WHERE id=:id");
+                $stmtNave->execute(['id' => $data['cuadra_destino_id']]);
+                $naveId = $stmtNave->fetchColumn();
+
+                // Sumar en cuadra destino
+                $stmtExiste = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid LIMIT 1");
+                $stmtExiste->execute(['cid' => $data['cuadra_destino_id'], 'lid' => $data['lote_origen_id']]);
+                $clId = $stmtExiste->fetchColumn();
+                if ($clId) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=num_animales+:n, activo=1 WHERE id=:id")
+                       ->execute(['n' => $cantidad, 'id' => $clId]);
+                } else {
+                    $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid,:lid,:n,CURDATE())")
+                       ->execute(['cid' => $data['cuadra_destino_id'], 'lid' => $data['lote_origen_id'], 'n' => $cantidad]);
+                }
+
+                // Actualizar nave del lote solo si no quedan animales en nave origen
+                if ($naveId && $loteOrigen['nave_id'] && $naveId != $loteOrigen['nave_id']) {
+                    $stmtResto = $db->prepare("SELECT COALESCE(SUM(cl.num_animales),0) FROM cuadra_lote cl JOIN cuadras c ON cl.cuadra_id=c.id WHERE cl.lote_id=:lid AND c.nave_id=:nid AND cl.activo=1");
+                    $stmtResto->execute(['lid' => $data['lote_origen_id'], 'nid' => $loteOrigen['nave_id']]);
+                    if ((int)$stmtResto->fetchColumn() === 0) {
+                        $db->prepare("UPDATE lotes SET nave_id=:nave WHERE id=:id")->execute(['nave' => $naveId, 'id' => $data['lote_origen_id']]);
+                    }
+                }
+                break;
+
+            case 'entrada_cebo':
+                $db->prepare("UPDATE lotes SET estado_animal='cebo' WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
+                break;
+
+            case 'entrada_reposicion':
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote.");
+                }
+                // Restar animales del lote origen
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                // Restar de cuadra origen
+                if (!empty($data['cuadra_origen_id'])) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                       ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                       ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                }
+                // Código RE = parte base del código sin identificador de raza
+                // L 13/26 IB → L 13/26 RE
+                $codigoRE = preg_replace('/^(L \d+\/\d+).*$/', '$1 RE', trim($loteOrigen['codigo']));
+
+                // Buscar lote RE existente (activo o cerrado) con ese código
+                $stmtRE = $db->prepare("
+                    SELECT id, estado FROM lotes WHERE codigo = :codigo
+                    AND granja_id = :gid ORDER BY id DESC LIMIT 1
+                ");
+                $stmtRE->execute(['codigo' => $codigoRE, 'gid' => $loteOrigen['granja_id']]);
+                $loteREExistente = $stmtRE->fetch();
+
+                if ($loteREExistente) {
+                    // Reutilizar — reactivar si estaba cerrado y sumar animales
+                    $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
+                       ->execute(['n' => $cantidad, 'id' => $loteREExistente['id']]);
+                    // Añadir a cuadra origen
+                    if (!empty($data['cuadra_origen_id'])) {
+                        $stmtCL = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid LIMIT 1");
+                        $stmtCL->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $loteREExistente['id']]);
+                        $clId = $stmtCL->fetchColumn();
+                        if ($clId) {
+                            $db->prepare("UPDATE cuadra_lote SET num_animales=num_animales+:n, activo=1 WHERE id=:id")
+                               ->execute(['n' => $cantidad, 'id' => $clId]);
+                        } else {
+                            $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid,:lid,:n,CURDATE())")
+                               ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $loteREExistente['id'], 'n' => $cantidad]);
+                        }
+                    }
+                    $data['lote_destino_id'] = $loteREExistente['id'];
+                } else {
+                    // Crear nuevo lote RE
+                    $nuevoId = $this->crearSubLote($loteOrigen, $codigoRE, $cantidad, 'reposicion', $uid, !empty($data['cuadra_origen_id']) ? (int)$data['cuadra_origen_id'] : null);
+                    $data['lote_destino_id'] = $nuevoId;
+                }
+                break;
+
+            case 'entrada_madres':
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote RE.");
+                }
+                // Restar animales del lote RE siempre
+                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                // Descontar de cuadra origen si se especificó
+                if (!empty($data['cuadra_origen_id'])) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n) WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1")
+                       ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0")
+                       ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                }
+                // Si el lote RE queda vacío, cerrarlo
+                $restantesRE = $db->prepare("SELECT num_animales FROM lotes WHERE id = :id");
+                $restantesRE->execute(['id' => $data['lote_origen_id']]);
+                if ((int)$restantesRE->fetchColumn() <= 0) {
+                    $db->prepare("UPDATE lotes SET estado = 'cerrado' WHERE id = :id")
+                       ->execute(['id' => $data['lote_origen_id']]);
+                }
+                // No se crea lote destino
+                $data['lote_destino_id'] = $data['lote_origen_id'];
+                break;
+
+            case 'venta':
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote.");
+                }
+                // Validar animales en cuadra origen si se especificó
+                if (!empty($data['cuadra_origen_id'])) {
+                    $stmtCheck = $db->prepare("SELECT COALESCE(num_animales,0) FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1 LIMIT 1");
+                    $stmtCheck->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $enCuadra = (int)$stmtCheck->fetchColumn();
+                    if ($cantidad > $enCuadra) {
+                        throw new \Exception("Solo hay {$enCuadra} animales del lote en esa cuadra.");
+                    }
+                }
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                // Descontar de cuadra origen
+                if (!empty($data['cuadra_origen_id'])) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                       ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                       ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                } else {
+                    // Sin cuadra específica, descontar proporcionalmente de todas
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE lote_id=:lid AND activo=1")->execute(['n' => $cantidad, 'lid' => $data['lote_origen_id']]);
+                }
+                $restantes = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
+                $restantes->execute(['id' => $data['lote_origen_id']]);
+                if ((int)$restantes->fetchColumn() <= 0) {
+                    $db->prepare("UPDATE lotes SET estado='cerrado' WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
+                }
+                break;
+        }
+    }
+
+    private function crearSubLote(array $origen, string $codigo, int $numAnimales, string $estadoAnimal, int $uid, ?int $cuadraOrigenId = null): int
+    {
+        $db = \App\Core\Database::getInstance();
+
+        $stmt = $db->prepare("
+            INSERT INTO lotes (granja_id, nave_id, tipo_animal_id, raza_id, codigo, num_animales,
+                               peso_entrada_kg, fecha_entrada, fecha_nacimiento, estado, estado_animal, observaciones)
+            VALUES (:granja_id, :nave_id, :tipo_animal_id, :raza_id, :codigo, :num_animales,
+                    :peso_entrada_kg, CURDATE(), :fecha_nacimiento, 'activo', :estado_animal, :observaciones)
+        ");
+        $stmt->execute([
+            'granja_id'       => $origen['granja_id'],
+            'nave_id'         => $origen['nave_id'],
+            'tipo_animal_id'  => $origen['tipo_animal_id'],
+            'raza_id'         => $origen['raza_id'],
+            'codigo'          => $codigo,
+            'num_animales'    => $numAnimales,
+            'peso_entrada_kg' => $origen['peso_entrada_kg'],
+            'fecha_nacimiento'=> $origen['fecha_nacimiento'],
+            'estado_animal'   => $estadoAnimal,
+            'observaciones'   => "Creado desde lote {$origen['codigo']}",
+        ]);
+        $nuevoId = (int) $db->lastInsertId();
+
+        // Asignar solo a la cuadra origen especificada
+        if ($cuadraOrigenId) {
+            $db->prepare("
+                INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada)
+                VALUES (:cid, :lid, :n, CURDATE())
+            ")->execute(['cid' => $cuadraOrigenId, 'lid' => $nuevoId, 'n' => $numAnimales]);
+        }
+
+        return $nuevoId;
     }
 }
