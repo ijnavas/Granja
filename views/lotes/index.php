@@ -2,7 +2,14 @@
 
 <div class="page-header">
     <h2>Lotes</h2>
-    <a href="<?= base_url('lotes/crear') ?>" class="btn btn-primary">+ Nuevo lote</a>
+    <div style="display:flex;gap:.75rem;align-items:center">
+        <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;color:#6b7280;cursor:pointer;font-weight:400">
+            <input type="checkbox" id="mostrarCerrados" onchange="toggleCerrados()"
+                   style="width:15px;height:15px;cursor:pointer">
+            Mostrar cerrados
+        </label>
+        <a href="<?= base_url('lotes/crear') ?>" class="btn btn-primary">+ Nuevo lote</a>
+    </div>
 </div>
 
 <?php if ($flash = \App\Core\Session::getFlash('success')): ?>
@@ -34,7 +41,9 @@
                 $costeTabla = $l['coste_tabla']   ?? null;
                 $valoracion = ($costeTabla && $l['num_animales']) ? $costeTabla * $l['num_animales'] : null;
             ?>
-            <tr style="cursor:pointer" onclick="window.location='<?= base_url("lotes/{$l['id']}/editar") ?>'">
+            <tr style="cursor:pointer<?= $l['estado'] === 'cerrado' ? ';opacity:.5' : '' ?>"
+                class="fila-lote<?= $l['estado'] === 'cerrado' ? ' fila-cerrada' : '' ?>"
+                onclick="window.location='<?= base_url("lotes/{$l['id']}/editar") ?>'">
                 <td>
                     <strong style="font-family:monospace"><?= e($l['codigo']) ?></strong>
                     <?php if ($l['raza_nombre']): ?>
@@ -90,3 +99,17 @@
     </table>
 <?php endif; ?>
 </div>
+
+<script>
+// Ocultar cerrados por defecto al cargar
+document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".fila-cerrada").forEach(r => r.style.display = "none");
+});
+
+function toggleCerrados() {
+    const mostrar = document.getElementById("mostrarCerrados").checked;
+    document.querySelectorAll(".fila-cerrada").forEach(r => {
+        r.style.display = mostrar ? "" : "none";
+    });
+}
+</script>
