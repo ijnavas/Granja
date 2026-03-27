@@ -380,18 +380,19 @@ class MovimientoController extends BaseController
                 // L 13/26 IB → L 13/26 RE
                 $codigoRE = preg_replace('/^(L \d+\/\d+).*$/', '$1 RE', trim($loteOrigen['codigo']));
 
-                // Buscar si ya existe un lote RE activo con ese código exacto
+                // Buscar lote RE existente (activo o cerrado) con ese código
                 $stmtRE = $db->prepare("
-                    SELECT id FROM lotes WHERE codigo = :codigo AND estado = 'activo' LIMIT 1
+                    SELECT id, estado FROM lotes WHERE codigo = :codigo
+                    AND granja_id = :gid ORDER BY id DESC LIMIT 1
                 ");
-                $stmtRE->execute(['codigo' => $codigoRE]);
+                $stmtRE->execute(['codigo' => $codigoRE, 'gid' => $loteOrigen['granja_id']]);
                 $loteREExistente = $stmtRE->fetch();
 
-                if ($loteREExistente && $loteREExistente['estado'] !== 'cerrado') {
-                    // Sumar al lote RE existente
-                    $db->prepare("UPDATE lotes SET num_animales = num_animales + :n WHERE id = :id")
+                if ($loteREExistente) {
+                    // Reutilizar — reactivar si estaba cerrado y sumar animales
+                    $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
                        ->execute(['n' => $cantidad, 'id' => $loteREExistente['id']]);
-                    // Añadir a cuadra origen en el lote RE
+                    // Añadir a cuadra origen
                     if (!empty($data['cuadra_origen_id'])) {
                         $stmtCL = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid LIMIT 1");
                         $stmtCL->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $loteREExistente['id']]);
