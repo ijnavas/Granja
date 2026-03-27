@@ -77,7 +77,8 @@ $totalAnimales = array_sum(array_column($lotes, 'num_animales'));
     </div>
 <?php else: ?>
     <?php foreach ($lotes as $l): ?>
-    <div class="lote-card">
+    <div class="lote-card" style="cursor:pointer" onclick="window.location='<?= base_url("lotes/{$l['lote_id']}/editar") ?>'"
+         onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow=''">
         <div>
             <div class="lote-codigo"><?= e($l['codigo']) ?></div>
             <div class="lote-info">
@@ -97,10 +98,10 @@ $totalAnimales = array_sum(array_column($lotes, 'num_animales'));
                 <?= number_format($l['total_lote']) ?> total lote
             </div>
             <form method="POST" action="<?= base_url("cuadras/{$cuadra['id']}/retirar") ?>"
-                  onsubmit="return confirm('¿Retirar este lote de la cuadra?')">
+                  onsubmit="event.stopPropagation(); return confirm('¿Retirar este lote de la cuadra?')">
                 <?= csrf_field() ?>
                 <input type="hidden" name="cuadra_lote_id" value="<?= $l['id'] ?>">
-                <button type="submit" class="btn btn-danger btn-sm">Retirar</button>
+                <button type="submit" class="btn btn-danger btn-sm" onclick="event.stopPropagation()">Retirar</button>
             </form>
         </div>
     </div>
