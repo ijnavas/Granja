@@ -262,14 +262,26 @@ $tipoLabels = [
                 </span>
                 <span style="font-size:.75rem;color:#9ca3af"><?= date('d/m/Y', strtotime($m['fecha'])) ?></span>
             </div>
-            <div style="font-size:.8rem;color:#6b7280">
-                <?php if ($m['cuadra_origen_nombre']): ?>
-                    <?= e($m['nave_origen_nombre'] ?? '') ?> · <?= e($m['cuadra_origen_nombre']) ?>
-                    <?php if ($m['cuadra_destino_nombre']): ?>
-                        → <?= e($m['nave_destino_nombre'] ?? '') ?> · <?= e($m['cuadra_destino_nombre']) ?>
+            <div style="font-size:.8rem;color:#6b7280;margin-top:.25rem">
+                <?php
+                $origen  = array_filter([$m['nave_origen_nombre'], $m['cuadra_origen_nombre']]);
+                $destino = array_filter([$m['nave_destino_nombre'], $m['cuadra_destino_nombre']]);
+                $origenLote  = $m['lote_origen_codigo']  ?? '';
+                $destinoLote = $m['lote_destino_codigo'] ?? '';
+                ?>
+                <?php if ($origen): ?>
+                    <span style="color:#374151">📍 <?= e(implode(' · ', $origen)) ?></span>
+                    <?php if ($destino): ?>
+                        <span style="color:#9ca3af"> → </span>
+                        <span style="color:#374151"><?= e(implode(' · ', $destino)) ?></span>
+                    <?php elseif ($destinoLote && $destinoLote !== $origenLote): ?>
+                        <span style="color:#9ca3af"> → </span>
+                        <span style="color:#374151"><?= e($destinoLote) ?></span>
                     <?php endif; ?>
-                <?php elseif ($m['lote_destino_codigo']): ?>
-                    → <?= e($m['lote_destino_codigo']) ?>
+                <?php elseif ($destinoLote && $destinoLote !== $origenLote): ?>
+                    <span style="color:#374151">📍 <?= e($origenLote) ?> → <?= e($destinoLote) ?></span>
+                <?php else: ?>
+                    <span style="color:#374151">📍 <?= e($origenLote) ?></span>
                 <?php endif; ?>
             </div>
             <div style="font-size:.78rem;color:#374151;font-weight:600;margin-top:.1rem">
