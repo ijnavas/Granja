@@ -57,6 +57,8 @@ class LoteController extends BaseController
             'tiposPorGranja'       => $tiposPorGranja,
             'razas'                => $this->razaModel->allParaUsuario($uid),
             'cuadrasAsig'          => [],
+            'cuadrasDelLote'       => [],
+            'historialMovimientos' => [],
             'pageTitle'            => 'Nuevo lote',
             'codigoAuto'           => '',
             'error'                => Session::getFlash('error'),
@@ -142,6 +144,32 @@ class LoteController extends BaseController
         $cuadrasDelLote = $cuadraModel->cuadrasDelLote((int)$id);
         $cuadrasAsig    = array_column($cuadrasDelLote, 'num_animales', 'cuadra_id');
 
+        // Historial de movimientos del lote
+        $db = \App\Core\Database::getInstance();
+        $stmtMov = $db->prepare("
+            SELECT m.*, m.fecha,
+                   lo.codigo AS lote_origen_codigo,
+                   ld.codigo AS lote_destino_codigo,
+                   co.nombre AS cuadra_origen_nombre,
+                   cd.nombre AS cuadra_destino_nombre,
+                   no.nombre AS nave_origen_nombre,
+                   nd.nombre AS nave_destino_nombre,
+                   u.nombre  AS usuario_nombre
+            FROM movimientos m
+            JOIN lotes lo ON m.lote_origen_id = lo.id
+            LEFT JOIN lotes ld   ON m.lote_destino_id  = ld.id
+            LEFT JOIN cuadras co ON m.cuadra_origen_id  = co.id
+            LEFT JOIN cuadras cd ON m.cuadra_destino_id = cd.id
+            LEFT JOIN naves no   ON co.nave_id = no.id
+            LEFT JOIN naves nd   ON cd.nave_id = nd.id
+            JOIN usuarios u ON m.usuario_id = u.id
+            WHERE m.lote_origen_id = :id OR m.lote_destino_id = :id2
+            ORDER BY m.fecha DESC, m.created_at DESC
+            LIMIT 20
+        ");
+        $stmtMov->execute(['id' => (int)$id, 'id2' => (int)$id]);
+        $historialMovimientos = $stmtMov->fetchAll();
+
         $this->view('lotes/form', [
             'lote'                 => $lote,
             'naves'                => $this->naveModel->selectOptions($uid),
@@ -151,6 +179,8 @@ class LoteController extends BaseController
             'tiposPorGranja'       => $tiposPorGranja,
             'razas'                => $this->razaModel->allParaUsuario($uid),
             'cuadrasAsig'          => $cuadrasAsig,
+            'cuadrasDelLote'       => $cuadrasDelLote,
+            'historialMovimientos' => $historialMovimientos,
             'pageTitle'            => 'Editar lote ' . $lote['codigo'],
             'codigoAuto'           => $lote['codigo'],
             'error'                => Session::getFlash('error'),

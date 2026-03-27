@@ -1,6 +1,13 @@
 <?php
 $esEdicion = !is_null($lote);
 $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url('lotes');
+$tipoLabels = [
+    'traslado_cuadra'    => 'Traslado cuadra',
+    'entrada_cebo'       => 'Entrada cebo',
+    'entrada_reposicion' => 'Reposición',
+    'entrada_madres'     => 'Entrada madres',
+    'venta'              => 'Venta',
+];
 ?>
 
 <div class="page-header">
@@ -11,6 +18,8 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
 <?php if ($error): ?>
     <div class="alert-flash alert-error"><?= e($error) ?></div>
 <?php endif; ?>
+
+<div style="display:grid;grid-template-columns:<?= $esEdicion ? '1fr 340px' : '1fr' ?>;gap:1.5rem;align-items:start">
 
 <div class="form-card">
     <form method="POST" action="<?= $action ?>" id="formLote">
@@ -153,10 +162,21 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
             </div>
 
             <!-- Panel distribución en cuadras -->
-            <div id="distribucionPanel" style="display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:1.25rem;margin-top:1rem">
+            <?php if ($esEdicion): ?>
+            <div style="border:1.5px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-top:1rem">
+                <button type="button"
+                        onclick="toggleDistribucion()"
+                        style="width:100%;display:flex;align-items:center;justify-content:space-between;padding:.75rem 1rem;background:#f8fafc;border:none;cursor:pointer;font-size:.82rem;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.04em">
+                    <span>Distribución en cuadras</span>
+                    <span id="distribArrow" style="font-size:1rem;transition:transform .2s">▼</span>
+                </button>
+                <div id="distribucionPanelWrap" style="display:none;padding:1rem">
+            <?php endif; ?>
+
+            <div id="distribucionPanel" style="<?= $esEdicion ? '' : 'display:none;' ?>background:#f8fafc;border:<?= $esEdicion ? 'none' : '1.5px solid #e2e8f0' ?>;border-radius:<?= $esEdicion ? '0' : '8px' ?>;padding:<?= $esEdicion ? '0' : '1.25rem' ?>;margin-top:<?= $esEdicion ? '0' : '1rem' ?>">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
                     <span style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#374151">
-                        Distribución en cuadras
+                        <?= $esEdicion ? '' : 'Distribución en cuadras' ?>
                     </span>
                     <div style="display:flex;align-items:center;gap:.5rem">
                         <label style="font-size:.82rem;color:#6b7280;white-space:nowrap">Por cuadra:</label>
@@ -172,6 +192,11 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
                 <div id="distribucionResumen" style="margin-top:.75rem;padding:.6rem .85rem;background:#fff;border-radius:6px;border:1px solid #e5e7eb;font-size:.82rem;color:#374151"></div>
             </div>
 
+            <?php if ($esEdicion): ?>
+                </div><!-- distribucionPanelWrap -->
+            </div><!-- collapsible -->
+            <?php endif; ?>
+
             <!-- Campos ocultos para asignación de cuadras -->
             <div id="cuadrasHidden"></div>
 
@@ -186,7 +211,79 @@ $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url(
             <a href="<?= base_url('lotes') ?>" class="btn btn-secondary">Cancelar</a>
         </div>
     </form>
-</div>
+</div><!-- form-card -->
+
+<?php if ($esEdicion): ?>
+<!-- Panel lateral derecho: cuadras actuales + historial movimientos -->
+<div style="display:flex;flex-direction:column;gap:1rem">
+
+    <?php if (!empty($cuadrasDelLote)): ?>
+    <div class="list-card">
+        <div style="padding:.75rem 1rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280">
+            Cuadras actuales
+        </div>
+        <?php foreach ($cuadrasDelLote as $cl): ?>
+        <a href="<?= base_url("cuadras/{$cl['cuadra_id']}") ?>"
+           style="display:flex;align-items:center;justify-content:space-between;padding:.6rem 1rem;border-bottom:1px solid #f3f4f6;text-decoration:none;color:inherit;transition:background .1s"
+           onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+            <div>
+                <div style="font-size:.875rem;font-weight:500"><?= e($cl['cuadra_nombre']) ?></div>
+                <div style="font-size:.75rem;color:#9ca3af"><?= e($cl['nave_nombre']) ?> · <?= e($cl['granja_nombre']) ?></div>
+            </div>
+            <span style="font-size:.875rem;font-weight:700;color:#1d4ed8"><?= number_format($cl['num_animales']) ?></span>
+        </a>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!empty($historialMovimientos)): ?>
+    <div class="list-card">
+        <div style="padding:.75rem 1rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280">
+            Historial de movimientos
+        </div>
+        <?php foreach ($historialMovimientos as $m): ?>
+        <?php
+            $label = $tipoLabels[$m['tipo']] ?? $m['tipo'];
+            $colores = [
+                'traslado_cuadra'    => ['#dbeafe','#1e40af'],
+                'entrada_cebo'       => ['#fef3c7','#92400e'],
+                'entrada_reposicion' => ['#f3e8ff','#6b21a8'],
+                'entrada_madres'     => ['#fce7f3','#9d174d'],
+                'venta'              => ['#d1fae5','#065f46'],
+            ];
+            [$bg, $txt] = $colores[$m['tipo']] ?? ['#f3f4f6','#374151'];
+        ?>
+        <a href="<?= base_url("movimientos/{$m['id']}/editar") ?>"
+           style="display:block;padding:.65rem 1rem;border-bottom:1px solid #f3f4f6;text-decoration:none;color:inherit;transition:background .1s"
+           onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background=''">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.2rem">
+                <span style="background:<?= $bg ?>;color:<?= $txt ?>;padding:.1rem .5rem;border-radius:20px;font-size:.72rem;font-weight:600">
+                    <?= $label ?>
+                </span>
+                <span style="font-size:.75rem;color:#9ca3af"><?= date('d/m/Y', strtotime($m['fecha'])) ?></span>
+            </div>
+            <div style="font-size:.8rem;color:#6b7280">
+                <?php if ($m['cuadra_origen_nombre']): ?>
+                    <?= e($m['nave_origen_nombre'] ?? '') ?> · <?= e($m['cuadra_origen_nombre']) ?>
+                    <?php if ($m['cuadra_destino_nombre']): ?>
+                        → <?= e($m['nave_destino_nombre'] ?? '') ?> · <?= e($m['cuadra_destino_nombre']) ?>
+                    <?php endif; ?>
+                <?php elseif ($m['lote_destino_codigo']): ?>
+                    → <?= e($m['lote_destino_codigo']) ?>
+                <?php endif; ?>
+            </div>
+            <div style="font-size:.78rem;color:#374151;font-weight:600;margin-top:.1rem">
+                <?= number_format($m['num_animales']) ?> animales · <?= e($m['usuario_nombre']) ?>
+            </div>
+        </a>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+
+</div><!-- panel lateral -->
+<?php endif; ?>
+
+</div><!-- grid principal -->
 
 <!-- Modal nueva raza -->
 <div id="modalRaza" class="modal-overlay">
@@ -440,6 +537,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // ── Distribución en cuadras ──────────────────────────────────
 let cuadrasData = [];
+
+function toggleDistribucion() {
+    const wrap  = document.getElementById('distribucionPanelWrap');
+    const arrow = document.getElementById('distribArrow');
+    if (!wrap) return;
+    const abierto = wrap.style.display !== 'none';
+    wrap.style.display  = abierto ? 'none' : 'block';
+    arrow.style.transform = abierto ? '' : 'rotate(180deg)';
+}
 
 async function cargarCuadrasDistribucion(naveId) {
     const panel = document.getElementById('distribucionPanel');
