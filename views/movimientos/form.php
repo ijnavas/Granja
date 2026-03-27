@@ -193,18 +193,32 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
              VENTA
         ════════════════════════════════════════════════════════ -->
         <?php elseif ($tipoActual === 'venta'): ?>
-        <div class="form-section-title">Lote y datos de venta</div>
-        <div class="form-group">
-            <label>Lote que se vende *</label>
-            <select name="lote_origen_id" required>
-                <option value="">— Selecciona lote —</option>
-                <?php foreach ($lotes as $l): ?>
-                    <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
-                        <?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?> animales)
-                    </option>
-                <?php endforeach; ?>
-            </select>
+        <div class="form-section-title">Origen</div>
+        <div class="form-grid form-grid-3">
+            <div class="form-group">
+                <label>Nave origen</label>
+                <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
+                    <option value="">— Nave —</option>
+                    <?php foreach ($naves as $n): ?>
+                        <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Cuadra origen</label>
+                <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
+                    <option value="">— Cuadra —</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Lote *</label>
+                <select id="loteOrigen" name="lote_origen_id" required>
+                    <option value="">— Lote —</option>
+                </select>
+            </div>
         </div>
+
+        <div class="form-section-title" style="margin-top:.5rem">Datos de venta</div>
         <div class="form-grid form-grid-2">
             <div class="form-group">
                 <label>Destino de venta *</label>
@@ -312,11 +326,7 @@ async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = n
     if (!valorSeleccionado && data.length === 1) sel.value = data[0].id;
 }
 
-<?php if ($esEdicion && $tipoActual === 'traslado_cuadra' && $movimiento): ?>
-// Precargar datos del movimiento en edición
-document.addEventListener('DOMContentLoaded', async () => {
-    <?php
-    // Necesitamos la nave de la cuadra origen y destino
+<?php if ($esEdicion && $movimiento):
     $db = \App\Core\Database::getInstance();
     $naveOrigen = null;
     $naveDestino = null;
@@ -330,20 +340,42 @@ document.addEventListener('DOMContentLoaded', async () => {
         $s->execute(['id' => $movimiento['cuadra_destino_id']]);
         $naveDestino = $s->fetchColumn();
     }
-    ?>
+?>
+document.addEventListener('DOMContentLoaded', async () => {
 
     <?php if ($naveOrigen): ?>
-    document.getElementById('naveOrigen').value = <?= $naveOrigen ?>;
-    await cargarCuadras(<?= $naveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= $movimiento['cuadra_origen_id'] ?? 'null' ?>);
-    <?php if ($movimiento['cuadra_origen_id']): ?>
-    await cargarLotesDeCuadra(<?= $movimiento['cuadra_origen_id'] ?>, 'loteOrigen', <?= $movimiento['lote_origen_id'] ?? 'null' ?>);
-    <?php endif; ?>
+    // Precargar origen
+    const naveOrigenSel = document.getElementById('naveOrigen');
+    if (naveOrigenSel) {
+        naveOrigenSel.value = <?= (int)$naveOrigen ?>;
+        await cargarCuadras(<?= (int)$naveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= (int)$movimiento['cuadra_origen_id'] ?>);
+        await cargarLotesDeCuadra(<?= (int)$movimiento['cuadra_origen_id'] ?>, 'loteOrigen', <?= (int)$movimiento['lote_origen_id'] ?>);
+        // Deshabilitar selectores de origen
+        ['naveOrigen','cuadraOrigen','loteOrigen'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) { el.disabled = true; el.style.background = '#f3f4f6'; el.style.color = '#9ca3af'; }
+        });
+    }
+    <?php elseif ($movimiento['lote_origen_id']): ?>
+    // Tipo sin cuadra (reposicion, madres, venta sin cuadra) — solo deshabilitar lote si está en select estático
+    const loteOrigenSel = document.getElementById('loteOrigen');
+    if (loteOrigenSel) {
+        loteOrigenSel.value = <?= (int)$movimiento['lote_origen_id'] ?>;
+        loteOrigenSel.disabled = true;
+        loteOrigenSel.style.background = '#f3f4f6';
+        loteOrigenSel.style.color = '#9ca3af';
+    }
     <?php endif; ?>
 
     <?php if ($naveDestino): ?>
-    document.getElementById('naveDestino').value = <?= $naveDestino ?>;
-    await cargarCuadras(<?= $naveDestino ?>, 'cuadraDestino', null, <?= $movimiento['cuadra_destino_id'] ?? 'null' ?>);
+    // Precargar destino (editable)
+    const naveDestinoSel = document.getElementById('naveDestino');
+    if (naveDestinoSel) {
+        naveDestinoSel.value = <?= (int)$naveDestino ?>;
+        await cargarCuadras(<?= (int)$naveDestino ?>, 'cuadraDestino', null, <?= (int)$movimiento['cuadra_destino_id'] ?>);
+    }
     <?php endif; ?>
+
 });
 <?php endif; ?>
 </script>
