@@ -124,6 +124,138 @@ class AuthController extends BaseController
         $this->redirect('login');
     }
 
+    // ── GET /forgot-password ─────────────────────────────────────
+    public function forgotPasswordForm(): void
+    {
+        guest_only();
+        $this->view('auth/forgot-password', [
+            'error'   => Session::getFlash('error'),
+            'success' => Session::getFlash('success'),
+        ], 'auth');
+    }
+
+    // ── POST /forgot-password ────────────────────────────────────
+    public function forgotPassword(): void
+    {
+        guest_only();
+
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token de seguridad inválido. Recarga la página.');
+            $this->redirect('forgot-password');
+        }
+
+        $email = strtolower($this->postString('email'));
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            Session::flash('error', 'El email no tiene un formato válido.');
+            $this->redirect('forgot-password');
+        }
+
+        // Respuesta genérica para no revelar si el email existe
+        if ($this->usuario->emailExists($email)) {
+            $token   = $this->usuario->createPasswordReset($email);
+            $resetUrl = base_url('reset-password/' . $token);
+            $this->sendResetEmail($email, $resetUrl);
+        }
+
+        Session::flash('success', 'Si existe una cuenta con ese email, recibirás un enlace para restablecer tu contraseña.');
+        $this->redirect('forgot-password');
+    }
+
+    // ── GET /reset-password/{token} ──────────────────────────────
+    public function resetPasswordForm(string $token): void
+    {
+        guest_only();
+
+        $reset = $this->usuario->findValidReset($token);
+        if (!$reset) {
+            Session::flash('error', 'El enlace de restablecimiento no es válido o ha expirado.');
+            $this->redirect('forgot-password');
+        }
+
+        $this->view('auth/reset-password', [
+            'token' => $token,
+            'error' => Session::getFlash('error'),
+        ], 'auth');
+    }
+
+    // ── POST /reset-password/{token} ─────────────────────────────
+    public function resetPassword(string $token): void
+    {
+        guest_only();
+
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token de seguridad inválido. Recarga la página.');
+            $this->redirect('reset-password/' . $token);
+        }
+
+        $reset = $this->usuario->findValidReset($token);
+        if (!$reset) {
+            Session::flash('error', 'El enlace de restablecimiento no es válido o ha expirado.');
+            $this->redirect('forgot-password');
+        }
+
+        $password  = $this->postString('password');
+        $password2 = $this->postString('password_confirm');
+
+        $errors = $this->validatePassword($password, $password2);
+        if ($errors) {
+            Session::flash('error', implode('<br>', $errors));
+            $this->redirect('reset-password/' . $token);
+        }
+
+        $user = $this->usuario->findByEmail($reset['email']);
+        if (!$user) {
+            Session::flash('error', 'No se encontró el usuario asociado a este enlace.');
+            $this->redirect('forgot-password');
+        }
+
+        $this->usuario->resetPasswordById((int) $user['id'], $password);
+        $this->usuario->deletePasswordReset($token);
+
+        Session::flash('success', '¡Contraseña actualizada! Ya puedes iniciar sesión con tu nueva contraseña.');
+        $this->redirect('login');
+    }
+
+    // ── Envío de email ───────────────────────────────────────────
+    private function sendResetEmail(string $to, string $resetUrl): void
+    {
+        $subject = 'Restablecimiento de contraseña';
+        $body    = "Hola,\n\n"
+                 . "Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.\n\n"
+                 . "Haz clic en el siguiente enlace (válido durante 1 hora):\n"
+                 . $resetUrl . "\n\n"
+                 . "Si no solicitaste este cambio, puedes ignorar este mensaje.\n\n"
+                 . "Saludos,\nEl equipo de Granja";
+
+        $headers = "From: no-reply@granja.local\r\n"
+                 . "Reply-To: no-reply@granja.local\r\n"
+                 . "Content-Type: text/plain; charset=UTF-8\r\n";
+
+        mail($to, $subject, $body, $headers);
+    }
+
+    // ── Validación de contraseña ─────────────────────────────────
+    private function validatePassword(string $password, string $password2): array
+    {
+        $errors = [];
+
+        if (strlen($password) < 8) {
+            $errors[] = 'La contraseña debe tener al menos 8 caracteres.';
+        }
+        if (!preg_match('/[A-Z]/', $password)) {
+            $errors[] = 'La contraseña debe contener al menos una mayúscula.';
+        }
+        if (!preg_match('/[0-9]/', $password)) {
+            $errors[] = 'La contraseña debe contener al menos un número.';
+        }
+        if ($password !== $password2) {
+            $errors[] = 'Las contraseñas no coinciden.';
+        }
+
+        return $errors;
+    }
+
     // ── Validaciones ─────────────────────────────────────────────
     private function validateRegister(
         string $nombre,
