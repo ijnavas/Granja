@@ -14,14 +14,14 @@ class Mailer
 
     public function __construct()
     {
-        $cfg        = require ROOT_PATH . '/config.php';
-        $m          = $cfg['mail'];
-        $this->host   = $m['smtp_host'];
-        $this->port   = (int) $m['smtp_port'];
-        $this->secure = $m['smtp_secure']; // ssl | tls | none
-        $this->user   = $m['smtp_user'];
-        $this->pass   = $m['smtp_pass'];
-        $this->from   = $m['mail_from'];
+        $cfg          = require ROOT_PATH . '/config.php';
+        $m            = $cfg['mail'];
+        $this->host   = $m['smtp']['host'];
+        $this->port   = (int) $m['smtp']['port'];
+        $this->secure = $m['smtp']['secure'];
+        $this->user   = $m['smtp']['user'];
+        $this->pass   = $m['smtp']['pass'];
+        $this->from   = $m['from_email'];
     }
 
     public function send(string $to, string $subject, string $body): bool
