@@ -442,12 +442,12 @@ async function calcularValoracion() {
         const res  = await fetch(`<?= base_url('lotes/tabla-semana') ?>?raza_id=${razaSel.value}&semana=${semana}`);
         const data = await res.json();
 
-        if (data.ok && data.coste) {
-            const total = (data.coste * num).toFixed(2);
-            document.getElementById('valorTotal').textContent       = parseFloat(total).toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €';
-            document.getElementById('valorPorAnimal').textContent   = parseFloat(data.coste).toFixed(2) + ' €';
+        if (data.ok && data.peso) {
+            const total = data.coste ? (data.coste * num).toFixed(2) : null;
+            document.getElementById('valorTotal').textContent       = total ? parseFloat(total).toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €' : '—';
+            document.getElementById('valorPorAnimal').textContent   = data.coste ? parseFloat(data.coste).toFixed(2) + ' €' : '—';
             document.getElementById('semanaTabla').textContent      = 'S' + semana;
-            document.getElementById('pesoTablaDisplay').textContent = data.peso ? parseFloat(data.peso).toFixed(3) + ' kg' : '—';
+            document.getElementById('pesoTablaDisplay').textContent = parseFloat(data.peso).toFixed(3) + ' kg';
             panel.style.display = '';
         } else {
             panel.style.display = 'none';
