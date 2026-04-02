@@ -42,6 +42,10 @@ $pageTitle = 'Iniciar sesión';
     <button type="submit" class="btn-primary">Entrar</button>
 </form>
 
+<div class="auth-footer" style="text-align:center;margin-top:.75rem;">
+    <a href="<?= base_url('forgot-password') ?>">¿Olvidaste tu contraseña?</a>
+</div>
+
 <div class="auth-footer">
     ¿No tienes cuenta? <a href="<?= base_url('register') ?>">Regístrate</a>
 </div>

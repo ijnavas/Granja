@@ -93,6 +93,14 @@ class Usuario
      */
     private function updatePassword(int $id, string $password): void
     {
+        $this->resetPasswordById($id, $password);
+    }
+
+    /**
+     * Actualiza la contraseña de un usuario por ID (uso público para reset)
+     */
+    public function resetPasswordById(int $id, string $password): void
+    {
         $stmt = $this->db->prepare(
             'UPDATE usuarios SET password_hash = :hash WHERE id = :id'
         );
@@ -100,5 +108,54 @@ class Usuario
             'hash' => password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]),
             'id'   => $id,
         ]);
+    }
+
+    // ── Password reset tokens ────────────────────────────────────
+
+    /**
+     * Crea un token de restablecimiento (válido 1 hora) y devuelve el token.
+     * Borra tokens previos del mismo email antes de crear uno nuevo.
+     */
+    public function createPasswordReset(string $email): string
+    {
+        // Limpiar tokens anteriores del mismo email
+        $del = $this->db->prepare('DELETE FROM password_resets WHERE email = :email');
+        $del->execute(['email' => $email]);
+
+        $token     = bin2hex(random_bytes(32)); // 64 chars hex
+        $expiresAt = date('Y-m-d H:i:s', time() + 3600);
+
+        $stmt = $this->db->prepare(
+            'INSERT INTO password_resets (email, token, expires_at)
+             VALUES (:email, :token, :expires_at)'
+        );
+        $stmt->execute(['email' => $email, 'token' => $token, 'expires_at' => $expiresAt]);
+
+        return $token;
+    }
+
+    /**
+     * Busca un reset válido (no expirado) por token.
+     * Devuelve ['email' => ..., 'token' => ...] o null si no es válido.
+     */
+    public function findValidReset(string $token): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT email, token FROM password_resets
+             WHERE token = :token AND expires_at > NOW()
+             LIMIT 1'
+        );
+        $stmt->execute(['token' => $token]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    /**
+     * Elimina el token de reset (después de usarlo)
+     */
+    public function deletePasswordReset(string $token): void
+    {
+        $stmt = $this->db->prepare('DELETE FROM password_resets WHERE token = :token');
+        $stmt->execute(['token' => $token]);
     }
 }
