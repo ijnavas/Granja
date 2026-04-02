@@ -127,6 +127,7 @@ $router->post('/configuracion/estados',                     [ConfigController::c
 $router->get('/configuracion/estados/{id}/editar',          [ConfigController::class, 'editarEstado']);
 $router->post('/configuracion/estados/{id}/actualizar',     [ConfigController::class, 'actualizarEstado']);
 $router->post('/configuracion/estados/{id}/toggle',         [ConfigController::class, 'toggleEstado']);
+$router->get('/configuracion/tablas',                       [ConfigController::class, 'tablas']);
 $router->get('/configuracion/tablas/crear',                 [ConfigController::class, 'crearTabla']);
 $router->post('/configuracion/tablas',                      [ConfigController::class, 'storeTabla']);
 $router->get('/configuracion/tablas/{id}/editar',           [ConfigController::class, 'editarTabla']);
