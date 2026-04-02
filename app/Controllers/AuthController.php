@@ -5,6 +5,7 @@ namespace App\Controllers;
 
 use App\Models\Usuario;
 use App\Core\Session;
+use App\Core\Mailer;
 
 class AuthController extends BaseController
 {
@@ -228,11 +229,7 @@ class AuthController extends BaseController
                  . "Si no solicitaste este cambio, puedes ignorar este mensaje.\n\n"
                  . "Saludos,\nEl equipo de Granja";
 
-        $headers = "From: no-reply@granja.local\r\n"
-                 . "Reply-To: no-reply@granja.local\r\n"
-                 . "Content-Type: text/plain; charset=UTF-8\r\n";
-
-        mail($to, $subject, $body, $headers);
+        (new Mailer())->send($to, $subject, $body);
     }
 
     // ── Validación de contraseña ─────────────────────────────────
