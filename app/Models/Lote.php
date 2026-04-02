@@ -41,7 +41,7 @@ class Lote
             LEFT JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
             LEFT JOIN tablas_crecimiento_lineas tcl
                 ON tcl.tabla_id = tc.id
-                AND tcl.semana = FLOOR(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
+                AND tcl.semana = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
             WHERE (g.usuario_id = :uid OR g2.usuario_id = :uid2)
             ORDER BY l.estado, l.fecha_nacimiento ASC
         ");
