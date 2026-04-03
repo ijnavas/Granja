@@ -116,10 +116,11 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
         <div class="form-section-title">Lote que pasa a cebo</div>
         <div class="form-group">
             <label>Lote de lechones *</label>
-            <select name="lote_origen_id" required>
+            <select id="loteOrigen" name="lote_origen_id" required
+                    <?= $esEdicion ? 'style="pointer-events:none;background:#f3f4f6;color:#9ca3af"' : '' ?>>
                 <option value="">— Selecciona lote —</option>
                 <?php foreach ($lotes as $l): ?>
-                    <?php if (($l['estado_animal'] ?? 'lechon') === 'lechon'): ?>
+                    <?php if ($esEdicion || ($l['estado_animal'] ?? 'lechon') === 'lechon'): ?>
                     <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
                         <?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?> animales)
                     </option>
@@ -350,7 +351,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         naveOrigenSel.value = <?= (int)$naveOrigen ?>;
         await cargarCuadras(<?= (int)$naveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= (int)$movimiento['cuadra_origen_id'] ?>);
         await cargarLotesDeCuadra(<?= (int)$movimiento['cuadra_origen_id'] ?>, 'loteOrigen', <?= (int)$movimiento['lote_origen_id'] ?>);
-        // Selectores de origen editables — ya precargados con los valores actuales
+        // Bloquear origen (nave, cuadra, lote) — no se puede cambiar en edición
+        ['naveOrigen','cuadraOrigen','loteOrigen'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.style.pointerEvents = 'none';
+                el.style.background    = '#f3f4f6';
+                el.style.color         = '#9ca3af';
+            }
+        });
     }
     <?php elseif ($movimiento['lote_origen_id']): ?>
     // Tipo sin cuadra — preseleccionar lote si el select tiene opciones estáticas
