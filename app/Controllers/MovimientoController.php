@@ -264,28 +264,49 @@ class MovimientoController extends BaseController
                 break;
 
             case 'entrada_reposicion':
-                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n WHERE id = :id")
+                // Devolver animales al lote origen
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
                    ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
-                if ($mov['lote_destino_id'] && $mov['lote_destino_id'] !== $mov['lote_origen_id']) {
-                    $db->prepare("UPDATE lotes SET estado = 'cerrado' WHERE id = :id")
-                       ->execute(['id' => $mov['lote_destino_id']]);
-                }
+                // Devolver animales a la cuadra origen
                 if ($mov['cuadra_origen_id']) {
-                    $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE cuadra_id = :cid AND lote_id = :lid")
-                       ->execute(['n' => $cantidad, 'cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                    $stmt = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1");
+                    $stmt->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                    $clId = $stmt->fetchColumn();
+                    if ($clId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE id = :id")
+                           ->execute(['n' => $cantidad, 'id' => $clId]);
+                    } else {
+                        $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid, :lid, :n, CURDATE())")
+                           ->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id'], 'n' => $cantidad]);
+                    }
+                }
+                // Cerrar el lote RE destino y limpiar sus cuadras
+                if ($mov['lote_destino_id'] && $mov['lote_destino_id'] !== $mov['lote_origen_id']) {
+                    $db->prepare("UPDATE lotes SET estado = 'cerrado', num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
+                       ->execute(['n' => $cantidad, 'id' => $mov['lote_destino_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n) WHERE lote_id = :lid AND activo = 1")
+                       ->execute(['n' => $cantidad, 'lid' => $mov['lote_destino_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE lote_id = :lid AND num_animales = 0")
+                       ->execute(['lid' => $mov['lote_destino_id']]);
                 }
                 break;
 
             case 'entrada_madres':
-                // Revertir estado del lote RE a reposicion
-                $db->prepare("UPDATE lotes SET estado_animal = 'reposicion' WHERE id = :id")
-                   ->execute(['id' => $mov['lote_origen_id']]);
-                // Si fue parcial, devolver animales
-                if ($mov['lote_destino_id'] === $mov['lote_origen_id']) {
-                    // Restaurar animales si fue parcial (se restaron)
-                    // El historial guarda la cantidad, la restauramos
-                    $db->prepare("UPDATE lotes SET num_animales = num_animales + :n WHERE id = :id AND estado_animal = 'reposicion'")
-                       ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                // Restaurar animales al lote RE y reactivarlo
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo', estado_animal = 'reposicion' WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                // Restaurar en cuadra origen
+                if ($mov['cuadra_origen_id']) {
+                    $stmt = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1");
+                    $stmt->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                    $clId = $stmt->fetchColumn();
+                    if ($clId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE id = :id")
+                           ->execute(['n' => $cantidad, 'id' => $clId]);
+                    } else {
+                        $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid, :lid, :n, CURDATE())")
+                           ->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id'], 'n' => $cantidad]);
+                    }
                 }
                 break;
         }
