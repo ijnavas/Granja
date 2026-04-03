@@ -89,7 +89,13 @@ class LoteController extends BaseController
             $codigo .= "-{$sufijo}";
         }
 
-        $naveId   = $this->post('nave_id') ?: null;
+        // Soporta multiselect (nave_ids[]) en creación y campo único (nave_id) en edición
+        $naveIdsSel = $_POST['nave_ids'] ?? null;
+        if ($naveIdsSel && is_array($naveIdsSel)) {
+            $naveId = !empty($naveIdsSel[0]) ? (int)$naveIdsSel[0] : null;
+        } else {
+            $naveId = $this->post('nave_id') ?: null;
+        }
         $granjaId = $this->post('granja_id') ?: null;
 
         $this->model->create([
