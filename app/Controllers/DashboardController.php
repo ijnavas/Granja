@@ -198,33 +198,48 @@ class DashboardController extends BaseController
     // ── Próximos a matadero ──────────────────────────────────────
     private function getProximosMatadero(int $userId): array
     {
-        // Lotes cuyo último pesaje supera el 90% del peso máximo de la tabla
+        // Previsión basada en tabla de crecimiento: semana en que el lote alcanza 150 kg
+        // Se aplica un 3% de bajas estimadas sobre el número de animales actual
         $stmt = $this->db->prepare("
-            SELECT l.codigo, n.nombre AS nave, g.nombre AS granja,
-                   p.peso_medio_kg,
-                   MAX(lt.peso_esperado_kg) AS peso_maximo_tabla,
-                   ROUND((p.peso_medio_kg / MAX(lt.peso_esperado_kg)) * 100) AS pct_objetivo,
-                   l.num_animales
+            SELECT
+                l.id,
+                l.codigo,
+                l.num_animales,
+                l.fecha_nacimiento,
+                COALESCE(n.nombre, '—')                                   AS nave,
+                g.nombre                                                  AS granja,
+                CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)        AS semana_actual,
+                MIN(tcl.semana)                                           AS semana_matadero
             FROM lotes l
-            JOIN naves n ON l.nave_id = n.id
-            JOIN granjas g ON n.granja_id = g.id
-            JOIN tablas_crecimiento tc ON g.tabla_crecimiento_id = tc.id
-            JOIN lineas_tabla lt ON lt.tabla_id = tc.id
-            JOIN (
-                SELECT lote_id, peso_medio_kg
-                FROM pesajes
-                WHERE (lote_id, fecha) IN (
-                    SELECT lote_id, MAX(fecha) FROM pesajes GROUP BY lote_id
-                )
-            ) p ON p.lote_id = l.id
-            WHERE g.usuario_id = :uid
-              AND l.estado = 'activo'
-            GROUP BY l.id, l.codigo, n.nombre, g.nombre, p.peso_medio_kg, l.num_animales
-            HAVING pct_objetivo >= 85
-            ORDER BY pct_objetivo DESC
+            JOIN granjas g                   ON l.granja_id  = g.id
+            LEFT JOIN naves n                ON l.nave_id    = n.id
+            JOIN tabla_raza tr               ON tr.raza_id   = l.raza_id
+            JOIN tablas_crecimiento tc       ON tc.id        = tr.tabla_id AND tc.activa = 1
+            JOIN tablas_crecimiento_lineas tcl ON tcl.tabla_id = tc.id
+                AND tcl.peso_kg >= 150
+            WHERE g.usuario_id   = :uid
+              AND l.estado       = 'activo'
+              AND l.raza_id      IS NOT NULL
+              AND l.fecha_nacimiento IS NOT NULL
+            GROUP BY l.id, l.codigo, l.num_animales, l.fecha_nacimiento, n.nombre, g.nombre
+            ORDER BY (MIN(tcl.semana) - CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)) ASC
         ");
         $stmt->execute(['uid' => $userId]);
-        return $stmt->fetchAll();
+        $rows = $stmt->fetchAll();
+
+        foreach ($rows as &$r) {
+            $semActual   = (int) $r['semana_actual'];
+            $semMatadero = (int) $r['semana_matadero'];
+            $semRest     = $semMatadero - $semActual;
+
+            $r['semanas_restantes']  = $semRest;
+            $r['animales_estimados'] = (int) round($r['num_animales'] * 0.97);
+            $r['fecha_estimada']     = $semRest <= 0
+                ? 'Listo'
+                : date('d/m/Y', strtotime("+{$semRest} weeks"));
+        }
+
+        return $rows;
     }
 
     // ── Últimos movimientos ───────────────────────────────────────
