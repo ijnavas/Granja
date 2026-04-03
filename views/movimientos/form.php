@@ -32,13 +32,73 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
     <?= csrf_field() ?>
     <input type="hidden" name="tipo" value="<?= e($tipoActual) ?>">
 
+    <?php if ($esEdicion): ?>
+
+    <!-- ══ MODO EDICIÓN: solo fecha y cantidad editables ══ -->
+
+    <!-- Hidden inputs: conservar todos los valores originales -->
+    <input type="hidden" name="lote_origen_id"    value="<?= (int)$movimiento['lote_origen_id'] ?>">
+    <input type="hidden" name="lote_destino_id"   value="<?= (int)($movimiento['lote_destino_id'] ?? 0) ?: '' ?>">
+    <input type="hidden" name="cuadra_origen_id"  value="<?= (int)($movimiento['cuadra_origen_id'] ?? 0) ?: '' ?>">
+    <input type="hidden" name="cuadra_destino_id" value="<?= (int)($movimiento['cuadra_destino_id'] ?? 0) ?: '' ?>">
+    <input type="hidden" name="peso_canal_kg"     value="<?= e($movimiento['peso_canal_kg'] ?? '') ?>">
+    <input type="hidden" name="precio_eur"        value="<?= e($movimiento['precio_eur'] ?? '') ?>">
+    <input type="hidden" name="tipo_venta"        value="<?= e($movimiento['tipo_venta'] ?? '') ?>">
+    <input type="hidden" name="observaciones"     value="<?= e($movimiento['observaciones'] ?? '') ?>">
+
+    <!-- Info de solo lectura -->
+    <div class="form-section-title">Movimiento</div>
+    <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:.75rem 2rem">
+        <div>
+            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Tipo</div>
+            <div style="font-weight:600"><?= e($tipoLabels[$tipoActual] ?? $tipoActual) ?></div>
+        </div>
+        <div>
+            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Lote origen</div>
+            <div style="font-family:monospace;font-weight:700;color:#1d4ed8"><?= e($movimiento['lote_origen_codigo'] ?? '—') ?></div>
+        </div>
+        <?php if ($movimiento['cuadra_origen_nombre']): ?>
+        <div>
+            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Cuadra origen</div>
+            <div><?= e($movimiento['cuadra_origen_nombre']) ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($movimiento['cuadra_destino_nombre']): ?>
+        <div>
+            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Cuadra destino</div>
+            <div><?= e($movimiento['cuadra_destino_nombre']) ?></div>
+        </div>
+        <?php endif; ?>
+        <?php if ($movimiento['lote_destino_codigo'] && $movimiento['lote_destino_codigo'] !== $movimiento['lote_origen_codigo']): ?>
+        <div>
+            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Lote destino</div>
+            <div style="font-family:monospace;font-weight:700;color:#1d4ed8"><?= e($movimiento['lote_destino_codigo']) ?></div>
+        </div>
+        <?php endif; ?>
+    </div>
+
+    <!-- Campos editables -->
+    <div class="form-grid form-grid-2">
+        <div class="form-group">
+            <label>Fecha *</label>
+            <input type="date" name="fecha" required value="<?= e($movimiento['fecha']) ?>">
+        </div>
+        <div class="form-group">
+            <label>Cantidad de animales *</label>
+            <input type="number" name="num_animales" min="1" required value="<?= e($movimiento['num_animales']) ?>">
+        </div>
+    </div>
+
+    <?php else: ?>
+
+    <!-- ══ MODO CREACIÓN ══ -->
+
     <!-- Selector de tipo -->
     <div class="form-section-title">Tipo de movimiento</div>
     <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.25rem">
         <?php foreach ($tipoLabels as $t => $label): ?>
         <a href="<?= base_url('movimientos/crear?tipo=' . $t) ?>"
-           class="btn <?= $tipoActual === $t ? 'btn-primary' : 'btn-secondary' ?> btn-sm"
-           <?= $esEdicion ? 'style="pointer-events:none;opacity:.6"' : '' ?>>
+           class="btn <?= $tipoActual === $t ? 'btn-primary' : 'btn-secondary' ?> btn-sm">
             <?= $label ?>
         </a>
         <?php endforeach; ?>
@@ -46,24 +106,18 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
 
     <div class="form-grid">
 
-        <!-- Fecha y cantidad siempre visibles -->
         <div class="form-grid form-grid-2">
             <div class="form-group">
                 <label>Fecha *</label>
-                <input type="date" name="fecha" required
-                       value="<?= e($movimiento['fecha'] ?? date('Y-m-d')) ?>">
+                <input type="date" name="fecha" required value="<?= e(date('Y-m-d')) ?>">
             </div>
             <div class="form-group">
                 <label>Cantidad de animales *</label>
-                <input type="number" name="num_animales" min="1" required
-                       value="<?= e($movimiento['num_animales'] ?? '') ?>"
-                       placeholder="Nº de animales">
+                <input type="number" name="num_animales" min="1" required placeholder="Nº de animales">
             </div>
         </div>
 
-        <!-- ═══════════════════════════════════════════════════
-             TRASLADO DE CUADRA
-        ════════════════════════════════════════════════════════ -->
+        <!-- TRASLADO DE CUADRA -->
         <?php if ($tipoActual === 'traslado_cuadra'): ?>
         <div class="form-section-title">Origen</div>
         <div class="form-grid form-grid-3">
@@ -89,7 +143,6 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
                 </select>
             </div>
         </div>
-
         <div class="form-section-title">Destino</div>
         <div class="form-grid form-grid-2">
             <div class="form-group">
@@ -109,30 +162,23 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
             </div>
         </div>
 
-        <!-- ═══════════════════════════════════════════════════
-             ENTRADA CEBO
-        ════════════════════════════════════════════════════════ -->
+        <!-- ENTRADA CEBO -->
         <?php elseif ($tipoActual === 'entrada_cebo'): ?>
         <div class="form-section-title">Lote que pasa a cebo</div>
         <div class="form-group">
             <label>Lote de lechones *</label>
-            <select id="loteOrigen" name="lote_origen_id" required
-                    <?= $esEdicion ? 'style="pointer-events:none;background:#f3f4f6;color:#9ca3af"' : '' ?>>
+            <select name="lote_origen_id" required>
                 <option value="">— Selecciona lote —</option>
                 <?php foreach ($lotes as $l): ?>
-                    <?php if ($esEdicion || ($l['estado_animal'] ?? 'lechon') === 'lechon'): ?>
-                    <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
-                        <?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?> animales)
-                    </option>
+                    <?php if (($l['estado_animal'] ?? 'lechon') === 'lechon'): ?>
+                    <option value="<?= $l['id'] ?>"><?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?> animales)</option>
                     <?php endif; ?>
                 <?php endforeach; ?>
             </select>
             <span class="form-hint">Todo el lote pasará al estado <strong>Cebo</strong></span>
         </div>
 
-        <!-- ═══════════════════════════════════════════════════
-             ENTRADA REPOSICIÓN
-        ════════════════════════════════════════════════════════ -->
+        <!-- ENTRADA REPOSICIÓN -->
         <?php elseif ($tipoActual === 'entrada_reposicion'): ?>
         <div class="form-section-title">Origen</div>
         <div class="form-grid form-grid-3">
@@ -160,9 +206,7 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
         </div>
         <span class="form-hint">Se creará un nuevo lote con sufijo <strong>RE</strong> con los animales indicados</span>
 
-        <!-- ═══════════════════════════════════════════════════
-             ENTRADA MADRES
-        ════════════════════════════════════════════════════════ -->
+        <!-- ENTRADA MADRES -->
         <?php elseif ($tipoActual === 'entrada_madres'): ?>
         <div class="form-section-title">Lote de reposición de origen</div>
         <div class="form-grid form-grid-3">
@@ -190,9 +234,7 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
         </div>
         <span class="form-hint">Solo se muestran lotes con sufijo <strong>RE</strong>. Se creará un nuevo lote <strong>MA</strong></span>
 
-        <!-- ═══════════════════════════════════════════════════
-             VENTA
-        ════════════════════════════════════════════════════════ -->
+        <!-- VENTA -->
         <?php elseif ($tipoActual === 'venta'): ?>
         <div class="form-section-title">Origen</div>
         <div class="form-grid form-grid-3">
@@ -218,37 +260,36 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
                 </select>
             </div>
         </div>
-
         <div class="form-section-title" style="margin-top:.5rem">Datos de venta</div>
         <div class="form-grid form-grid-2">
             <div class="form-group">
                 <label>Destino de venta *</label>
                 <select name="tipo_venta" required>
                     <option value="">— Selecciona —</option>
-                    <option value="matadero" <?= ($movimiento['tipo_venta'] ?? '') === 'matadero' ? 'selected' : '' ?>>Matadero</option>
-                    <option value="tercero"  <?= ($movimiento['tipo_venta'] ?? '') === 'tercero'  ? 'selected' : '' ?>>Tercero</option>
+                    <option value="matadero">Matadero</option>
+                    <option value="tercero">Tercero</option>
                 </select>
             </div>
             <div class="form-group">
                 <label>Precio total (€)</label>
-                <input type="number" name="precio_eur" step="0.01" min="0"
-                       value="<?= e($movimiento['precio_eur'] ?? '') ?>" placeholder="0.00">
+                <input type="number" name="precio_eur" step="0.01" min="0" placeholder="0.00">
             </div>
         </div>
         <div class="form-group">
             <label>Peso canal total (kg)</label>
-            <input type="number" name="peso_canal_kg" step="0.01" min="0"
-                   value="<?= e($movimiento['peso_canal_kg'] ?? '') ?>" placeholder="0.00">
+            <input type="number" name="peso_canal_kg" step="0.01" min="0" placeholder="0.00">
         </div>
         <?php endif; ?>
 
-        <!-- Observaciones siempre -->
+        <!-- Observaciones -->
         <div class="form-group">
             <label>Observaciones</label>
-            <textarea name="observaciones" rows="2"><?= e($movimiento['observaciones'] ?? '') ?></textarea>
+            <textarea name="observaciones" rows="2"></textarea>
         </div>
 
     </div>
+
+    <?php endif; ?>
 
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">
