@@ -70,22 +70,44 @@
     <div class="two-col">
 
         <div class="card">
-            <div class="section-title">Próximos a matadero</div>
+            <div class="section-title">Próximos a matadero <span style="font-size:.75rem;font-weight:400;color:#9ca3af">(previsión · 3% bajas est.)</span></div>
             <?php if (empty($matadero)): ?>
-                <div class="empty">No hay lotes cerca del peso objetivo</div>
+                <div class="empty">No hay lotes con tabla de crecimiento asignada</div>
             <?php else: ?>
-                <?php foreach ($matadero as $m): ?>
-                    <div class="matadero-item">
-                        <div>
-                            <strong><?= e($m['codigo']) ?></strong>
-                            <div style="font-size:.78rem;color:#6b7280"><?= e($m['nave']) ?> · <?= e($m['granja']) ?></div>
-                            <div style="font-size:.78rem;color:#6b7280"><?= e($m['num_animales']) ?> animales · <?= e($m['peso_medio_kg']) ?> kg</div>
-                        </div>
-                        <div class="matadero-pct <?= $m['pct_objetivo'] >= 95 ? 'pct-alto' : 'pct-medio' ?>">
-                            <?= $m['pct_objetivo'] ?>%
-                        </div>
-                    </div>
-                <?php endforeach; ?>
+                <table class="tabla" style="font-size:.82rem">
+                    <thead>
+                        <tr>
+                            <th>Lote</th>
+                            <th>Ubicación</th>
+                            <th style="text-align:right">Animales est.</th>
+                            <th style="text-align:center">Semana</th>
+                            <th style="text-align:center">Previsión</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($matadero as $m):
+                            $sem = (int) $m['semanas_restantes'];
+                            if ($sem <= 0) {
+                                $badge = '<span style="background:#dcfce7;color:#166534;padding:.15rem .5rem;border-radius:20px;font-size:.72rem;font-weight:700">Listo</span>';
+                            } elseif ($sem <= 4) {
+                                $badge = '<span style="background:#fef3c7;color:#92400e;padding:.15rem .5rem;border-radius:20px;font-size:.72rem;font-weight:700">en ' . $sem . ' sem.</span>';
+                            } else {
+                                $badge = '<span style="background:#dbeafe;color:#1e40af;padding:.15rem .5rem;border-radius:20px;font-size:.72rem;font-weight:400">en ' . $sem . ' sem.</span>';
+                            }
+                        ?>
+                        <tr>
+                            <td><strong><?= e($m['codigo']) ?></strong></td>
+                            <td style="color:#6b7280;font-size:.78rem"><?= e($m['nave']) ?> · <?= e($m['granja']) ?></td>
+                            <td style="text-align:right;font-weight:600"><?= number_format($m['animales_estimados']) ?></td>
+                            <td style="text-align:center;color:#6b7280">S<?= e($m['semana_matadero']) ?></td>
+                            <td style="text-align:center">
+                                <?= $badge ?>
+                                <div style="font-size:.72rem;color:#9ca3af;margin-top:.1rem"><?= e($m['fecha_estimada']) ?></div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
             <?php endif; ?>
         </div>
 
