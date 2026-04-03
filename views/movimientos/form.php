@@ -350,20 +350,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         naveOrigenSel.value = <?= (int)$naveOrigen ?>;
         await cargarCuadras(<?= (int)$naveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= (int)$movimiento['cuadra_origen_id'] ?>);
         await cargarLotesDeCuadra(<?= (int)$movimiento['cuadra_origen_id'] ?>, 'loteOrigen', <?= (int)$movimiento['lote_origen_id'] ?>);
-        // Deshabilitar selectores de origen
+        // Bloquear selectores de origen visualmente (sin disabled para que se envíen en el formulario)
         ['naveOrigen','cuadraOrigen','loteOrigen'].forEach(id => {
             const el = document.getElementById(id);
-            if (el) { el.disabled = true; el.style.background = '#f3f4f6'; el.style.color = '#9ca3af'; }
+            if (el) { el.style.pointerEvents = 'none'; el.style.background = '#f3f4f6'; el.style.color = '#9ca3af'; }
         });
     }
     <?php elseif ($movimiento['lote_origen_id']): ?>
-    // Tipo sin cuadra (reposicion, madres, venta sin cuadra) — solo deshabilitar lote si está en select estático
+    // Tipo sin cuadra — insertar hidden input para garantizar el envío del lote_origen_id
     const loteOrigenSel = document.getElementById('loteOrigen');
     if (loteOrigenSel) {
+        // Si el select tiene opciones (estático), preseleccionar y bloquear
         loteOrigenSel.value = <?= (int)$movimiento['lote_origen_id'] ?>;
-        loteOrigenSel.disabled = true;
+        loteOrigenSel.style.pointerEvents = 'none';
         loteOrigenSel.style.background = '#f3f4f6';
         loteOrigenSel.style.color = '#9ca3af';
+        // Si no hay opción con ese value (select dinámico vacío), añadir hidden input como respaldo
+        if (!loteOrigenSel.value || loteOrigenSel.value === '') {
+            const h = document.createElement('input');
+            h.type  = 'hidden';
+            h.name  = 'lote_origen_id';
+            h.value = '<?= (int)$movimiento['lote_origen_id'] ?>';
+            loteOrigenSel.insertAdjacentElement('afterend', h);
+            loteOrigenSel.name = ''; // evitar que el select vacío sobreescriba el hidden
+        }
     }
     <?php endif; ?>
 
