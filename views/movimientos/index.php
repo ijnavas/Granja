@@ -5,6 +5,7 @@ $etiquetas = [
     'entrada_reposicion' => ['label' => 'Reposición',        'color' => '#f3e8ff', 'text' => '#6b21a8'],
     'entrada_madres'     => ['label' => 'Entrada madres',    'color' => '#fce7f3', 'text' => '#9d174d'],
     'venta'              => ['label' => 'Venta',             'color' => '#d1fae5', 'text' => '#065f46'],
+    'baja'               => ['label' => 'Baja',              'color' => '#fee2e2', 'text' => '#991b1b'],
 ];
 ?>
 
@@ -70,6 +71,8 @@ $etiquetas = [
                         <?php if ($m['precio_eur']): ?> · <?= number_format($m['precio_eur'], 2) ?> €<?php endif; ?>
                     <?php elseif ($m['tipo'] === 'traslado_cuadra'): ?>
                         <?= e($m['nave_origen_nombre'] ?? '') ?> → <?= e($m['nave_destino_nombre'] ?? '') ?>
+                    <?php elseif ($m['tipo'] === 'baja' && !empty($m['motivo_baja'])): ?>
+                        <?= $m['motivo_baja'] === 'enfermedad' ? '🤒 Enfermedad' : '⚰ Sacrificio' ?>
                     <?php endif; ?>
                 </td>
                 <td style="font-size:.82rem;color:#6b7280"><?= e($m['usuario_nombre']) ?></td>
