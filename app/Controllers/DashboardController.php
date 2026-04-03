@@ -234,9 +234,10 @@ class DashboardController extends BaseController
 
             $r['semanas_restantes']  = $semRest;
             $r['animales_estimados'] = (int) round($r['num_animales'] * 0.97);
+            // Fecha anclada a fecha_nacimiento + semana_matadero semanas (siempre semana entera)
             $r['fecha_estimada']     = $semRest <= 0
                 ? 'Listo'
-                : date('d/m/Y', strtotime("+{$semRest} weeks"));
+                : date('d/m/Y', strtotime($r['fecha_nacimiento'] . " +{$semMatadero} weeks"));
         }
 
         return $rows;
