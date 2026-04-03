@@ -128,6 +128,8 @@ $router->get('/configuracion/estados/{id}/editar',          [ConfigController::c
 $router->post('/configuracion/estados/{id}/actualizar',     [ConfigController::class, 'actualizarEstado']);
 $router->post('/configuracion/estados/{id}/toggle',         [ConfigController::class, 'toggleEstado']);
 $router->get('/configuracion/tablas',                       [ConfigController::class, 'tablas']);
+$router->get('/configuracion/reset',                        [ConfigController::class, 'resetForm']);
+$router->post('/configuracion/reset',                       [ConfigController::class, 'resetConfirm']);
 $router->get('/configuracion/tablas/crear',                 [ConfigController::class, 'crearTabla']);
 $router->post('/configuracion/tablas',                      [ConfigController::class, 'storeTabla']);
 $router->get('/configuracion/tablas/{id}/editar',           [ConfigController::class, 'editarTabla']);

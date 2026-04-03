@@ -293,6 +293,52 @@ class ConfigController extends BaseController
         $this->redirect('configuracion/estados');
     }
 
+    // ════════════════════════════════════════════════════════════
+    // RESETEAR DATOS
+    // ════════════════════════════════════════════════════════════
+    public function resetForm(): void
+    {
+        auth_required();
+        require_rol('admin');
+        $this->view('config/reset', [
+            'pageTitle' => 'Configuración — Resetear datos',
+            'success'   => Session::getFlash('success'),
+        ]);
+    }
+
+    public function resetConfirm(): void
+    {
+        auth_required();
+        require_rol('admin');
+
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('configuracion/reset');
+        }
+
+        if ($this->postString('confirmacion') !== 'RESETEAR') {
+            Session::flash('error', 'Confirmación incorrecta.');
+            $this->redirect('configuracion/reset');
+        }
+
+        $db = \App\Core\Database::getInstance();
+
+        // Borrar en orden para respetar claves foráneas
+        $db->exec('DELETE FROM movimientos_historial');
+        $db->exec('DELETE FROM movimientos');
+        $db->exec('DELETE FROM pesajes');
+        $db->exec('DELETE FROM cuadra_lote');
+        $db->exec('DELETE FROM lotes');
+
+        // Reiniciar auto_increment
+        foreach (['movimientos_historial', 'movimientos', 'pesajes', 'cuadra_lote', 'lotes'] as $tabla) {
+            $db->exec("ALTER TABLE {$tabla} AUTO_INCREMENT = 1");
+        }
+
+        Session::flash('success', 'Todos los datos operativos han sido eliminados correctamente.');
+        $this->redirect('configuracion/reset');
+    }
+
     private function guardarLineas(int $tablaId): void
     {
         $semanas  = $_POST['semana']  ?? [];

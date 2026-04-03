@@ -14,4 +14,9 @@ $seccion = $seccionConfig ?? 'razas';
        class="btn <?= $seccion === 'estados' ? 'btn-primary' : 'btn-secondary' ?>">
         Estados animal
     </a>
+    <a href="<?= base_url('configuracion/reset') ?>"
+       class="btn <?= $seccion === 'reset' ? 'btn-danger' : 'btn-secondary' ?>"
+       style="margin-left:auto;<?= $seccion === 'reset' ? '' : 'color:#dc2626;border-color:#fca5a5' ?>">
+        ⚠ Resetear datos
+    </a>
 </div>
