@@ -78,6 +78,7 @@ class MovimientoController extends BaseController
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
             'tipo_venta'        => $this->post('tipo_venta')        ?: null,
+            'motivo_baja'       => $this->postString('motivo_baja') ?: null,
             'observaciones'     => $this->postString('observaciones'),
         ];
 
@@ -138,6 +139,7 @@ class MovimientoController extends BaseController
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
             'tipo_venta'        => $this->post('tipo_venta')        ?: null,
+            'motivo_baja'       => $this->postString('motivo_baja') ?: null,
             'observaciones'     => $this->postString('observaciones'),
         ];
 
@@ -268,9 +270,22 @@ class MovimientoController extends BaseController
                 break;
 
             case 'venta':
-                // Devolver animales al lote
+            case 'baja':
+                // Devolver animales al lote y restaurar cuadra si aplica
                 $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
                    ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                if ($mov['cuadra_origen_id']) {
+                    $stmtCL = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1");
+                    $stmtCL->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                    $clId = $stmtCL->fetchColumn();
+                    if ($clId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE id = :id")
+                           ->execute(['n' => $cantidad, 'id' => $clId]);
+                    } else {
+                        $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid, :lid, :n, CURDATE())")
+                           ->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id'], 'n' => $cantidad]);
+                    }
+                }
                 break;
 
             case 'entrada_cebo':
@@ -501,6 +516,31 @@ class MovimientoController extends BaseController
                 $restantes = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
                 $restantes->execute(['id' => $data['lote_origen_id']]);
                 if ((int)$restantes->fetchColumn() <= 0) {
+                    $db->prepare("UPDATE lotes SET estado='cerrado' WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
+                }
+                break;
+
+            case 'baja':
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote.");
+                }
+                if (!empty($data['cuadra_origen_id'])) {
+                    $stmtChk = $db->prepare("SELECT COALESCE(num_animales,0) FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1 LIMIT 1");
+                    $stmtChk->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $enCuadra = (int)$stmtChk->fetchColumn();
+                    if ($cantidad > $enCuadra) {
+                        throw new \Exception("Solo hay {$enCuadra} animales del lote en esa cuadra.");
+                    }
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                       ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                       ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                }
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                $restantesBaja = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
+                $restantesBaja->execute(['id' => $data['lote_origen_id']]);
+                if ((int)$restantesBaja->fetchColumn() <= 0) {
                     $db->prepare("UPDATE lotes SET estado='cerrado' WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
                 }
                 break;

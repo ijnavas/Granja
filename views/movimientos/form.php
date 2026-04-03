@@ -12,6 +12,7 @@ $tipoLabels = [
     'entrada_reposicion' => 'Entrada a reposición',
     'entrada_madres'     => 'Entrada a madres',
     'venta'              => 'Venta',
+    'baja'               => 'Baja',
 ];
 
 // Filtrar lotes según tipo
@@ -279,6 +280,62 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
             <label>Peso canal total (kg)</label>
             <input type="number" name="peso_canal_kg" step="0.01" min="0" placeholder="0.00">
         </div>
+        <!-- ═══════════════════════════════════════════════════
+             BAJA
+        ════════════════════════════════════════════════════════ -->
+        <?php elseif ($tipoActual === 'baja'): ?>
+        <?php if ($esEdicion && $movimiento): ?>
+            <!-- Edición: lote/cuadra/motivo no editables -->
+            <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem">
+                <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:.4rem">Lote y cuadra (no editables)</div>
+                <div style="font-size:.9rem;color:#374151;font-weight:600"><?= e($movimiento['lote_origen_codigo']) ?></div>
+                <?php if (!empty($movimiento['cuadra_origen_nombre'])): ?>
+                    <div style="font-size:.82rem;color:#6b7280">Cuadra: <?= e($movimiento['cuadra_origen_nombre']) ?></div>
+                <?php endif; ?>
+                <?php if (!empty($movimiento['motivo_baja'])): ?>
+                    <?php $motivoLabel = $movimiento['motivo_baja'] === 'enfermedad' ? 'Enfermedad' : 'Sacrificio'; ?>
+                    <div style="font-size:.82rem;color:#6b7280;margin-top:.25rem">Motivo: <strong><?= $motivoLabel ?></strong></div>
+                <?php endif; ?>
+            </div>
+            <input type="hidden" name="lote_origen_id"   value="<?= (int)$movimiento['lote_origen_id'] ?>">
+            <input type="hidden" name="cuadra_origen_id" value="<?= e($movimiento['cuadra_origen_id'] ?? '') ?>">
+            <input type="hidden" name="motivo_baja"      value="<?= e($movimiento['motivo_baja'] ?? '') ?>">
+        <?php else: ?>
+            <!-- Creación: cascada nave → cuadra → lote -->
+            <div class="form-section-title">Lote afectado</div>
+            <div class="form-grid form-grid-3">
+                <div class="form-group">
+                    <label>Nave</label>
+                    <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
+                        <option value="">— Nave —</option>
+                        <?php foreach ($naves as $n): ?>
+                            <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Cuadra</label>
+                    <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
+                        <option value="">— Cuadra —</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Lote *</label>
+                    <select id="loteOrigen" name="lote_origen_id" required>
+                        <option value="">— Lote —</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Motivo *</label>
+                <select name="motivo_baja" required>
+                    <option value="">— Selecciona —</option>
+                    <option value="enfermedad">Enfermedad</option>
+                    <option value="sacrificio">Sacrificio</option>
+                </select>
+            </div>
+        <?php endif; ?>
+
         <?php endif; ?>
 
         <!-- Observaciones -->
