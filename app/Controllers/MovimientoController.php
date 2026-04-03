@@ -173,28 +173,43 @@ class MovimientoController extends BaseController
         $this->redirect('movimientos');
     }
 
-    // ── API AJAX: cuadras de una nave ────────────────────────────
+    // ── API AJAX: cuadras de una o varias naves ──────────────────
     public function cuadrasPorNave(): void
     {
         auth_required();
         header('Content-Type: application/json');
-        $naveId = (int)($_GET['nave_id'] ?? 0);
-        if (!$naveId) { echo json_encode([]); return; }
 
+        // Soporta ?nave_id=X (legacy) o ?nave_ids[]=X&nave_ids[]=Y
+        $naveIds = [];
+        if (isset($_GET['nave_ids']) && is_array($_GET['nave_ids'])) {
+            $naveIds = array_values(array_filter(array_map('intval', $_GET['nave_ids'])));
+        } elseif (!empty($_GET['nave_id'])) {
+            $naveIds = [(int)$_GET['nave_id']];
+        }
+        if (empty($naveIds)) { echo json_encode([]); return; }
+
+        $ph   = implode(',', array_fill(0, count($naveIds), '?'));
         $stmt = \App\Core\Database::getInstance()->prepare("
             SELECT c.id, c.nombre, c.capacidad_maxima,
+                   COALESCE(SUM(cl.num_animales), 0)             AS ocupados,
                    GROUP_CONCAT(DISTINCT l.codigo SEPARATOR ', ') AS lotes
             FROM cuadras c
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id
                 AND cl.activo = 1
                 AND cl.num_animales > 0
             LEFT JOIN lotes l ON cl.lote_id = l.id AND l.estado = 'activo'
-            WHERE c.nave_id = :nave_id AND c.activa = 1
+            WHERE c.nave_id IN ({$ph}) AND c.activa = 1
             GROUP BY c.id
             ORDER BY c.nombre
         ");
-        $stmt->execute(['nave_id' => $naveId]);
-        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+        $stmt->execute($naveIds);
+        $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
+        foreach ($rows as &$r) {
+            $r['disponible'] = $r['capacidad_maxima'] !== null
+                ? max(0, (int)$r['capacidad_maxima'] - (int)$r['ocupados'])
+                : null;
+        }
+        echo json_encode($rows);
     }
 
     // ── API AJAX: lotes de una cuadra ────────────────────────────

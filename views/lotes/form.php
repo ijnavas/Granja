@@ -1,6 +1,19 @@
 <?php
 $esEdicion = !is_null($lote);
 $action    = $esEdicion ? base_url("lotes/{$lote['id']}/actualizar") : base_url('lotes');
+
+// Raza por defecto para nuevos lotes: 50% Ibérico
+$defaultRazaId = null;
+if (!$esEdicion) {
+    foreach ($razas as $r) {
+        $check = strtolower($r['nombre'] . ' ' . ($r['porcentaje'] ?? ''));
+        if (str_contains($check, 'ibéric') && str_contains($check, '50')) {
+            $defaultRazaId = $r['id'];
+            break;
+        }
+    }
+}
+
 $tipoLabels = [
     'traslado_cuadra'    => 'Traslado cuadra',
     'entrada_cebo'       => 'Entrada cebo',
@@ -90,7 +103,7 @@ $tipoLabels = [
                         <?php foreach ($razas as $r): ?>
                             <option value="<?= $r['id'] ?>"
                                     data-identificador="<?= e($r['identificador'] ?? '') ?>"
-                                    <?= ($lote['raza_id'] ?? '') == $r['id'] ? 'selected' : '' ?>>
+                                    <?= (($lote['raza_id'] ?? $defaultRazaId) == $r['id']) ? 'selected' : '' ?>>
                                 <?= e($r['nombre']) ?><?= $r['porcentaje'] ? ' (' . $r['porcentaje'] . ')' : '' ?>
                             </option>
                         <?php endforeach; ?>
@@ -103,7 +116,19 @@ $tipoLabels = [
             </div>
 
             <div class="form-group">
-                <label>Nave (opcional)</label>
+                <label>Nave<?= $esEdicion ? '' : 's' ?> (opcional)</label>
+                <?php if (!$esEdicion): ?>
+                <select name="nave_ids[]" id="naveSelect" multiple size="4"
+                        onchange="cargarCuadrasDistribucion()"
+                        style="min-height:90px">
+                    <?php foreach ($naves as $n): ?>
+                        <option value="<?= $n['id'] ?>" data-granja="<?= e($n['granja_nombre']) ?>">
+                            <?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <span class="form-hint">Ctrl+clic para seleccionar varias naves</span>
+                <?php else: ?>
                 <select name="nave_id" id="naveSelect" onchange="cargarCuadrasDistribucion(this.value)">
                     <option value="">— Sin asignar aún —</option>
                     <?php foreach ($naves as $n): ?>
@@ -114,6 +139,7 @@ $tipoLabels = [
                         </option>
                     <?php endforeach; ?>
                 </select>
+                <?php endif; ?>
             </div>
 
             <div class="form-section-title" style="margin-top:.5rem">Datos de entrada</div>
@@ -124,7 +150,7 @@ $tipoLabels = [
                     <input type="number" name="num_animales" id="numAnimales" min="1" required
                            value="<?= e($lote['num_animales'] ?? '') ?>"
                            placeholder="200"
-                           oninput="calcularPesoIndividual(); calcularValoracion(); if(cuadrasData.length) recalcularDistribucion();">
+                           oninput="calcularPesoIndividual(); calcularValoracion(); if(cuadrasData.length) { recalcularDistribucion(); mostrarAdvertenciaCapacidad(); }">
                 </div>
                 <div class="form-group">
                     <label>Peso medio entrada (kg)</label>
@@ -160,6 +186,9 @@ $tipoLabels = [
                     </div>
                 </div>
             </div>
+
+            <!-- Aviso si los animales superan la capacidad disponible -->
+            <div id="capacidadWarning" style="display:none;margin-top:.5rem"></div>
 
             <!-- Panel distribución en cuadras -->
             <?php if ($esEdicion): ?>
@@ -515,9 +544,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // En creación generar código inicial; en edición también actualizar si cambia
     actualizarCodigo();
 
-    // Cargar cuadras si hay nave preseleccionada (edición)
+    // Cargar cuadras si hay nave preseleccionada (solo edición, single select)
     const navesel = document.getElementById('naveSelect');
-    if (navesel && navesel.value) cargarCuadrasDistribucion(navesel.value);
+    if (navesel && !navesel.multiple && navesel.value) cargarCuadrasDistribucion(navesel.value);
 
     // Detectar edición manual del código
     const codigoManual = document.getElementById('codigoManual');
@@ -559,41 +588,72 @@ function toggleDistribucion() {
     arrow.style.transform = abierto ? '' : 'rotate(180deg)';
 }
 
-async function cargarCuadrasDistribucion(naveId) {
-    const panel = document.getElementById('distribucionPanel');
-    if (!naveId) { panel.style.display = 'none'; cuadrasData = []; return; }
+async function cargarCuadrasDistribucion(singleNaveId) {
+    const panel      = document.getElementById('distribucionPanel');
+    const naveSelect = document.getElementById('naveSelect');
 
-    const res  = await fetch(`<?= base_url('movimientos/cuadras') ?>?nave_id=${naveId}`);
-    cuadrasData = await res.json();
+    let selectedIds;
+    if (naveSelect && naveSelect.multiple) {
+        selectedIds = Array.from(naveSelect.selectedOptions).map(o => o.value).filter(v => v);
+    } else {
+        const id = singleNaveId || (naveSelect ? naveSelect.value : '');
+        selectedIds = id ? [id] : [];
+    }
+
+    if (!selectedIds.length) {
+        panel.style.display = 'none';
+        cuadrasData = [];
+        actualizarCamposOcultos([]);
+        document.getElementById('capacidadWarning').style.display = 'none';
+        return;
+    }
+
+    const params = selectedIds.map(id => `nave_ids[]=${encodeURIComponent(id)}`).join('&');
+    const res    = await fetch(`<?= base_url('movimientos/cuadras') ?>?${params}`);
+    cuadrasData  = await res.json();
 
     if (!cuadrasData.length) { panel.style.display = 'none'; return; }
 
     panel.style.display = '';
     renderCuadras();
     recalcularDistribucion();
+    mostrarAdvertenciaCapacidad();
 }
 
 function renderCuadras() {
     const grid = document.getElementById('cuadrasGrid');
     grid.innerHTML = '';
     cuadrasData.forEach((c, i) => {
-        const yaAsignado = cuadrasAsig[c.id] ?? null;
+        const yaAsignado  = cuadrasAsig[c.id] ?? null;
+        const ocupados    = parseInt(c.ocupados) || 0;
+        const capMaxima   = c.capacidad_maxima !== null ? parseInt(c.capacidad_maxima) : null;
+        const disponible  = capMaxima !== null ? Math.max(0, capMaxima - ocupados) : null;
+        const estaLlena   = disponible !== null && disponible <= 0;
+
+        const capLabel = capMaxima !== null
+            ? `Cap. ${capMaxima}${ocupados > 0 ? ` · Ocup. ${ocupados} · Libre: ${disponible}` : ''}`
+            : '—';
+
         const div = document.createElement('div');
-        div.style.cssText = 'display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:#fff;border-radius:6px;border:1px solid #e5e7eb';
+        div.style.cssText = 'display:flex;align-items:center;gap:.75rem;padding:.5rem .75rem;background:#fff;border-radius:6px;border:1px solid #e5e7eb'
+            + (estaLlena ? ';opacity:.55' : '');
         div.innerHTML = `
-            <input type="checkbox" id="cuadra_chk_${i}" checked
+            <input type="checkbox" id="cuadra_chk_${i}" ${estaLlena ? '' : 'checked'}
                    style="width:16px;height:16px;cursor:pointer"
                    onchange="alDesmarcar(${i})">
             <label for="cuadra_chk_${i}" style="flex:1;font-size:.875rem;font-weight:500;cursor:pointer;margin:0">
                 ${c.nombre}
-                <span style="font-size:.75rem;color:#9ca3af;font-weight:400"> · Cap. ${c.capacidad_maxima || '—'}</span>
+                <span style="font-size:.75rem;color:${estaLlena ? '#dc2626' : '#9ca3af'};font-weight:400"> · ${capLabel}</span>
+                ${estaLlena ? '<span style="font-size:.72rem;color:#dc2626;font-weight:700"> LLENA</span>' : ''}
                 ${c.lotes ? `<span style="font-size:.75rem;color:#d97706;font-weight:400"> · ${c.lotes}</span>` : ''}
             </label>
             <input type="number" id="cuadra_num_${i}" min="0"
-                   value="${yaAsignado !== null ? yaAsignado : ''}"
+                   value="${estaLlena ? '0' : (yaAsignado !== null ? yaAsignado : '')}"
                    placeholder="0"
                    data-fijado="false"
-                   style="width:70px;padding:.35rem .5rem;border:1.5px solid #d1d5db;border-radius:6px;font-size:.875rem;font-family:inherit;text-align:right"
+                   data-disponible="${disponible !== null ? disponible : 9999}"
+                   ${estaLlena ? 'disabled' : ''}
+                   style="width:70px;padding:.35rem .5rem;border:1.5px solid #d1d5db;border-radius:6px;font-size:.875rem;font-family:inherit;text-align:right${estaLlena ? ';background:#f3f4f6;color:#9ca3af' : ''}"
                    oninput="alEditarCuadra(${i})">
         `;
         grid.appendChild(div);
@@ -639,7 +699,8 @@ function redistribuirLibres() {
         if (num.dataset.fijado === 'true') {
             fijados += parseInt(num.value) || 0;
         } else {
-            libres.push({ idx: i, cap: c.capacidad_maxima || 9999 });
+            const disp = parseInt(num.dataset.disponible) || (c.capacidad_maxima ? parseInt(c.capacidad_maxima) : 9999);
+            if (disp > 0) libres.push({ idx: i, cap: disp });
         }
     });
 
@@ -649,7 +710,7 @@ function redistribuirLibres() {
     libres.forEach(c => {
         const numEl = document.getElementById(`cuadra_num_${c.idx}`);
         if (restantes <= 0) { numEl.value = '0'; return; }
-        const cap  = porCuadraFijo || c.cap;
+        const cap  = porCuadraFijo ? Math.min(porCuadraFijo, c.cap) : c.cap;
         const asig = Math.min(restantes, cap);
         restantes -= asig;
         numEl.value = asig;
@@ -717,5 +778,25 @@ function repartirIgual() {
         }
     });
     redistribuirLibres();
+}
+
+function mostrarAdvertenciaCapacidad() {
+    const total  = parseInt(document.getElementById('numAnimales').value) || 0;
+    const warnEl = document.getElementById('capacidadWarning');
+    if (!warnEl) return;
+    if (!total || !cuadrasData.length) { warnEl.style.display = 'none'; return; }
+
+    const totalDisponible = cuadrasData.reduce((sum, c) => {
+        const ocupados = parseInt(c.ocupados) || 0;
+        const cap = c.capacidad_maxima !== null ? parseInt(c.capacidad_maxima) : 0;
+        return sum + Math.max(0, cap - ocupados);
+    }, 0);
+
+    if (totalDisponible > 0 && total > totalDisponible) {
+        warnEl.innerHTML = `<div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:6px;padding:.6rem .85rem;font-size:.82rem;color:#dc2626">⚠ <strong>Atención:</strong> Los <strong>${total}</strong> animales exceden la capacidad disponible en las naves seleccionadas (<strong>${totalDisponible}</strong> plazas libres).</div>`;
+        warnEl.style.display = '';
+    } else {
+        warnEl.style.display = 'none';
+    }
 }
 </script>
