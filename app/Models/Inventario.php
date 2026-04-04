@@ -99,7 +99,11 @@ class Inventario
             SELECT
                 l.id            AS lote_id,
                 l.codigo        AS lote_codigo,
-                l.estado_animal,
+                CASE
+                    WHEN l.estado_animal IN ('lechon','cebo') AND ea.peso_min_kg IS NOT NULL AND tcl.peso_kg >= ea.peso_min_kg THEN 'cebo'
+                    WHEN l.estado_animal IN ('lechon','cebo') AND ea.peso_min_kg IS NOT NULL AND tcl.peso_kg < ea.peso_min_kg  THEN 'lechon'
+                    ELSE l.estado_animal
+                END             AS estado_animal,
                 l.granja_id,
                 l.nave_id,
                 l.num_animales  AS lote_num_actual,
@@ -121,6 +125,7 @@ class Inventario
             LEFT JOIN tablas_crecimiento_lineas tcl
                 ON tcl.tabla_id = tc.id
                 AND tcl.semana  = CEIL(DATEDIFF(:fecha2, l.fecha_nacimiento) / 7)
+            LEFT JOIN estados_animal ea ON ea.codigo = 'cebo'
             WHERE g.usuario_id      = :uid
               AND l.fecha_nacimiento <= :fecha3
               AND l.fecha_nacimiento IS NOT NULL
