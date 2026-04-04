@@ -14,4 +14,8 @@ $seccion = $seccionConfig ?? 'razas';
        class="btn <?= $seccion === 'estados' ? 'btn-primary' : 'btn-secondary' ?>">
         Estados animal
     </a>
+    <a href="<?= base_url('perfil') ?>"
+       class="btn btn-secondary" style="margin-left:auto">
+        Mi perfil
+    </a>
 </div>

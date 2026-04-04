@@ -115,10 +115,10 @@
         </div>
         <div class="topbar-right">
             <?php $u = auth_user(); ?>
-            <div class="user-badge">
+            <a href="<?= base_url('perfil') ?>" class="user-badge" style="text-decoration:none;color:inherit" title="Mi perfil">
                 <div class="user-avatar"><?= strtoupper(substr($u['nombre'] ?? 'U', 0, 1)) ?></div>
                 <span><?= e($u['nombre'] ?? '') ?></span>
-            </div>
+            </a>
             <a href="<?= base_url('logout') ?>" class="btn-logout">Salir</a>
         </div>
     </header>

@@ -36,6 +36,7 @@ use App\Controllers\CuadraController;
 use App\Controllers\MovimientoController;
 use App\Controllers\InventarioController;
 use App\Controllers\ConfigController;
+use App\Controllers\PerfilController;
 
 Session::start();
 
@@ -127,6 +128,11 @@ $router->get('/inventarios/{id}',                   [InventarioController::class
 $router->get('/inventarios/{id}/excel',             [InventarioController::class, 'excel']);
 $router->post('/inventarios/{id}/email',            [InventarioController::class, 'email']);
 $router->post('/inventarios/{id}/eliminar',         [InventarioController::class, 'delete']);
+
+// Perfil
+$router->get('/perfil',                                     [PerfilController::class, 'show']);
+$router->post('/perfil/info',                               [PerfilController::class, 'updateInfo']);
+$router->post('/perfil/password',                           [PerfilController::class, 'updatePassword']);
 
 $router->get('/configuracion',                              [ConfigController::class, 'index']);
 $router->get('/configuracion/razas',                        [ConfigController::class, 'razas']);
