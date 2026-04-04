@@ -27,7 +27,9 @@ class LoteController extends BaseController
     public function index(): void
     {
         auth_required();
-        $lotes = $this->model->allByUsuario(Session::get('usuario_id'));
+        $uid = Session::get('usuario_id');
+        $this->model->actualizarEstadoLechonACebo($uid);
+        $lotes = $this->model->allByUsuario($uid);
         $this->view('lotes/index', ['lotes' => $lotes, 'pageTitle' => 'Lotes']);
     }
 

@@ -255,7 +255,8 @@ class ConfigController extends BaseController
             Session::flash('error', 'Nombre y código son obligatorios.');
             $this->redirect('configuracion/estados');
         }
-        $this->estadoModel->create($nombre, $codigo);
+        $pesoMin = $this->postString('peso_min_kg') !== '' ? (float) $this->postString('peso_min_kg') : null;
+        $this->estadoModel->create($nombre, $codigo, $pesoMin);
         Session::flash('success', "Estado \"{$nombre}\" creado.");
         $this->redirect('configuracion/estados');
     }
@@ -276,10 +277,12 @@ class ConfigController extends BaseController
     {
         auth_required();
         require_rol('admin');
+        $pesoMin = $this->postString('peso_min_kg') !== '' ? (float) $this->postString('peso_min_kg') : null;
         $this->estadoModel->update(
             (int)$id,
             capitalizar($this->postString('nombre')),
-            $this->postString('codigo')
+            $this->postString('codigo'),
+            $pesoMin
         );
         Session::flash('success', 'Estado actualizado.');
         $this->redirect('configuracion/estados');

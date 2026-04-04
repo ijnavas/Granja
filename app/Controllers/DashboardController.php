@@ -5,6 +5,7 @@ namespace App\Controllers;
 
 use App\Core\Database;
 use App\Core\Session;
+use App\Models\Lote;
 use PDO;
 
 class DashboardController extends BaseController
@@ -20,6 +21,9 @@ class DashboardController extends BaseController
     {
         auth_required();
         $userId = Session::get('usuario_id');
+
+        // Transición automática lechón → cebo (≥22 kg según tabla)
+        (new Lote())->actualizarEstadoLechonACebo($userId);
 
         $data = [
             'kpis'         => $this->getKpis($userId),
