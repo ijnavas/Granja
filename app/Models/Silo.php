@@ -102,6 +102,117 @@ class Silo
         return $stmt->execute(['id' => $id, 'uid' => $userId]);
     }
 
+    // ── Recargas ─────────────────────────────────────────────────
+
+    public function recargas(int $siloId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT r.*, u.nombre AS usuario_nombre
+            FROM silo_recargas r
+            JOIN usuarios u ON r.usuario_id = u.id
+            WHERE r.silo_id = :id
+            ORDER BY r.fecha DESC, r.id DESC
+        ");
+        $stmt->execute(['id' => $siloId]);
+        return $stmt->fetchAll();
+    }
+
+    public function addRecarga(int $siloId, float $cantidadKg, string $fecha, ?string $proveedor, ?string $obs, int $userId): int
+    {
+        $stmt = $this->db->prepare("
+            INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, proveedor, observaciones, usuario_id)
+            VALUES (:silo_id, :fecha, :cantidad_kg, :proveedor, :observaciones, :usuario_id)
+        ");
+        $stmt->execute([
+            'silo_id'      => $siloId,
+            'fecha'        => $fecha,
+            'cantidad_kg'  => $cantidadKg,
+            'proveedor'    => $proveedor,
+            'observaciones'=> $obs,
+            'usuario_id'   => $userId,
+        ]);
+        $id = (int) $this->db->lastInsertId();
+
+        // Actualizar stock
+        $this->db->prepare("UPDATE silos SET stock_actual_kg = stock_actual_kg + :kg WHERE id = :id")
+            ->execute(['kg' => $cantidadKg, 'id' => $siloId]);
+
+        return $id;
+    }
+
+    public function deleteRecarga(int $recargaId, int $siloId): void
+    {
+        // Recuperar cantidad antes de borrar
+        $stmt = $this->db->prepare("SELECT cantidad_kg FROM silo_recargas WHERE id = :id AND silo_id = :silo_id");
+        $stmt->execute(['id' => $recargaId, 'silo_id' => $siloId]);
+        $r = $stmt->fetch();
+        if (!$r) return;
+
+        $this->db->prepare("DELETE FROM silo_recargas WHERE id = :id")->execute(['id' => $recargaId]);
+        $this->db->prepare("UPDATE silos SET stock_actual_kg = GREATEST(0, stock_actual_kg - :kg) WHERE id = :id")
+            ->execute(['kg' => $r['cantidad_kg'], 'id' => $siloId]);
+    }
+
+    /**
+     * Calcula consumo diario (kg/día) de los lotes activos en las naves de este silo,
+     * y estima cuántos días quedan hasta llegar al stock mínimo.
+     * Devuelve ['consumo_diario_kg', 'dias_hasta_minimo', 'fecha_minimo', 'lotes']
+     */
+    public function proyeccionConsumo(int $siloId): array
+    {
+        // Lotes activos en naves abastecidas por este silo
+        $stmt = $this->db->prepare("
+            SELECT l.id, l.codigo, l.num_animales, l.fecha_nacimiento,
+                   n.nombre AS nave_nombre,
+                   CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7) AS semana_actual,
+                   tcl_curr.consumo_acumulado_g AS consumo_acumulado_actual,
+                   tcl_prev.consumo_acumulado_g AS consumo_acumulado_anterior
+            FROM silos s
+            JOIN silo_nave sn ON sn.silo_id = s.id
+            JOIN naves n ON sn.nave_id = n.id
+            JOIN lotes l ON l.nave_id = n.id AND l.estado = 'activo' AND l.fecha_nacimiento IS NOT NULL
+            LEFT JOIN tabla_raza tr ON tr.raza_id = l.raza_id
+            LEFT JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
+            LEFT JOIN tablas_crecimiento_lineas tcl_curr
+                ON tcl_curr.tabla_id = tc.id
+                AND tcl_curr.semana  = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
+            LEFT JOIN tablas_crecimiento_lineas tcl_prev
+                ON tcl_prev.tabla_id = tc.id
+                AND tcl_prev.semana  = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7) - 1
+            WHERE s.id = :silo_id
+        ");
+        $stmt->execute(['silo_id' => $siloId]);
+        $lotes = $stmt->fetchAll();
+
+        $totalDiarioKg = 0.0;
+        foreach ($lotes as &$l) {
+            $consumoSemanalG = max(0,
+                (float)($l['consumo_acumulado_actual'] ?? 0) - (float)($l['consumo_acumulado_anterior'] ?? 0)
+            );
+            $consumoDiarioKg = ($consumoSemanalG / 7 / 1000) * (int)$l['num_animales'];
+            $l['consumo_diario_kg'] = round($consumoDiarioKg, 2);
+            $totalDiarioKg += $consumoDiarioKg;
+        }
+
+        // Stock disponible hasta mínimo
+        $siloData = $this->db->prepare("SELECT stock_actual_kg, stock_minimo_kg FROM silos WHERE id = :id");
+        $siloData->execute(['id' => $siloId]);
+        $s = $siloData->fetch();
+
+        $margen = max(0, (float)$s['stock_actual_kg'] - (float)$s['stock_minimo_kg']);
+        $diasHastaMinimo = $totalDiarioKg > 0 ? (int) floor($margen / $totalDiarioKg) : null;
+        $fechaMinimo     = $diasHastaMinimo !== null
+            ? date('Y-m-d', strtotime("+{$diasHastaMinimo} days"))
+            : null;
+
+        return [
+            'consumo_diario_kg'  => round($totalDiarioKg, 2),
+            'dias_hasta_minimo'  => $diasHastaMinimo,
+            'fecha_minimo'       => $fechaMinimo,
+            'lotes'              => $lotes,
+        ];
+    }
+
     private function syncNaves(int $siloId, array $naveIds): void
     {
         $this->db->prepare("DELETE FROM silo_nave WHERE silo_id = :id")->execute(['id' => $siloId]);

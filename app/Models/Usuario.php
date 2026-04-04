@@ -34,11 +34,17 @@ class Usuario
     public function findById(int $id): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT id, nombre, apellidos, email, movil, activo, created_at FROM usuarios WHERE id = :id LIMIT 1'
+            'SELECT id, nombre, apellidos, email, movil, email_pedidos, activo, created_at FROM usuarios WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
         return $row ?: null;
+    }
+
+    public function updateEmailPedidos(int $id, string $email): void
+    {
+        $this->db->prepare('UPDATE usuarios SET email_pedidos = :email WHERE id = :id')
+            ->execute(['email' => strtolower(trim($email)), 'id' => $id]);
     }
 
     public function updatePerfil(int $id, string $nombre, string $apellidos, string $email, string $movil): bool

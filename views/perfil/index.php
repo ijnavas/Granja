@@ -30,6 +30,11 @@
             <label>Móvil</label>
             <input type="tel" name="movil" value="<?= e($user['movil'] ?? '') ?>" placeholder="+34 600 000 000">
         </div>
+        <div class="form-group">
+            <label>Email para pedidos de pienso</label>
+            <input type="email" name="email_pedidos" value="<?= e($user['email_pedidos'] ?? '') ?>" placeholder="proveedor@ejemplo.com">
+            <span class="form-hint">Se usará como destinatario al enviar pedidos desde los silos.</span>
+        </div>
         <div class="form-actions">
             <button type="submit" class="btn btn-primary">Guardar cambios</button>
         </div>
