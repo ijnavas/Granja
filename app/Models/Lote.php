@@ -158,6 +158,33 @@ class Lote
         return $stmt->execute(['id' => $id, 'uid' => $userId]);
     }
 
+    /**
+     * Actualiza automáticamente estado_animal de 'lechon' a 'cebo'
+     * cuando el peso de tabla para la semana actual >= 22 kg.
+     * Devuelve el número de lotes actualizados.
+     */
+    public function actualizarEstadoLechonACebo(int $userId): int
+    {
+        $stmt = $this->db->prepare("
+            UPDATE lotes l
+            JOIN granjas g ON l.granja_id = g.id
+            JOIN tabla_raza tr ON tr.raza_id = l.raza_id
+            JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
+            JOIN tablas_crecimiento_lineas tcl
+                ON tcl.tabla_id = tc.id
+                AND tcl.semana  = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
+            SET l.estado_animal = 'cebo'
+            WHERE g.usuario_id       = :uid
+              AND l.estado           = 'activo'
+              AND l.estado_animal    = 'lechon'
+              AND l.fecha_nacimiento IS NOT NULL
+              AND l.raza_id          IS NOT NULL
+              AND tcl.peso_kg        >= 22
+        ");
+        $stmt->execute(['uid' => $userId]);
+        return $stmt->rowCount();
+    }
+
     public function tiposAnimal(): array
     {
         return $this->db->query("SELECT id, nombre, especie FROM tipos_animal ORDER BY especie, nombre")->fetchAll();
