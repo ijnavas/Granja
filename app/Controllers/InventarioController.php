@@ -45,7 +45,8 @@ class InventarioController extends BaseController
         header('Content-Type: application/json');
         $uid   = Session::get('usuario_id');
         $fecha = $_GET['fecha'] ?? date('Y-m-d');
-        $lineas = $this->model->calcularLineas($uid, $fecha);
+        $tipo  = $_GET['tipo']  ?? 'cuadra';
+        $lineas = $this->model->calcularLineas($uid, $fecha, $tipo);
         echo json_encode($lineas);
     }
 
@@ -61,14 +62,15 @@ class InventarioController extends BaseController
         $uid    = Session::get('usuario_id');
         $fecha  = $this->postString('fecha') ?: date('Y-m-d');
         $nombre = trim($this->postString('nombre')) ?: null;
+        $tipo   = in_array($this->postString('tipo'), ['cuadra', 'global']) ? $this->postString('tipo') : 'cuadra';
 
-        $lineas = $this->model->calcularLineas($uid, $fecha);
+        $lineas = $this->model->calcularLineas($uid, $fecha, $tipo);
         if (empty($lineas)) {
             Session::flash('error', 'No hay lotes activos para esa fecha.');
             $this->redirect('inventarios/crear');
         }
 
-        $id = $this->model->create($uid, $fecha, $nombre);
+        $id = $this->model->create($uid, $fecha, $nombre, $tipo);
         foreach ($lineas as $l) {
             // Quitar claves de preview (_*)
             $linea = array_filter($l, fn($k) => !str_starts_with($k, '_'), ARRAY_FILTER_USE_KEY);

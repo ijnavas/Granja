@@ -6,6 +6,8 @@ $estadoLabels = [
     'madres'     => 'Madres',
 ];
 
+$esCuadra = ($inventario['tipo'] ?? 'cuadra') === 'cuadra';
+
 // Totales
 $totalAnimales = array_sum(array_column($lineas, 'num_animales'));
 $totalPeso     = array_sum(array_column($lineas, 'peso_total_kg'));
@@ -15,9 +17,15 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
 <div class="page-header">
     <div>
         <h2><?= e($pageTitle) ?></h2>
-        <?php if ($inventario['nombre']): ?>
-            <div style="font-size:.875rem;color:#6b7280;margin-top:.15rem"><?= e($inventario['nombre']) ?></div>
-        <?php endif; ?>
+        <div style="font-size:.875rem;color:#6b7280;margin-top:.15rem;display:flex;gap:.75rem;align-items:center">
+            <?php if ($inventario['nombre']): ?>
+                <span><?= e($inventario['nombre']) ?></span>
+                <span style="color:#d1d5db">·</span>
+            <?php endif; ?>
+            <span style="background:<?= $esCuadra ? '#eff6ff' : '#f0fdf4' ?>;color:<?= $esCuadra ? '#1d4ed8' : '#166534' ?>;font-size:.72rem;font-weight:700;padding:.2rem .5rem;border-radius:.25rem;text-transform:uppercase;letter-spacing:.05em">
+                <?= $esCuadra ? 'Por cuadra' : 'Global' ?>
+            </span>
+        </div>
     </div>
     <div style="display:flex;gap:.5rem">
         <a href="<?= base_url('inventarios') ?>" class="btn btn-secondary">Volver</a>
@@ -55,7 +63,7 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
 <!-- Tabla detalle -->
 <div class="list-card">
     <div style="padding:.75rem 1rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280">
-        Detalle por lote y cuadra
+        <?= $esCuadra ? 'Detalle por lote y cuadra' : 'Detalle global por lote' ?>
     </div>
     <?php if (empty($lineas)): ?>
         <div class="empty-state">Sin líneas registradas.</div>
@@ -64,7 +72,7 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
         <thead>
             <tr>
                 <th>Granja</th>
-                <th>Nave · Cuadra</th>
+                <th><?= $esCuadra ? 'Nave · Cuadra' : 'Naves' ?></th>
                 <th>Lote</th>
                 <th>Estado</th>
                 <th style="text-align:center">Semana</th>
@@ -92,9 +100,13 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
             <tr>
                 <td style="color:#9ca3af;font-size:.78rem"></td>
                 <td style="font-size:.82rem;color:#6b7280">
-                    <?= e($l['nave_nombre'] ?? '—') ?>
-                    <?php if ($l['cuadra_nombre']): ?>
-                        <span style="color:#d1d5db"> · </span><?= e($l['cuadra_nombre']) ?>
+                    <?php if ($esCuadra): ?>
+                        <?= e($l['nave_nombre'] ?? '—') ?>
+                        <?php if ($l['cuadra_nombre']): ?>
+                            <span style="color:#d1d5db"> · </span><?= e($l['cuadra_nombre']) ?>
+                        <?php endif; ?>
+                    <?php else: ?>
+                        <?= e($l['nave_nombre'] ?? '—') ?>
                     <?php endif; ?>
                 </td>
                 <td><span style="font-family:monospace;font-weight:600;color:#1d4ed8"><?= e($l['lote_codigo']) ?></span></td>
