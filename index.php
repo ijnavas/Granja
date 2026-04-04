@@ -37,6 +37,7 @@ use App\Controllers\MovimientoController;
 use App\Controllers\InventarioController;
 use App\Controllers\ConfigController;
 use App\Controllers\PerfilController;
+use App\Controllers\PesajeController;
 
 Session::start();
 
@@ -128,6 +129,12 @@ $router->get('/inventarios/{id}',                   [InventarioController::class
 $router->get('/inventarios/{id}/excel',             [InventarioController::class, 'excel']);
 $router->post('/inventarios/{id}/email',            [InventarioController::class, 'email']);
 $router->post('/inventarios/{id}/eliminar',         [InventarioController::class, 'delete']);
+
+// Pesajes
+$router->get('/pesajes',                                    [PesajeController::class, 'index']);
+$router->get('/pesajes/crear',                              [PesajeController::class, 'create']);
+$router->post('/pesajes',                                   [PesajeController::class, 'store']);
+$router->post('/pesajes/{id}/eliminar',                     [PesajeController::class, 'delete']);
 
 // Perfil
 $router->get('/perfil',                                     [PerfilController::class, 'show']);

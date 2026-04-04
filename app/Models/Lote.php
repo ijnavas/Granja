@@ -25,12 +25,16 @@ class Lote
                    COALESCE(g.nombre, g2.nombre) AS granja_nombre,
                    DATEDIFF(CURDATE(), l.fecha_entrada) AS dias_en_granja,
                    CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7) AS semana_actual,
-                   (SELECT p.peso_medio_kg FROM pesajes p WHERE p.lote_id = l.id ORDER BY p.fecha DESC LIMIT 1) AS ultimo_peso,
                    r.nombre AS raza_nombre,
                    r.identificador AS raza_identificador,
-                   tcl.peso_kg AS peso_tabla,
+                   tcl.peso_kg  AS peso_tabla,
                    tcl.coste_eur AS coste_tabla,
-                   tcl.consumo_acumulado_g AS consumo_tabla
+                   tcl.consumo_acumulado_g AS consumo_tabla,
+                   ult_p.peso_medio_kg   AS ultimo_peso_real,
+                   ult_p.fecha           AS ultimo_pesaje_fecha,
+                   CEIL(DATEDIFF(ult_p.fecha, l.fecha_nacimiento) / 7) AS semana_ultimo_pesaje,
+                   tcl_p.peso_kg         AS peso_tabla_en_pesaje,
+                   ROUND(ult_p.peso_medio_kg + COALESCE(tcl.peso_kg, 0) - COALESCE(tcl_p.peso_kg, 0), 3) AS peso_real_proyectado
             FROM lotes l
             JOIN tipos_animal ta ON l.tipo_animal_id = ta.id
             LEFT JOIN naves n   ON l.nave_id    = n.id
@@ -42,6 +46,12 @@ class Lote
             LEFT JOIN tablas_crecimiento_lineas tcl
                 ON tcl.tabla_id = tc.id
                 AND tcl.semana = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
+            LEFT JOIN pesajes ult_p ON ult_p.id = (
+                SELECT id FROM pesajes WHERE lote_id = l.id ORDER BY fecha DESC LIMIT 1
+            )
+            LEFT JOIN tablas_crecimiento_lineas tcl_p
+                ON tcl_p.tabla_id = tc.id
+                AND tcl_p.semana  = CEIL(DATEDIFF(ult_p.fecha, l.fecha_nacimiento) / 7)
             WHERE (g.usuario_id = :uid OR g2.usuario_id = :uid2)
             ORDER BY l.estado, l.fecha_nacimiento ASC
         ");

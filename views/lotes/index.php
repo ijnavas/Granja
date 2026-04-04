@@ -28,6 +28,7 @@
                 <th>Animales</th>
                 <th>Semana</th>
                 <th>Peso tabla</th>
+                <th>Peso real</th>
                 <th>Valoración lote</th>
                 <th>Estado</th>
                 <th></th>
@@ -36,10 +37,15 @@
         <tbody>
             <?php foreach ($lotes as $l): ?>
             <?php
-                $semana     = $l['semana_actual'] ?? null;
-                $pesoTabla  = $l['peso_tabla']    ?? null;
-                $costeTabla = $l['coste_tabla']   ?? null;
-                $valoracion = ($costeTabla && $l['num_animales']) ? $costeTabla * $l['num_animales'] : null;
+                $semana          = $l['semana_actual']        ?? null;
+                $pesoTabla       = $l['peso_tabla']           ?? null;
+                $costeTabla      = $l['coste_tabla']          ?? null;
+                $pesoReal        = $l['peso_real_proyectado'] ?? null;
+                $ultimoPesaje    = $l['ultimo_pesaje_fecha']  ?? null;
+                $valoracion      = ($costeTabla && $l['num_animales']) ? $costeTabla * $l['num_animales'] : null;
+                $desv = ($pesoTabla && $pesoReal)
+                    ? round((($pesoReal - $pesoTabla) / $pesoTabla) * 100, 1)
+                    : null;
             ?>
             <tr style="cursor:pointer<?= $l['estado'] === 'cerrado' ? ';opacity:.5' : '' ?>"
                 class="fila-lote<?= $l['estado'] === 'cerrado' ? ' fila-cerrada' : '' ?>"
@@ -76,6 +82,21 @@
                     <?php endif; ?>
                 </td>
                 <td>
+                    <?php if ($pesoReal): ?>
+                        <span style="font-weight:600;color:#1d4ed8"><?= number_format($pesoReal, 3) ?> kg</span>
+                        <?php if ($desv !== null): ?>
+                            <span style="font-size:.72rem;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>;display:block">
+                                <?= $desv >= 0 ? '+' : '' ?><?= $desv ?>% vs tabla
+                            </span>
+                        <?php endif; ?>
+                        <span style="font-size:.7rem;color:#9ca3af;display:block">
+                            Pesaje <?= date('d/m/Y', strtotime($ultimoPesaje)) ?>
+                        </span>
+                    <?php else: ?>
+                        <span style="color:#d1d5db">Sin pesaje</span>
+                    <?php endif; ?>
+                </td>
+                <td>
                     <?php if ($valoracion): ?>
                         <div style="font-weight:600"><?= number_format($valoracion, 2) ?> €</div>
                         <div style="font-size:.75rem;color:#9ca3af"><?= number_format($costeTabla, 2) ?> €/animal</div>
@@ -87,6 +108,7 @@
                 <td onclick="event.stopPropagation()">
                     <div class="actions">
                         <a href="<?= base_url("lotes/{$l['id']}/editar") ?>" class="btn btn-secondary btn-sm">Editar</a>
+                        <a href="<?= base_url("pesajes/crear?lote_id={$l['id']}") ?>" class="btn btn-secondary btn-sm">Pesar</a>
                         <form method="POST" action="<?= base_url("lotes/{$l['id']}/eliminar") ?>" onsubmit="return confirm('¿Cerrar este lote?')">
                             <?= csrf_field() ?>
                             <button type="submit" class="btn btn-danger btn-sm">Cerrar</button>

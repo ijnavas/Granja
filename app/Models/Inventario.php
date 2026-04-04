@@ -114,7 +114,11 @@ class Inventario
                 COALESCE(cl.num_animales, 0) AS cuadra_num_actual,
                 CEIL(DATEDIFF(:fecha1, l.fecha_nacimiento) / 7) AS semana_actual,
                 tcl.peso_kg     AS peso_tabla,
-                tcl.coste_eur   AS coste_tabla
+                tcl.coste_eur   AS coste_tabla,
+                ult_p.peso_medio_kg  AS ultimo_peso_real,
+                ult_p.fecha          AS ultimo_pesaje_fecha,
+                tcl_p.peso_kg        AS peso_tabla_en_pesaje,
+                ROUND(ult_p.peso_medio_kg + COALESCE(tcl.peso_kg,0) - COALESCE(tcl_p.peso_kg,0), 3) AS peso_real_proyectado
             FROM lotes l
             JOIN granjas g ON l.granja_id = g.id
             LEFT JOIN naves n   ON l.nave_id   = n.id
@@ -126,12 +130,18 @@ class Inventario
                 ON tcl.tabla_id = tc.id
                 AND tcl.semana  = CEIL(DATEDIFF(:fecha2, l.fecha_nacimiento) / 7)
             LEFT JOIN estados_animal ea ON ea.codigo = 'cebo'
+            LEFT JOIN pesajes ult_p ON ult_p.id = (
+                SELECT id FROM pesajes WHERE lote_id = l.id AND fecha <= :fecha4 ORDER BY fecha DESC LIMIT 1
+            )
+            LEFT JOIN tablas_crecimiento_lineas tcl_p
+                ON tcl_p.tabla_id = tc.id
+                AND tcl_p.semana  = CEIL(DATEDIFF(ult_p.fecha, l.fecha_nacimiento) / 7)
             WHERE g.usuario_id      = :uid
               AND l.fecha_nacimiento <= :fecha3
               AND l.fecha_nacimiento IS NOT NULL
             ORDER BY g.nombre, n.nombre, c.nombre, l.codigo
         ");
-        $stmt->execute(['uid' => $userId, 'fecha1' => $fecha, 'fecha2' => $fecha, 'fecha3' => $fecha]);
+        $stmt->execute(['uid' => $userId, 'fecha1' => $fecha, 'fecha2' => $fecha, 'fecha3' => $fecha, 'fecha4' => $fecha]);
         $rows = $stmt->fetchAll();
 
         // 2. Movimientos POSTERIORES a la fecha para reconstruir conteos
@@ -215,7 +225,8 @@ class Inventario
             if ($num <= 0) continue;
             if ($r['peso_tabla'] === null) continue; // sin tabla de crecimiento en esa fecha
 
-            $pesoKg     = (float) $r['peso_tabla'];
+            $pesoTabla  = (float) $r['peso_tabla'];
+            $pesoKg     = $r['peso_real_proyectado'] !== null ? (float) $r['peso_real_proyectado'] : $pesoTabla;
             $costeEur   = $r['coste_tabla'] !== null ? (float) $r['coste_tabla'] : null;
 
             $lineas[] = [
@@ -226,7 +237,9 @@ class Inventario
                 'estado_animal'   => $r['estado_animal'],
                 'num_animales'    => $num,
                 'peso_kg'         => $pesoKg,
-                'peso_total_kg'   => $pesoKg  !== null ? round($pesoKg  * $num, 3) : null,
+                'peso_kg_tabla'   => $pesoTabla,
+                'tiene_pesaje'    => $r['ultimo_peso_real'] !== null,
+                'peso_total_kg'   => round($pesoKg * $num, 3),
                 'coste_eur'       => $costeEur,
                 'valor_total_eur' => $costeEur !== null ? round($costeEur * $num, 2) : null,
                 'semana_tabla'    => $r['semana_actual'] ? (int) $r['semana_actual'] : null,
@@ -247,17 +260,18 @@ class Inventario
             $loteId = (int) $r['lote_id'];
             if (!isset($porLote[$loteId])) {
                 $porLote[$loteId] = [
-                    'lote_id'      => $loteId,
-                    'granja_id'    => (int) $r['granja_id'],
-                    'nave_id'      => $r['nave_id'] ? (int) $r['nave_id'] : null,
-                    'estado_animal'=> $r['estado_animal'],
-                    'semana_actual'=> $r['semana_actual'],
-                    'peso_tabla'   => $r['peso_tabla'],
-                    'coste_tabla'  => $r['coste_tabla'],
-                    'lote_num_actual' => (int) $r['lote_num_actual'],
-                    '_lote_codigo' => $r['lote_codigo'],
-                    '_granja_nombre' => $r['granja_nombre'],
-                    '_naves'       => [],
+                    'lote_id'              => $loteId,
+                    'granja_id'            => (int) $r['granja_id'],
+                    'nave_id'              => $r['nave_id'] ? (int) $r['nave_id'] : null,
+                    'estado_animal'        => $r['estado_animal'],
+                    'semana_actual'        => $r['semana_actual'],
+                    'peso_tabla'           => $r['peso_tabla'],
+                    'coste_tabla'          => $r['coste_tabla'],
+                    'peso_real_proyectado' => $r['peso_real_proyectado'],
+                    'lote_num_actual'      => (int) $r['lote_num_actual'],
+                    '_lote_codigo'         => $r['lote_codigo'],
+                    '_granja_nombre'       => $r['granja_nombre'],
+                    '_naves'               => [],
                 ];
             }
             // Acumular naves únicas
@@ -272,8 +286,9 @@ class Inventario
             if ($num <= 0) continue;
             if ($d['peso_tabla'] === null) continue; // sin tabla de crecimiento en esa fecha
 
-            $pesoKg   = (float) $d['peso_tabla'];
-            $costeEur = $d['coste_tabla'] !== null ? (float) $d['coste_tabla'] : null;
+            $pesoTabla  = (float) $d['peso_tabla'];
+            $pesoKg     = $d['peso_real_proyectado'] !== null ? (float) $d['peso_real_proyectado'] : $pesoTabla;
+            $costeEur   = $d['coste_tabla'] !== null ? (float) $d['coste_tabla'] : null;
             $naveStr  = !empty($d['_naves']) ? implode(', ', $d['_naves']) : null;
 
             $lineas[] = [
@@ -284,7 +299,9 @@ class Inventario
                 'estado_animal'   => $d['estado_animal'],
                 'num_animales'    => $num,
                 'peso_kg'         => $pesoKg,
-                'peso_total_kg'   => $pesoKg  !== null ? round($pesoKg  * $num, 3) : null,
+                'peso_kg_tabla'   => $pesoTabla,
+                'tiene_pesaje'    => $d['peso_real_proyectado'] !== null,
+                'peso_total_kg'   => round($pesoKg * $num, 3),
                 'coste_eur'       => $costeEur,
                 'valor_total_eur' => $costeEur !== null ? round($costeEur * $num, 2) : null,
                 'semana_tabla'    => $d['semana_actual'] ? (int) $d['semana_actual'] : null,
