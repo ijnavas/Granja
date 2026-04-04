@@ -165,33 +165,32 @@ class Silo
             SELECT l.id, l.codigo, l.num_animales, l.fecha_nacimiento,
                    n.nombre AS nave_nombre,
                    CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7) AS semana_actual,
-                   tcl_curr.consumo_acumulado_g AS consumo_acumulado_actual,
-                   tcl_curr.semana              AS semana_curr,
-                   tcl_prev.consumo_acumulado_g AS consumo_acumulado_anterior,
-                   tcl_prev.semana              AS semana_prev
+                   tcl_hi.consumo_acumulado_g AS consumo_hi,
+                   tcl_lo.consumo_acumulado_g AS consumo_lo
             FROM silos s
             JOIN silo_nave sn ON sn.silo_id = s.id
             JOIN naves n ON sn.nave_id = n.id
             JOIN lotes l ON l.nave_id = n.id AND l.estado = 'activo' AND l.fecha_nacimiento IS NOT NULL
             LEFT JOIN tabla_raza tr ON tr.raza_id = l.raza_id
             LEFT JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
-            LEFT JOIN tablas_crecimiento_lineas tcl_curr
-                ON tcl_curr.tabla_id = tc.id
-                AND tcl_curr.semana  = (
-                    SELECT MAX(semana) FROM tablas_crecimiento_lineas
-                    WHERE tabla_id = tc.id
-                      AND semana <= CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
-                      AND consumo_acumulado_g IS NOT NULL
+            -- Semana donde hubo el último incremento real (consumo[s] > consumo[s-1])
+            LEFT JOIN tablas_crecimiento_lineas tcl_hi
+                ON tcl_hi.tabla_id = tc.id
+                AND tcl_hi.semana = (
+                    SELECT MAX(t_c.semana)
+                    FROM tablas_crecimiento_lineas t_c
+                    JOIN tablas_crecimiento_lineas t_p
+                        ON t_p.tabla_id = t_c.tabla_id AND t_p.semana = t_c.semana - 1
+                    WHERE t_c.tabla_id = tc.id
+                      AND t_c.semana <= CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
+                      AND t_c.consumo_acumulado_g IS NOT NULL
+                      AND t_p.consumo_acumulado_g IS NOT NULL
+                      AND t_c.consumo_acumulado_g > t_p.consumo_acumulado_g
                 )
-            LEFT JOIN tablas_crecimiento_lineas tcl_prev
-                ON tcl_prev.tabla_id = tc.id
-                AND tcl_prev.semana  = (
-                    SELECT MAX(semana) FROM tablas_crecimiento_lineas
-                    WHERE tabla_id = tc.id
-                      AND semana < tcl_curr.semana
-                      AND consumo_acumulado_g IS NOT NULL
-                      AND consumo_acumulado_g < tcl_curr.consumo_acumulado_g
-                )
+            -- Semana anterior al último incremento
+            LEFT JOIN tablas_crecimiento_lineas tcl_lo
+                ON tcl_lo.tabla_id = tc.id
+                AND tcl_lo.semana = tcl_hi.semana - 1
             WHERE s.id = :silo_id
         ");
         $stmt->execute(['silo_id' => $siloId]);
@@ -199,21 +198,18 @@ class Silo
 
         $totalDiarioKg = 0.0;
         foreach ($lotes as &$l) {
-            $consumoActualG   = (float)($l['consumo_acumulado_actual']  ?? 0);
-            $consumoAnteriorG = (float)($l['consumo_acumulado_anterior'] ?? 0);
-            $semanaCurr       = (int)($l['semana_curr'] ?? $l['semana_actual'] ?? 1);
-            $semanaAnterior   = (int)($l['semana_prev'] ?? 0);
-            $semana           = max(1, (int)($l['semana_actual'] ?? 1));
+            $consumoHiG = (float)($l['consumo_hi'] ?? 0);
+            $consumoLoG = (float)($l['consumo_lo'] ?? 0);
+            $semana     = max(1, (int)($l['semana_actual'] ?? 1));
 
-            $difConsumog = $consumoActualG - $consumoAnteriorG;
-            $difSemanas  = max(1, $semanaCurr - $semanaAnterior);
+            $difConsumog = $consumoHiG - $consumoLoG;
 
-            if ($consumoAnteriorG > 0 && $difConsumog > 0) {
-                // Consumo real entre dos semanas con valores distintos
-                $consumoDiarioAnimalG = $difConsumog / ($difSemanas * 7);
-            } elseif ($consumoActualG > 0) {
+            if ($difConsumog > 0) {
+                // Tasa del último incremento semanal real (siempre 1 semana)
+                $consumoDiarioAnimalG = $difConsumog / 7;
+            } elseif ($consumoHiG > 0) {
                 // Fallback: consumo acumulado repartido en todas las semanas
-                $consumoDiarioAnimalG = $consumoActualG / $semana / 7;
+                $consumoDiarioAnimalG = $consumoHiG / $semana / 7;
             } else {
                 $consumoDiarioAnimalG = 0;
             }
