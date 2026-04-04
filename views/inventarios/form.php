@@ -17,13 +17,28 @@
             <label>Fecha del inventario *</label>
             <input type="date" name="fecha" id="fechaInv" required
                    value="<?= date('Y-m-d') ?>"
-                   onchange="cargarPreview(this.value)">
+                   onchange="cargarPreview()">
             <span class="form-hint">Normalmente a final de mes</span>
         </div>
 
         <div class="form-group">
             <label>Nombre (opcional)</label>
             <input type="text" name="nombre" placeholder="Ej: Cierre marzo 2026">
+        </div>
+
+        <div class="form-group">
+            <label>Tipo de inventario</label>
+            <div style="display:flex;gap:1rem;margin-top:.25rem">
+                <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-weight:400">
+                    <input type="radio" name="tipo" value="cuadra" checked onchange="cargarPreview()">
+                    Por cuadra
+                </label>
+                <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-weight:400">
+                    <input type="radio" name="tipo" value="global" onchange="cargarPreview()">
+                    Global (por lote)
+                </label>
+            </div>
+            <span class="form-hint">Por cuadra: una fila por lote + cuadra. Global: una fila por lote.</span>
         </div>
 
         <div class="form-actions" style="margin-top:1.5rem">
@@ -50,13 +65,22 @@
 <script>
 let previewData = [];
 
-async function cargarPreview(fecha) {
+function getTipo() {
+    const r = document.querySelector('input[name="tipo"]:checked');
+    return r ? r.value : 'cuadra';
+}
+
+async function cargarPreview() {
+    const fecha = document.getElementById('fechaInv').value;
+    const tipo  = getTipo();
+    if (!fecha) return;
+
     const panel  = document.getElementById('previewPanel');
     const btnG   = document.getElementById('btnGuardar');
     panel.innerHTML = '<div style="color:#9ca3af;font-size:.875rem">Cargando...</div>';
     btnG.disabled   = true;
 
-    const res  = await fetch(`<?= base_url('inventarios/preview') ?>?fecha=${fecha}`);
+    const res  = await fetch(`<?= base_url('inventarios/preview') ?>?fecha=${fecha}&tipo=${tipo}`);
     previewData = await res.json();
 
     if (!previewData.length) {
@@ -71,7 +95,9 @@ async function cargarPreview(fecha) {
         totalValor += parseFloat(l.valor_total_eur) || 0;
     });
 
-    // Agrupar por granja > nave > cuadra
+    // Cabeceras según tipo
+    const esCuadra = tipo === 'cuadra';
+
     let html = '<div class="list-card" style="font-size:.82rem">';
     html += `<div style="padding:.75rem 1rem;background:#f0fdf4;border-bottom:1px solid #bbf7d0;display:flex;justify-content:space-between;align-items:center">
         <span style="font-weight:700;color:#166534">${previewData.length} línea${previewData.length !== 1 ? 's' : ''} · ${totalAnim.toLocaleString('es-ES')} animales</span>
@@ -81,7 +107,7 @@ async function cargarPreview(fecha) {
     html += '<table style="width:100%;border-collapse:collapse">';
     html += `<thead><tr style="background:#f9fafb;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:#6b7280">
         <th style="padding:.5rem .75rem;text-align:left;font-weight:600">Lote</th>
-        <th style="padding:.5rem .75rem;text-align:left;font-weight:600">Ubicación</th>
+        <th style="padding:.5rem .75rem;text-align:left;font-weight:600">${esCuadra ? 'Nave · Cuadra' : 'Naves'}</th>
         <th style="padding:.5rem .75rem;text-align:left;font-weight:600">Estado</th>
         <th style="padding:.5rem .75rem;text-align:center;font-weight:600">Sem.</th>
         <th style="padding:.5rem .75rem;text-align:right;font-weight:600">Animales</th>
@@ -92,7 +118,12 @@ async function cargarPreview(fecha) {
 
     previewData.forEach((l, i) => {
         const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
-        const ubicacion = [l._nave_nombre, l._cuadra_nombre].filter(Boolean).join(' · ') || l._granja_nombre || '—';
+        let ubicacion;
+        if (esCuadra) {
+            ubicacion = [l._nave_nombre, l._cuadra_nombre].filter(Boolean).join(' · ') || l._granja_nombre || '—';
+        } else {
+            ubicacion = l._nave_nombre || l._granja_nombre || '—';
+        }
         const estadoLabel = {
             'lechon': 'Lechón', 'cebo': 'Cebo', 'reposicion': 'Reposición', 'madres': 'Madres'
         }[l.estado_animal] || (l.estado_animal || '—');
@@ -119,6 +150,6 @@ async function cargarPreview(fecha) {
 
 document.addEventListener('DOMContentLoaded', () => {
     const f = document.getElementById('fechaInv');
-    if (f && f.value) cargarPreview(f.value);
+    if (f && f.value) cargarPreview();
 });
 </script>

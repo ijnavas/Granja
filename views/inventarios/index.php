@@ -29,7 +29,13 @@
             <?php foreach ($inventarios as $inv): ?>
             <tr style="cursor:pointer" onclick="window.location='<?= base_url("inventarios/{$inv['id']}") ?>'">
                 <td><strong><?= date('d/m/Y', strtotime($inv['fecha'])) ?></strong></td>
-                <td style="color:#6b7280"><?= $inv['nombre'] ? e($inv['nombre']) : '<span style="color:#d1d5db">—</span>' ?></td>
+                <td style="color:#6b7280">
+                    <?= $inv['nombre'] ? e($inv['nombre']) : '<span style="color:#d1d5db">—</span>' ?>
+                    <?php $esCuadra = ($inv['tipo'] ?? 'cuadra') === 'cuadra'; ?>
+                    <span style="margin-left:.4rem;background:<?= $esCuadra ? '#eff6ff' : '#f0fdf4' ?>;color:<?= $esCuadra ? '#1d4ed8' : '#166534' ?>;font-size:.68rem;font-weight:700;padding:.1rem .4rem;border-radius:.25rem;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle">
+                        <?= $esCuadra ? 'Cuadra' : 'Global' ?>
+                    </span>
+                </td>
                 <td style="text-align:right"><?= number_format($inv['num_lineas']) ?></td>
                 <td style="text-align:right;font-weight:600"><?= number_format($inv['total_animales']) ?></td>
                 <td style="text-align:right;font-weight:600;color:#166534">
