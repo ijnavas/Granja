@@ -213,8 +213,9 @@ class Inventario
             }
 
             if ($num <= 0) continue;
+            if ($r['peso_tabla'] === null) continue; // sin tabla de crecimiento en esa fecha
 
-            $pesoKg     = $r['peso_tabla']  !== null ? (float) $r['peso_tabla']  : null;
+            $pesoKg     = (float) $r['peso_tabla'];
             $costeEur   = $r['coste_tabla'] !== null ? (float) $r['coste_tabla'] : null;
 
             $lineas[] = [
@@ -269,8 +270,9 @@ class Inventario
         foreach ($porLote as $loteId => $d) {
             $num = max(0, $d['lote_num_actual'] + ($ajusteLote[$loteId] ?? 0));
             if ($num <= 0) continue;
+            if ($d['peso_tabla'] === null) continue; // sin tabla de crecimiento en esa fecha
 
-            $pesoKg   = $d['peso_tabla']  !== null ? (float) $d['peso_tabla']  : null;
+            $pesoKg   = (float) $d['peso_tabla'];
             $costeEur = $d['coste_tabla'] !== null ? (float) $d['coste_tabla'] : null;
             $naveStr  = !empty($d['_naves']) ? implode(', ', $d['_naves']) : null;
 
