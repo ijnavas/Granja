@@ -93,8 +93,6 @@ class Inventario
     // y calcula peso/valor según la tabla de crecimiento en la fecha dada
     public function calcularLineas(int $userId, string $fecha): array
     {
-        $semanaFn = "CEIL(DATEDIFF(:fecha, l.fecha_nacimiento) / 7)";
-
         $stmt = $this->db->prepare("
             SELECT
                 l.id            AS lote_id,
@@ -106,28 +104,26 @@ class Inventario
                 n.nombre        AS nave_nombre,
                 cl.cuadra_id,
                 c.nombre        AS cuadra_nombre,
-                cl.num_animales,
-                {$semanaFn}     AS semana_actual,
+                COALESCE(cl.num_animales, l.num_animales) AS num_animales,
+                CEIL(DATEDIFF(:fecha1, l.fecha_nacimiento) / 7) AS semana_actual,
                 tcl.peso_kg     AS peso_tabla,
                 tcl.coste_eur   AS coste_tabla
             FROM lotes l
             JOIN granjas g ON l.granja_id = g.id
             LEFT JOIN naves n ON l.nave_id = n.id
-            -- Distribución en cuadras (puede haber varias filas por lote)
             LEFT JOIN cuadra_lote cl ON cl.lote_id = l.id AND cl.activo = 1 AND cl.num_animales > 0
             LEFT JOIN cuadras c ON cl.cuadra_id = c.id
-            -- Tabla de crecimiento via raza
             LEFT JOIN tabla_raza tr ON tr.raza_id = l.raza_id
             LEFT JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
             LEFT JOIN tablas_crecimiento_lineas tcl
                 ON tcl.tabla_id = tc.id
-                AND tcl.semana  = {$semanaFn}
+                AND tcl.semana  = CEIL(DATEDIFF(:fecha2, l.fecha_nacimiento) / 7)
             WHERE g.usuario_id = :uid
               AND l.estado      = 'activo'
               AND l.fecha_nacimiento IS NOT NULL
             ORDER BY g.nombre, n.nombre, c.nombre, l.codigo
         ");
-        $stmt->execute(['uid' => $userId, 'fecha' => $fecha, 'fecha' => $fecha]);
+        $stmt->execute(['uid' => $userId, 'fecha1' => $fecha, 'fecha2' => $fecha]);
         $rows = $stmt->fetchAll();
 
         $lineas = [];
