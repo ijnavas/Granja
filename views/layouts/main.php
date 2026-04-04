@@ -67,6 +67,12 @@
             <span class="nav-tooltip">Movimientos</span>
         </a>
 
+        <a href="<?= base_url('inventarios') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/inventarios') ? 'active' : '' ?>">
+            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></span>
+            <span class="nav-label">Inventarios</span>
+            <span class="nav-tooltip">Inventarios</span>
+        </a>
+
         <a href="<?= base_url('pesajes') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/pesajes') ? 'active' : '' ?>">
             <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 2a4 4 0 0 1 4 4H8a4 4 0 0 1 4-4z"/><path d="M4 6h16l-2 14H6L4 6z"/></svg></span>
             <span class="nav-label">Pesajes</span>
