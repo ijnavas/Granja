@@ -85,6 +85,9 @@ $router->get('/silos/{id}',                 [SiloController::class, 'show']);
 $router->get('/silos/{id}/editar',          [SiloController::class, 'edit']);
 $router->post('/silos/{id}/actualizar',     [SiloController::class, 'update']);
 $router->post('/silos/{id}/eliminar',       [SiloController::class, 'delete']);
+$router->post('/silos/{id}/recarga',        [SiloController::class, 'storeRecarga']);
+$router->post('/silos/{id}/recarga/{rid}/eliminar', [SiloController::class, 'deleteRecarga']);
+$router->post('/silos/{id}/pedido',         [SiloController::class, 'pedido']);
 
 // Lotes
 $router->get('/lotes',                      [LoteController::class, 'index']);

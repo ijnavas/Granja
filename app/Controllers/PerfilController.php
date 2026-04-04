@@ -59,7 +59,16 @@ class PerfilController extends BaseController
             $this->redirect('perfil');
         }
 
+        $emailPedidos = $this->postString('email_pedidos') ?: null;
+        if ($emailPedidos && !filter_var($emailPedidos, FILTER_VALIDATE_EMAIL)) {
+            Session::flash('error', 'El email de pedidos no es válido.');
+            $this->redirect('perfil');
+        }
+
         $this->model->updatePerfil($uid, $nombre, $apellidos, $email, $movil);
+        if ($emailPedidos !== null) {
+            $this->model->updateEmailPedidos($uid, $emailPedidos);
+        }
 
         // Actualizar nombre en sesión
         Session::set('usuario_nombre', $nombre);
