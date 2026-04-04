@@ -175,10 +175,20 @@ class Silo
             LEFT JOIN tablas_crecimiento tc ON tc.id = tr.tabla_id AND tc.activa = 1
             LEFT JOIN tablas_crecimiento_lineas tcl_curr
                 ON tcl_curr.tabla_id = tc.id
-                AND tcl_curr.semana  = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
+                AND tcl_curr.semana  = (
+                    SELECT MAX(semana) FROM tablas_crecimiento_lineas
+                    WHERE tabla_id = tc.id
+                      AND semana <= CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
+                      AND consumo_acumulado_g IS NOT NULL
+                )
             LEFT JOIN tablas_crecimiento_lineas tcl_prev
                 ON tcl_prev.tabla_id = tc.id
-                AND tcl_prev.semana  = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7) - 1
+                AND tcl_prev.semana  = (
+                    SELECT MAX(semana) FROM tablas_crecimiento_lineas
+                    WHERE tabla_id = tc.id
+                      AND semana < tcl_curr.semana
+                      AND consumo_acumulado_g IS NOT NULL
+                )
             WHERE s.id = :silo_id
         ");
         $stmt->execute(['silo_id' => $siloId]);
