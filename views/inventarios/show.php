@@ -27,8 +27,17 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
             </span>
         </div>
     </div>
-    <div style="display:flex;gap:.5rem">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
         <a href="<?= base_url('inventarios') ?>" class="btn btn-secondary">Volver</a>
+        <a href="<?= base_url("inventarios/{$inventario['id']}/excel") ?>" class="btn btn-secondary">
+            Exportar Excel
+        </a>
+        <button type="button" onclick="window.print()" class="btn btn-secondary">
+            Exportar PDF
+        </button>
+        <button type="button" onclick="document.getElementById('modalEmail').style.display='flex'" class="btn btn-secondary">
+            Enviar por email
+        </button>
         <form method="POST" action="<?= base_url("inventarios/{$inventario['id']}/eliminar") ?>"
               onsubmit="return confirm('¿Eliminar este inventario permanentemente?')">
             <?= csrf_field() ?>
@@ -138,3 +147,31 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
     </table>
     <?php endif; ?>
 </div>
+
+<!-- Modal email -->
+<div id="modalEmail" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:.75rem;padding:1.5rem;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+        <h3 style="margin:0 0 1rem;font-size:1rem">Enviar inventario por email</h3>
+        <form method="POST" action="<?= base_url("inventarios/{$inventario['id']}/email") ?>">
+            <?= csrf_field() ?>
+            <div class="form-group">
+                <label>Dirección de email *</label>
+                <input type="email" name="email" required autofocus placeholder="destinatario@ejemplo.com">
+            </div>
+            <div style="display:flex;gap:.5rem;margin-top:1rem">
+                <button type="submit" class="btn btn-primary">Enviar</button>
+                <button type="button" class="btn btn-secondary"
+                        onclick="document.getElementById('modalEmail').style.display='none'">Cancelar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+@media print {
+    nav, aside, .page-header .btn, .page-header form, #modalEmail,
+    [class*="sidebar"], [class*="nav"], [class*="header"] { display: none !important; }
+    .kpi-card { border: 1px solid #e5e7eb !important; box-shadow: none !important; }
+    body { font-size: 11px; }
+}
+</style>

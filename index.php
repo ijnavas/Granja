@@ -124,6 +124,8 @@ $router->get('/inventarios/crear',                  [InventarioController::class
 $router->post('/inventarios',                       [InventarioController::class, 'store']);
 $router->get('/inventarios/preview',                [InventarioController::class, 'preview']);
 $router->get('/inventarios/{id}',                   [InventarioController::class, 'show']);
+$router->get('/inventarios/{id}/excel',             [InventarioController::class, 'excel']);
+$router->post('/inventarios/{id}/email',            [InventarioController::class, 'email']);
 $router->post('/inventarios/{id}/eliminar',         [InventarioController::class, 'delete']);
 
 $router->get('/configuracion',                              [ConfigController::class, 'index']);
