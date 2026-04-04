@@ -10,18 +10,17 @@
     <div class="alert-flash alert-error"><?= e($error) ?></div>
 <?php endif; ?>
 
-<div class="list-card">
+<div class="list-card" style="overflow-x:auto">
 <?php if (empty($pesajes)): ?>
     <div class="empty-state">No hay pesajes registrados. <a href="<?= base_url('pesajes/crear') ?>">Registra el primero</a>.</div>
 <?php else: ?>
-    <table class="list-table">
+    <table class="list-table" style="white-space:nowrap">
         <thead>
             <tr>
                 <th>Fecha</th>
-                <th>Lote</th>
-                <th>Nave</th>
+                <th>Lote · Nave</th>
                 <th style="text-align:center">Sem.</th>
-                <th style="text-align:right">Animales pesados</th>
+                <th style="text-align:right">Animales</th>
                 <th style="text-align:right">Peso real (pesaje)</th>
                 <th style="text-align:right">Peso tabla (ese día)</th>
                 <th style="text-align:right">Peso real proyectado hoy</th>
@@ -39,39 +38,46 @@
                 }
             ?>
             <tr>
-                <td><strong><?= date('d/m/Y', strtotime($p['fecha'])) ?></strong></td>
-                <td><span style="font-family:monospace;font-weight:600;color:#1d4ed8"><?= e($p['lote_codigo']) ?></span></td>
-                <td style="color:#6b7280;font-size:.875rem"><?= e($p['nave_nombre'] ?? $p['granja_nombre'] ?? '—') ?></td>
+                <td style="white-space:nowrap"><strong><?= date('d/m/Y', strtotime($p['fecha'])) ?></strong></td>
+                <td style="white-space:nowrap">
+                    <span style="font-family:monospace;font-weight:600;color:#1d4ed8"><?= e($p['lote_codigo']) ?></span>
+                    <?php if ($p['nave_nombre'] ?? $p['granja_nombre'] ?? null): ?>
+                        <span style="color:#9ca3af;font-size:.8rem"> · <?= e($p['nave_nombre'] ?? $p['granja_nombre']) ?></span>
+                    <?php endif; ?>
+                </td>
                 <td style="text-align:center;color:#6b7280">
                     <?= $p['semana_pesaje'] ? 'S' . $p['semana_pesaje'] : '—' ?>
                 </td>
                 <td style="text-align:right"><?= number_format($p['num_animales_pesados']) ?></td>
-                <td style="text-align:right;font-weight:600">
+                <td style="text-align:right;font-weight:600;white-space:nowrap">
                     <?= number_format((float)$p['peso_medio_kg'], 3) ?> kg
                     <?php if ($desv !== null): ?>
-                        <span style="font-size:.72rem;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>;margin-left:.25rem">
+                        <span style="font-size:.72rem;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>">
                             <?= $desv >= 0 ? '+' : '' ?><?= $desv ?>%
                         </span>
                     <?php endif; ?>
                 </td>
-                <td style="text-align:right;color:#6b7280">
+                <td style="text-align:right;color:#6b7280;white-space:nowrap">
                     <?= $p['peso_tabla_pesaje'] ? number_format((float)$p['peso_tabla_pesaje'], 3) . ' kg' : '—' ?>
                 </td>
-                <td style="text-align:right;font-weight:600;color:#1d4ed8">
+                <td style="text-align:right;font-weight:600;color:#1d4ed8;white-space:nowrap">
                     <?= $p['peso_proyectado_hoy'] ? number_format((float)$p['peso_proyectado_hoy'], 3) . ' kg' : '—' ?>
                 </td>
-                <td style="text-align:right;color:#6b7280">
+                <td style="text-align:right;color:#6b7280;white-space:nowrap">
                     <?= $p['peso_tabla_hoy'] ? number_format((float)$p['peso_tabla_hoy'], 3) . ' kg' : '—' ?>
                 </td>
                 <td style="text-align:right;color:#6b7280">
                     <?= $p['ic_real'] ? number_format((float)$p['ic_real'], 3) : '—' ?>
                 </td>
                 <td>
-                    <form method="POST" action="<?= base_url("pesajes/{$p['id']}/eliminar") ?>"
-                          onsubmit="return confirm('¿Eliminar este pesaje?')">
-                        <?= csrf_field() ?>
-                        <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
-                    </form>
+                    <div class="actions">
+                        <a href="<?= base_url("pesajes/{$p['id']}/editar") ?>" class="btn btn-secondary btn-sm">Editar</a>
+                        <form method="POST" action="<?= base_url("pesajes/{$p['id']}/eliminar") ?>"
+                              onsubmit="return confirm('¿Eliminar este pesaje?')">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             <?php endforeach; ?>

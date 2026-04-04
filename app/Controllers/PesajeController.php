@@ -84,6 +84,57 @@ class PesajeController extends BaseController
         $this->redirect('pesajes');
     }
 
+    public function edit(string $id): void
+    {
+        auth_required();
+        $uid    = Session::get('usuario_id');
+        $pesaje = $this->model->find((int)$id);
+        if (!$pesaje) $this->redirect('pesajes');
+
+        $lotes = $this->loteModel->allByUsuario($uid);
+
+        $this->view('pesajes/edit', [
+            'pesaje'    => $pesaje,
+            'lotes'     => array_filter($lotes, fn($l) => $l['estado'] === 'activo' || $l['id'] == $pesaje['lote_id']),
+            'pageTitle' => 'Editar pesaje',
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function update(string $id): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect("pesajes/{$id}/editar");
+        }
+
+        $fecha  = $this->postString('fecha');
+        $peso   = (float) $this->postString('peso_medio_kg');
+        $num    = (int) $this->postString('num_animales_pesados');
+
+        if (!$fecha || !$peso || !$num) {
+            Session::flash('error', 'Fecha, peso y número de animales son obligatorios.');
+            $this->redirect("pesajes/{$id}/editar");
+        }
+
+        $consumo = $this->postString('consumo_pienso_kg') !== '' ? (float) $this->postString('consumo_pienso_kg') : null;
+        $ic      = $this->postString('ic_real')           !== '' ? (float) $this->postString('ic_real')           : null;
+        $obs     = $this->postString('observaciones') ?: null;
+
+        $this->model->update((int)$id, [
+            'fecha'               => $fecha,
+            'peso_medio_kg'       => $peso,
+            'num_animales_pesados'=> $num,
+            'consumo_pienso_kg'   => $consumo,
+            'ic_real'             => $ic,
+            'observaciones'       => $obs,
+        ]);
+
+        Session::flash('success', 'Pesaje actualizado.');
+        $this->redirect('pesajes');
+    }
+
     public function delete(string $id): void
     {
         auth_required();

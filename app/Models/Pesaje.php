@@ -119,6 +119,22 @@ class Pesaje
         return (int) $this->db->lastInsertId();
     }
 
+    public function update(int $id, array $data): bool
+    {
+        $stmt = $this->db->prepare("
+            UPDATE pesajes SET
+                fecha                = :fecha,
+                peso_medio_kg        = :peso_medio_kg,
+                num_animales_pesados = :num_animales_pesados,
+                consumo_pienso_kg    = :consumo_pienso_kg,
+                ic_real              = :ic_real,
+                observaciones        = :observaciones
+            WHERE id = :id
+        ");
+        $data['id'] = $id;
+        return $stmt->execute($data);
+    }
+
     public function delete(int $id): bool
     {
         $stmt = $this->db->prepare("DELETE FROM pesajes WHERE id = :id");

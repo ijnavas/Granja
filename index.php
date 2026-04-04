@@ -134,6 +134,8 @@ $router->post('/inventarios/{id}/eliminar',         [InventarioController::class
 $router->get('/pesajes',                                    [PesajeController::class, 'index']);
 $router->get('/pesajes/crear',                              [PesajeController::class, 'create']);
 $router->post('/pesajes',                                   [PesajeController::class, 'store']);
+$router->get('/pesajes/{id}/editar',                        [PesajeController::class, 'edit']);
+$router->post('/pesajes/{id}/actualizar',                   [PesajeController::class, 'update']);
 $router->post('/pesajes/{id}/eliminar',                     [PesajeController::class, 'delete']);
 
 // Perfil
