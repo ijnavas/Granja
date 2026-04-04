@@ -10,13 +10,16 @@
 <div class="list-card" style="margin-bottom:2rem">
     <table class="list-table">
         <thead>
-            <tr><th>Nombre</th><th>Código</th><th>Activo</th><th></th></tr>
+            <tr><th>Nombre</th><th>Código</th><th>Peso mínimo (kg)</th><th>Activo</th><th></th></tr>
         </thead>
         <tbody>
             <?php foreach ($estados as $est): ?>
             <tr>
                 <td><strong><?= e($est['nombre']) ?></strong></td>
                 <td><span style="font-family:monospace;background:#f3f4f6;padding:.15rem .5rem;border-radius:4px"><?= e($est['codigo']) ?></span></td>
+                <td style="color:#6b7280">
+                    <?= $est['peso_min_kg'] !== null ? number_format((float)$est['peso_min_kg'], 1) . ' kg' : '<span style="color:#d1d5db">—</span>' ?>
+                </td>
                 <td>
                     <span class="badge <?= $est['activo'] ? 'badge-activo' : 'badge-cerrado' ?>">
                         <?= $est['activo'] ? 'Activo' : 'Inactivo' ?>
@@ -56,6 +59,11 @@
                        style="font-family:monospace"
                        oninput="this.value=this.value.toLowerCase().replace(/\s+/g,'_')">
                 <span class="form-hint">Sin espacios ni mayúsculas. Ej: entrada_cebo</span>
+            </div>
+            <div class="form-group">
+                <label>Peso mínimo (kg)</label>
+                <input type="number" name="peso_min_kg" min="0" step="0.1" placeholder="Ej: 22">
+                <span class="form-hint">Peso a partir del cual los lechones pasan a este estado automáticamente.</span>
             </div>
         </div>
         <div class="form-actions">

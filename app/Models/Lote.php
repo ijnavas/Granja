@@ -173,13 +173,14 @@ class Lote
             JOIN tablas_crecimiento_lineas tcl
                 ON tcl.tabla_id = tc.id
                 AND tcl.semana  = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
+            JOIN estados_animal ea ON ea.codigo = 'cebo' AND ea.peso_min_kg IS NOT NULL
             SET l.estado_animal = 'cebo'
             WHERE g.usuario_id       = :uid
               AND l.estado           = 'activo'
               AND l.estado_animal    = 'lechon'
               AND l.fecha_nacimiento IS NOT NULL
               AND l.raza_id          IS NOT NULL
-              AND tcl.peso_kg        >= 22
+              AND tcl.peso_kg        >= ea.peso_min_kg
         ");
         $stmt->execute(['uid' => $userId]);
         return $stmt->rowCount();
