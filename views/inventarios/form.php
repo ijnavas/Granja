@@ -64,10 +64,102 @@
 
 <script>
 let previewData = [];
+let sortCol = 'semana_tabla';
+let sortDir = 1; // 1 asc, -1 desc
+
+const COLS = [
+    { key: 'semana_tabla',    label: () => 'Sem.',        align: 'center' },
+    { key: '_lote_codigo',    label: () => 'Lote',        align: 'left'   },
+    { key: 'ubicacion',       label: () => getTipo() === 'cuadra' ? 'Nave · Cuadra' : 'Naves', align: 'left', nosort: true },
+    { key: 'estado_animal',   label: () => 'Estado',      align: 'left'   },
+    { key: 'num_animales',    label: () => 'Animales',    align: 'right'  },
+    { key: 'peso_kg',         label: () => 'Peso/ud',     align: 'right'  },
+    { key: 'peso_total_kg',   label: () => 'Peso total',  align: 'right'  },
+    { key: 'valor_total_eur', label: () => 'Valor total', align: 'right'  },
+];
+
+const estadoLabel = k => ({ lechon:'Lechón', cebo:'Cebo', reposicion:'Reposición', madres:'Madres' }[k] || k || '—');
 
 function getTipo() {
     const r = document.querySelector('input[name="tipo"]:checked');
     return r ? r.value : 'cuadra';
+}
+
+function sortData(data) {
+    return [...data].sort((a, b) => {
+        let va = a[sortCol], vb = b[sortCol];
+        if (va === null || va === undefined) va = sortDir > 0 ? Infinity : -Infinity;
+        if (vb === null || vb === undefined) vb = sortDir > 0 ? Infinity : -Infinity;
+        if (typeof va === 'string') return sortDir * va.localeCompare(vb);
+        return sortDir * (parseFloat(va) - parseFloat(vb));
+    });
+}
+
+function renderTable() {
+    const esCuadra = getTipo() === 'cuadra';
+    const sorted   = sortData(previewData);
+
+    let totalAnim = 0, totalValor = 0;
+    previewData.forEach(l => {
+        totalAnim  += l.num_animales;
+        totalValor += parseFloat(l.valor_total_eur) || 0;
+    });
+
+    const thStyle = (col) => {
+        const active  = sortCol === col.key;
+        const cursor  = col.nosort ? 'default' : 'pointer';
+        const color   = active ? '#111827' : '#6b7280';
+        const align   = col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left';
+        const arrow   = !col.nosort ? (active ? (sortDir > 0 ? ' ↑' : ' ↓') : ' ↕') : '';
+        return `<th onclick="${col.nosort ? '' : `setSort('${col.key}')`}"
+            style="padding:.5rem .75rem;text-align:${align};font-weight:600;cursor:${cursor};color:${color};user-select:none;white-space:nowrap">
+            ${col.label()}${arrow}</th>`;
+    };
+
+    let html = '<div class="list-card" style="font-size:.82rem">';
+    html += `<div style="padding:.75rem 1rem;background:#f0fdf4;border-bottom:1px solid #bbf7d0;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700;color:#166534">${previewData.length} línea${previewData.length !== 1 ? 's' : ''} · ${totalAnim.toLocaleString('es-ES')} animales</span>
+        <span style="font-weight:700;color:#166534">${totalValor > 0 ? totalValor.toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €' : '—'}</span>
+    </div>`;
+
+    html += '<table style="width:100%;border-collapse:collapse">';
+    html += `<thead><tr style="background:#f9fafb;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">`;
+    COLS.forEach(c => { html += thStyle(c); });
+    html += `</tr></thead><tbody>`;
+
+    sorted.forEach((l, i) => {
+        const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
+        const ubicacion = esCuadra
+            ? ([l._nave_nombre, l._cuadra_nombre].filter(Boolean).join(' · ') || l._granja_nombre || '—')
+            : (l._nave_nombre || l._granja_nombre || '—');
+        const pesoUd    = l.peso_kg         ? parseFloat(l.peso_kg).toFixed(3) + ' kg'         : '—';
+        const pesoTotal = l.peso_total_kg   ? parseFloat(l.peso_total_kg).toFixed(1) + ' kg'   : '—';
+        const valor     = l.valor_total_eur ? parseFloat(l.valor_total_eur).toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €' : '—';
+
+        html += `<tr style="background:${bg};border-bottom:1px solid #f3f4f6">
+            <td style="padding:.45rem .75rem;text-align:center;color:#9ca3af">${l.semana_tabla !== null ? 'S' + l.semana_tabla : '—'}</td>
+            <td style="padding:.45rem .75rem;font-family:monospace;font-weight:600;color:#1d4ed8">${l._lote_codigo}</td>
+            <td style="padding:.45rem .75rem;color:#6b7280">${ubicacion}</td>
+            <td style="padding:.45rem .75rem;color:#374151">${estadoLabel(l.estado_animal)}</td>
+            <td style="padding:.45rem .75rem;text-align:right;font-weight:600">${l.num_animales.toLocaleString('es-ES')}</td>
+            <td style="padding:.45rem .75rem;text-align:right">${pesoUd}</td>
+            <td style="padding:.45rem .75rem;text-align:right">${pesoTotal}</td>
+            <td style="padding:.45rem .75rem;text-align:right;font-weight:600;color:#166534">${valor}</td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    document.getElementById('previewPanel').innerHTML = html;
+}
+
+function setSort(col) {
+    if (sortCol === col) {
+        sortDir *= -1;
+    } else {
+        sortCol = col;
+        sortDir = 1;
+    }
+    renderTable();
 }
 
 async function cargarPreview() {
@@ -75,8 +167,8 @@ async function cargarPreview() {
     const tipo  = getTipo();
     if (!fecha) return;
 
-    const panel  = document.getElementById('previewPanel');
-    const btnG   = document.getElementById('btnGuardar');
+    const panel = document.getElementById('previewPanel');
+    const btnG  = document.getElementById('btnGuardar');
     panel.innerHTML = '<div style="color:#9ca3af;font-size:.875rem">Cargando...</div>';
     btnG.disabled   = true;
 
@@ -88,64 +180,10 @@ async function cargarPreview() {
         return;
     }
 
-    // Totales
-    let totalAnim = 0, totalValor = 0;
-    previewData.forEach(l => {
-        totalAnim  += l.num_animales;
-        totalValor += parseFloat(l.valor_total_eur) || 0;
-    });
-
-    // Cabeceras según tipo
-    const esCuadra = tipo === 'cuadra';
-
-    let html = '<div class="list-card" style="font-size:.82rem">';
-    html += `<div style="padding:.75rem 1rem;background:#f0fdf4;border-bottom:1px solid #bbf7d0;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:700;color:#166534">${previewData.length} línea${previewData.length !== 1 ? 's' : ''} · ${totalAnim.toLocaleString('es-ES')} animales</span>
-        <span style="font-weight:700;color:#166534">${totalValor > 0 ? totalValor.toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €' : '—'}</span>
-    </div>`;
-
-    html += '<table style="width:100%;border-collapse:collapse">';
-    html += `<thead><tr style="background:#f9fafb;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;color:#6b7280">
-        <th style="padding:.5rem .75rem;text-align:left;font-weight:600">Lote</th>
-        <th style="padding:.5rem .75rem;text-align:left;font-weight:600">${esCuadra ? 'Nave · Cuadra' : 'Naves'}</th>
-        <th style="padding:.5rem .75rem;text-align:left;font-weight:600">Estado</th>
-        <th style="padding:.5rem .75rem;text-align:center;font-weight:600">Sem.</th>
-        <th style="padding:.5rem .75rem;text-align:right;font-weight:600">Animales</th>
-        <th style="padding:.5rem .75rem;text-align:right;font-weight:600">Peso/ud</th>
-        <th style="padding:.5rem .75rem;text-align:right;font-weight:600">Peso total</th>
-        <th style="padding:.5rem .75rem;text-align:right;font-weight:600">Valor total</th>
-    </tr></thead><tbody>`;
-
-    previewData.forEach((l, i) => {
-        const bg = i % 2 === 0 ? '#fff' : '#f9fafb';
-        let ubicacion;
-        if (esCuadra) {
-            ubicacion = [l._nave_nombre, l._cuadra_nombre].filter(Boolean).join(' · ') || l._granja_nombre || '—';
-        } else {
-            ubicacion = l._nave_nombre || l._granja_nombre || '—';
-        }
-        const estadoLabel = {
-            'lechon': 'Lechón', 'cebo': 'Cebo', 'reposicion': 'Reposición', 'madres': 'Madres'
-        }[l.estado_animal] || (l.estado_animal || '—');
-        const pesoUd    = l.peso_kg         ? parseFloat(l.peso_kg).toFixed(3) + ' kg'         : '—';
-        const pesoTotal = l.peso_total_kg   ? parseFloat(l.peso_total_kg).toFixed(1) + ' kg'   : '—';
-        const valor     = l.valor_total_eur ? parseFloat(l.valor_total_eur).toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €' : '—';
-
-        html += `<tr style="background:${bg};border-bottom:1px solid #f3f4f6">
-            <td style="padding:.45rem .75rem;font-family:monospace;font-weight:600;color:#1d4ed8">${l._lote_codigo}</td>
-            <td style="padding:.45rem .75rem;color:#6b7280">${ubicacion}</td>
-            <td style="padding:.45rem .75rem;color:#374151">${estadoLabel}</td>
-            <td style="padding:.45rem .75rem;text-align:center;color:#9ca3af">${l.semana_tabla !== null ? 'S' + l.semana_tabla : '—'}</td>
-            <td style="padding:.45rem .75rem;text-align:right;font-weight:600">${l.num_animales.toLocaleString('es-ES')}</td>
-            <td style="padding:.45rem .75rem;text-align:right">${pesoUd}</td>
-            <td style="padding:.45rem .75rem;text-align:right">${pesoTotal}</td>
-            <td style="padding:.45rem .75rem;text-align:right;font-weight:600;color:#166534">${valor}</td>
-        </tr>`;
-    });
-
-    html += '</tbody></table></div>';
-    panel.innerHTML = html;
-    btnG.disabled   = false;
+    sortCol = 'semana_tabla';
+    sortDir = 1;
+    renderTable();
+    btnG.disabled = false;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
