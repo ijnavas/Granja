@@ -186,10 +186,22 @@ class Silo
 
         $totalDiarioKg = 0.0;
         foreach ($lotes as &$l) {
-            $consumoSemanalG = max(0,
-                (float)($l['consumo_acumulado_actual'] ?? 0) - (float)($l['consumo_acumulado_anterior'] ?? 0)
-            );
-            $consumoDiarioKg = ($consumoSemanalG / 7 / 1000) * (int)$l['num_animales'];
+            // consumo_acumulado_g es el consumo diario por animal en esa semana (en gramos)
+            // Si hay semana anterior, usamos la diferencia semanal / 7; si no, usamos el acumulado actual / semana
+            $consumoActualG  = (float)($l['consumo_acumulado_actual']  ?? 0);
+            $consumoAnteriorG = (float)($l['consumo_acumulado_anterior'] ?? 0);
+            $semana          = max(1, (int)($l['semana_actual'] ?? 1));
+
+            if ($consumoAnteriorG > 0) {
+                // Diferencia entre semanas = consumo de esa semana (g/animal) → dividir por 7 → g/animal/día
+                $consumoDiarioAnimalG = ($consumoActualG - $consumoAnteriorG) / 7;
+            } else {
+                // Primera semana: consumo acumulado / semana / 7
+                $consumoDiarioAnimalG = $consumoActualG / $semana / 7;
+            }
+
+            // Multiplicar por animales del lote y convertir a kg
+            $consumoDiarioKg = max(0, $consumoDiarioAnimalG / 1000) * (int)$l['num_animales'];
             $l['consumo_diario_kg'] = round($consumoDiarioKg, 2);
             $totalDiarioKg += $consumoDiarioKg;
         }
