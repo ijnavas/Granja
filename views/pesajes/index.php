@@ -10,21 +10,21 @@
     <div class="alert-flash alert-error"><?= e($error) ?></div>
 <?php endif; ?>
 
-<div class="list-card" style="overflow-x:auto">
+<div class="list-card">
 <?php if (empty($pesajes)): ?>
     <div class="empty-state">No hay pesajes registrados. <a href="<?= base_url('pesajes/crear') ?>">Registra el primero</a>.</div>
 <?php else: ?>
-    <table class="list-table" style="white-space:nowrap">
+    <table class="list-table">
         <thead>
-            <tr>
+            <tr style="font-size:.72rem">
                 <th>Fecha</th>
                 <th>Lote · Nave</th>
                 <th style="text-align:center">Sem.</th>
                 <th style="text-align:right">Animales</th>
-                <th style="text-align:right">Peso real (pesaje)</th>
-                <th style="text-align:right">Peso tabla (ese día)</th>
-                <th style="text-align:right">Peso real proyectado hoy</th>
-                <th style="text-align:right">Peso tabla hoy</th>
+                <th style="text-align:right">Peso real<br>(pesaje)</th>
+                <th style="text-align:right">Peso tabla<br>(ese día)</th>
+                <th style="text-align:right">Peso real<br>proyectado hoy</th>
+                <th style="text-align:right">Peso tabla<br>hoy</th>
                 <th style="text-align:right">IC real</th>
                 <th></th>
             </tr>
@@ -49,7 +49,7 @@
                     <?= $p['semana_pesaje'] ? 'S' . $p['semana_pesaje'] : '—' ?>
                 </td>
                 <td style="text-align:right"><?= number_format($p['num_animales_pesados']) ?></td>
-                <td style="text-align:right;font-weight:600;white-space:nowrap">
+                <td style="text-align:right;font-weight:600">
                     <?= number_format((float)$p['peso_medio_kg'], 3) ?> kg
                     <?php if ($desv !== null): ?>
                         <span style="font-size:.72rem;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>">
@@ -57,13 +57,13 @@
                         </span>
                     <?php endif; ?>
                 </td>
-                <td style="text-align:right;color:#6b7280;white-space:nowrap">
+                <td style="text-align:right;color:#6b7280">
                     <?= $p['peso_tabla_pesaje'] ? number_format((float)$p['peso_tabla_pesaje'], 3) . ' kg' : '—' ?>
                 </td>
-                <td style="text-align:right;font-weight:600;color:#1d4ed8;white-space:nowrap">
+                <td style="text-align:right;font-weight:600;color:#1d4ed8">
                     <?= $p['peso_proyectado_hoy'] ? number_format((float)$p['peso_proyectado_hoy'], 3) . ' kg' : '—' ?>
                 </td>
-                <td style="text-align:right;color:#6b7280;white-space:nowrap">
+                <td style="text-align:right;color:#6b7280">
                     <?= $p['peso_tabla_hoy'] ? number_format((float)$p['peso_tabla_hoy'], 3) . ' kg' : '—' ?>
                 </td>
                 <td style="text-align:right;color:#6b7280">
