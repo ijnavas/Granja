@@ -34,6 +34,7 @@ use App\Controllers\LoteController;
 use App\Controllers\CuadraController;
 
 use App\Controllers\MovimientoController;
+use App\Controllers\InventarioController;
 use App\Controllers\ConfigController;
 
 Session::start();
@@ -116,6 +117,15 @@ $router->get('/movimientos/lotes-cuadra',           [MovimientoController::class
 $router->get('/movimientos/{id}/editar',            [MovimientoController::class, 'edit']);
 $router->post('/movimientos/{id}/actualizar',       [MovimientoController::class, 'update']);
 $router->post('/movimientos/{id}/eliminar',         [MovimientoController::class, 'delete']);
+
+// Inventarios
+$router->get('/inventarios',                        [InventarioController::class, 'index']);
+$router->get('/inventarios/crear',                  [InventarioController::class, 'create']);
+$router->post('/inventarios',                       [InventarioController::class, 'store']);
+$router->get('/inventarios/preview',                [InventarioController::class, 'preview']);
+$router->get('/inventarios/{id}',                   [InventarioController::class, 'show']);
+$router->post('/inventarios/{id}/eliminar',         [InventarioController::class, 'delete']);
+
 $router->get('/configuracion',                              [ConfigController::class, 'index']);
 $router->get('/configuracion/razas',                        [ConfigController::class, 'razas']);
 $router->post('/configuracion/razas',                       [ConfigController::class, 'crearRaza']);
