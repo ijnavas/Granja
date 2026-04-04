@@ -122,7 +122,7 @@ class Inventario
                 ON tcl.tabla_id = tc.id
                 AND tcl.semana  = CEIL(DATEDIFF(:fecha2, l.fecha_nacimiento) / 7)
             WHERE g.usuario_id  = :uid
-              AND l.fecha_entrada <= :fecha3
+              AND l.fecha_nacimiento <= :fecha3
               AND l.fecha_nacimiento IS NOT NULL
             ORDER BY g.nombre, n.nombre, c.nombre, l.codigo
         ");
