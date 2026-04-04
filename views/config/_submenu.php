@@ -16,7 +16,11 @@ $seccion = $seccionConfig ?? 'razas';
     </a>
     <a href="<?= base_url('configuracion/reset') ?>"
        class="btn <?= $seccion === 'reset' ? 'btn-danger' : 'btn-secondary' ?>"
-       style="margin-left:auto;<?= $seccion === 'reset' ? '' : 'color:#dc2626;border-color:#fca5a5' ?>">
+       style="<?= $seccion === 'reset' ? '' : 'color:#dc2626;border-color:#fca5a5' ?>">
         ⚠ Resetear datos
+    </a>
+    <a href="<?= base_url('perfil') ?>"
+       class="btn btn-secondary" style="margin-left:auto">
+        Mi perfil
     </a>
 </div>

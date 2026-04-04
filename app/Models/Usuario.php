@@ -34,11 +34,44 @@ class Usuario
     public function findById(int $id): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT id, nombre, email, activo, created_at FROM usuarios WHERE id = :id LIMIT 1'
+            'SELECT id, nombre, apellidos, email, movil, activo, created_at FROM usuarios WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
         return $row ?: null;
+    }
+
+    public function updatePerfil(int $id, string $nombre, string $apellidos, string $email, string $movil): bool
+    {
+        $stmt = $this->db->prepare(
+            'UPDATE usuarios SET nombre = :nombre, apellidos = :apellidos, email = :email, movil = :movil WHERE id = :id'
+        );
+        return $stmt->execute([
+            'nombre'    => trim($nombre),
+            'apellidos' => trim($apellidos),
+            'email'     => strtolower(trim($email)),
+            'movil'     => trim($movil),
+            'id'        => $id,
+        ]);
+    }
+
+    public function emailExistsForOther(string $email, int $exceptId): bool
+    {
+        $stmt = $this->db->prepare('SELECT COUNT(*) FROM usuarios WHERE email = :email AND id != :id');
+        $stmt->execute(['email' => strtolower(trim($email)), 'id' => $exceptId]);
+        return (int) $stmt->fetchColumn() > 0;
+    }
+
+    public function changePassword(int $id, string $currentPassword, string $newPassword): bool|string
+    {
+        $stmt = $this->db->prepare('SELECT password_hash FROM usuarios WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+        $hash = $stmt->fetchColumn();
+        if (!$hash || !password_verify($currentPassword, $hash)) {
+            return 'La contraseña actual no es correcta.';
+        }
+        $this->resetPasswordById($id, $newPassword);
+        return true;
     }
 
     /**
