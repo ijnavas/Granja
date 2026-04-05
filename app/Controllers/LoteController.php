@@ -328,8 +328,23 @@ class LoteController extends BaseController
     public function delete(string $id): void
     {
         auth_required();
-        $this->model->delete((int)$id, Session::get('usuario_id'));
+        $this->model->cerrar((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Lote cerrado.');
         $this->redirect('lotes');
+    }
+
+    public function historico(): void
+    {
+        auth_required();
+        $lotes = $this->model->allCerradosByUsuario(Session::get('usuario_id'));
+        $this->view('lotes/historico', ['lotes' => $lotes, 'pageTitle' => 'Histórico de lotes']);
+    }
+
+    public function historicoShow(string $id): void
+    {
+        auth_required();
+        $lote = $this->model->historicoDetalle((int)$id, Session::get('usuario_id'));
+        if (!$lote) $this->redirect('lotes/historico');
+        $this->view('lotes/historico_show', ['lote' => $lote, 'pageTitle' => 'Histórico · ' . e($lote['codigo'])]);
     }
 }

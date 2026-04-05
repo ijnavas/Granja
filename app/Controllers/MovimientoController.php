@@ -495,7 +495,7 @@ class MovimientoController extends BaseController
                 $restantes = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
                 $restantes->execute(['id' => $data['lote_origen_id']]);
                 if ((int)$restantes->fetchColumn() <= 0) {
-                    $db->prepare("UPDATE lotes SET estado='cerrado' WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE lotes SET estado='cerrado', fecha_cierre=CURDATE() WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
                 }
                 break;
 
@@ -520,7 +520,7 @@ class MovimientoController extends BaseController
                 $restantesBaja = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
                 $restantesBaja->execute(['id' => $data['lote_origen_id']]);
                 if ((int)$restantesBaja->fetchColumn() <= 0) {
-                    $db->prepare("UPDATE lotes SET estado='cerrado' WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE lotes SET estado='cerrado', fecha_cierre=CURDATE() WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
                 }
                 break;
         }
