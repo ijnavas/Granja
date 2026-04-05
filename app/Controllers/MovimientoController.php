@@ -105,8 +105,18 @@ class MovimientoController extends BaseController
             $this->redirect('movimientos/crear?tipo=' . $tipo);
         }
 
+        $cuadrasOrigenGuardar = $data['cuadras_origen'];
         unset($data['cuadras_origen']);
-        $this->model->create($data, $uid);
+        $movId = $this->model->create($data, $uid);
+
+        // Guardar cuadras de origen para poder revertir después
+        if (!empty($cuadrasOrigenGuardar)) {
+            $db = \App\Core\Database::getInstance();
+            $stmtMC = $db->prepare("INSERT INTO movimiento_cuadras (movimiento_id, cuadra_id, num_animales) VALUES (:mid, :cid, :n)");
+            foreach ($cuadrasOrigenGuardar as $co) {
+                $stmtMC->execute(['mid' => $movId, 'cid' => $co['cuadra_id'], 'n' => $co['num']]);
+            }
+        }
         Session::flash('success', 'Movimiento registrado correctamente.');
         $this->redirect('movimientos');
     }
@@ -186,6 +196,9 @@ class MovimientoController extends BaseController
                 // Si no se puede revertir, eliminar igualmente pero avisar
             }
         }
+        \App\Core\Database::getInstance()
+            ->prepare("DELETE FROM movimiento_cuadras WHERE movimiento_id = :id")
+            ->execute(['id' => (int)$id]);
         $this->model->delete((int)$id, $uid);
         Session::flash('success', 'Movimiento eliminado y efecto revertido.');
         $this->redirect('movimientos');
@@ -309,10 +322,30 @@ class MovimientoController extends BaseController
 
             case 'venta':
             case 'baja':
-                // Devolver animales al lote y restaurar cuadra si aplica
+                // Devolver animales al lote
                 $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
                    ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
-                if ($mov['cuadra_origen_id']) {
+
+                // Restaurar cuadras: primero buscar en movimiento_cuadras (multi-cuadra)
+                $stmtMC = $db->prepare("SELECT cuadra_id, num_animales FROM movimiento_cuadras WHERE movimiento_id = :mid");
+                $stmtMC->execute(['mid' => $mov['id']]);
+                $cuadrasOrigen = $stmtMC->fetchAll();
+
+                if (!empty($cuadrasOrigen)) {
+                    foreach ($cuadrasOrigen as $co) {
+                        $stmtCL = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1");
+                        $stmtCL->execute(['cid' => $co['cuadra_id'], 'lid' => $mov['lote_origen_id']]);
+                        $clId = $stmtCL->fetchColumn();
+                        if ($clId) {
+                            $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE id = :id")
+                               ->execute(['n' => $co['num_animales'], 'id' => $clId]);
+                        } else {
+                            $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid, :lid, :n, CURDATE())")
+                               ->execute(['cid' => $co['cuadra_id'], 'lid' => $mov['lote_origen_id'], 'n' => $co['num_animales']]);
+                        }
+                    }
+                } elseif ($mov['cuadra_origen_id']) {
+                    // Fallback: cuadra única guardada en el movimiento
                     $stmtCL = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1");
                     $stmtCL->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
                     $clId = $stmtCL->fetchColumn();
