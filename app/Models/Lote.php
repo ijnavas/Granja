@@ -232,10 +232,10 @@ class Lote
                    r.nombre   AS raza_nombre,
                    -- Resumen ventas
                    SUM(CASE WHEN m.tipo = 'venta' THEN m.num_animales ELSE 0 END) AS total_vendidos,
-                   SUM(CASE WHEN m.tipo = 'venta' THEN m.num_animales * COALESCE(m.precio_eur, 0) ELSE 0 END) AS ingreso_total,
-                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.num_animales * m.precio_eur ELSE 0 END)
+                   SUM(CASE WHEN m.tipo = 'venta' THEN COALESCE(m.precio_eur, 0) ELSE 0 END) AS ingreso_total,
+                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.precio_eur ELSE 0 END)
                        / NULLIF(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.num_animales ELSE 0 END), 0), 2) AS precio_medio_eur,
-                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.num_animales * m.peso_canal_kg ELSE 0 END)
+                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.peso_canal_kg ELSE 0 END)
                        / NULLIF(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.num_animales ELSE 0 END), 0), 2) AS peso_medio_venta_kg,
                    -- Resumen bajas
                    SUM(CASE WHEN m.tipo = 'baja' THEN m.num_animales ELSE 0 END) AS total_bajas
@@ -265,10 +265,10 @@ class Lote
                    COALESCE(g.nombre, g2.nombre) AS granja_nombre,
                    r.nombre   AS raza_nombre,
                    SUM(CASE WHEN m.tipo = 'venta' THEN m.num_animales ELSE 0 END) AS total_vendidos,
-                   SUM(CASE WHEN m.tipo = 'venta' THEN m.num_animales * COALESCE(m.precio_eur, 0) ELSE 0 END) AS ingreso_total,
-                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.num_animales * m.precio_eur ELSE 0 END)
+                   SUM(CASE WHEN m.tipo = 'venta' THEN COALESCE(m.precio_eur, 0) ELSE 0 END) AS ingreso_total,
+                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.precio_eur ELSE 0 END)
                        / NULLIF(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.num_animales ELSE 0 END), 0), 2) AS precio_medio_eur,
-                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.num_animales * m.peso_canal_kg ELSE 0 END)
+                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.peso_canal_kg ELSE 0 END)
                        / NULLIF(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.num_animales ELSE 0 END), 0), 2) AS peso_medio_venta_kg,
                    SUM(CASE WHEN m.tipo = 'baja'  THEN m.num_animales ELSE 0 END) AS total_bajas
             FROM lotes l
