@@ -47,7 +47,7 @@
             <span class="nav-tooltip">Cuadras</span>
         </a>
 
-        <a href="<?= base_url('silos') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/silos') ? 'active' : '' ?>">
+        <a href="<?= base_url('silos') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/silos') && !str_contains($_SERVER['REQUEST_URI'], '/almacen') ? 'active' : '' ?>">
             <span class="nav-icon"><svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="20" rx="2"/><path d="M8 6H4v14h4M16 6h4v14h-4"/></svg></span>
             <span class="nav-label">Silos</span>
             <span class="nav-tooltip">Silos</span>
@@ -77,6 +77,12 @@
             <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M12 2a4 4 0 0 1 4 4H8a4 4 0 0 1 4-4z"/><path d="M4 6h16l-2 14H6L4 6z"/></svg></span>
             <span class="nav-label">Pesajes</span>
             <span class="nav-tooltip">Pesajes</span>
+        </a>
+
+        <a href="<?= base_url('almacen') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/almacen') ? 'active' : '' ?>">
+            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><line x1="9" y1="22" x2="9" y2="12"/><line x1="15" y1="22" x2="15" y2="12"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span>
+            <span class="nav-label">Almacén</span>
+            <span class="nav-tooltip">Almacén</span>
         </a>
 
         <a href="<?= base_url('informes') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/informes') ? 'active' : '' ?>">
