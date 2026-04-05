@@ -207,10 +207,13 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
             </select>
         </div>
 
-        <input type="hidden" id="cuadraOrigenVentaHidden" name="cuadra_origen_id" value="">
         <div id="cuadrasVentaWrap" style="display:none;margin-bottom:1rem">
-            <div class="form-section-title">Selecciona la cuadra de origen</div>
-            <div id="cuadrasVentaCards" style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.5rem"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+                <div class="form-section-title" style="margin:0">Cuadras de origen</div>
+                <button type="button" onclick="seleccionarLoteEntero('venta')" class="btn btn-secondary btn-sm">Lote entero</button>
+            </div>
+            <div id="cuadrasVentaCards" style="display:flex;flex-wrap:wrap;gap:.6rem"></div>
+            <div id="cuadrasVentaInputs"></div>
         </div>
 
         <div class="form-section-title" style="margin-top:.5rem">Datos de venta</div>
@@ -268,10 +271,13 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
                     <?php endforeach; ?>
                 </select>
             </div>
-            <input type="hidden" id="cuadraOrigenBajaHidden" name="cuadra_origen_id" value="">
             <div id="cuadrasBajaWrap" style="display:none;margin-bottom:1rem">
-                <div class="form-section-title">Selecciona la cuadra de origen</div>
-                <div id="cuadrasBajaCards" style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.5rem"></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+                    <div class="form-section-title" style="margin:0">Cuadra de origen</div>
+                    <button type="button" onclick="seleccionarLoteEntero('baja')" class="btn btn-secondary btn-sm">Lote entero</button>
+                </div>
+                <div id="cuadrasBajaCards" style="display:flex;flex-wrap:wrap;gap:.6rem"></div>
+                <div id="cuadrasBajaInputs"></div>
             </div>
             <div class="form-group">
                 <label>Motivo *</label>
@@ -351,61 +357,104 @@ async function cargarCuadras(naveId, selectId, loteSelectId, valorSeleccionado =
     }
 }
 
-async function cargarCuadrasDelLote(loteId, tipo) {
-    const wrap        = document.getElementById(tipo === 'venta' ? 'cuadrasVentaWrap'    : 'cuadrasBajaWrap');
-    const cards       = document.getElementById(tipo === 'venta' ? 'cuadrasVentaCards'   : 'cuadrasBajaCards');
-    const hiddenInput = document.getElementById(tipo === 'venta' ? 'cuadraOrigenVentaHidden' : 'cuadraOrigenBajaHidden');
+// Datos de cuadras cargados por lote (para referenciar al seleccionar lote entero)
+let cuadrasCache = {};
 
-    hiddenInput.value = '';
-    if (!loteId) { wrap.style.display = 'none'; cards.innerHTML = ''; return; }
+async function cargarCuadrasDelLote(loteId, tipo) {
+    const wrap   = document.getElementById(tipo === 'venta' ? 'cuadrasVentaWrap'   : 'cuadrasBajaWrap');
+    const cards  = document.getElementById(tipo === 'venta' ? 'cuadrasVentaCards'  : 'cuadrasBajaCards');
+    const inputs = document.getElementById(tipo === 'venta' ? 'cuadrasVentaInputs' : 'cuadrasBajaInputs');
+
+    cards.innerHTML  = '';
+    inputs.innerHTML = '';
+    cuadrasCache[tipo] = [];
+
+    if (!loteId) { wrap.style.display = 'none'; return; }
 
     const res  = await fetch(`<?= base_url('movimientos/cuadras-lote') ?>?lote_id=${loteId}`);
     const data = await res.json();
 
-    cards.innerHTML = '';
-
     if (data.length === 0) {
         wrap.style.display = 'none';
+        const numField = document.querySelector('input[name="num_animales"]');
+        if (numField) { numField.readOnly = false; numField.style.background = ''; }
         return;
     }
 
-    // Si solo hay una cuadra, seleccionarla automáticamente sin mostrar selector
-    if (data.length === 1) {
-        hiddenInput.value = data[0].id;
-        wrap.style.display = 'none';
-
-        // Mostrar badge informativo
-        cards.innerHTML = `<div style="font-size:.82rem;color:#6b7280;padding:.3rem 0">
-            Cuadra: <strong>${data[0].nombre}</strong> · ${data[0].nave_nombre} (${data[0].num_animales} animales) — seleccionada automáticamente
-        </div>`;
-        wrap.style.display = 'block';
-        return;
-    }
+    cuadrasCache[tipo] = data;
 
     data.forEach(c => {
         const card = document.createElement('div');
-        card.className = 'cuadra-card';
+        card.className  = 'cuadra-card-multi';
         card.dataset.id = c.id;
-        card.innerHTML = `
-            <div style="font-weight:700;font-size:.9rem">${c.nombre}</div>
-            <div style="font-size:.75rem;color:#6b7280">${c.nave_nombre}</div>
-            <div style="font-size:1.1rem;font-weight:700;color:#1d4ed8;margin-top:.25rem">${c.num_animales} animales</div>`;
-        card.style.cssText = 'cursor:pointer;padding:.75rem 1rem;border:2px solid #e5e7eb;border-radius:.5rem;min-width:120px;text-align:center;transition:all .15s;background:#fff';
-        card.addEventListener('click', () => {
-            cards.querySelectorAll('.cuadra-card').forEach(el => {
-                el.style.borderColor = '#e5e7eb';
-                el.style.background  = '#fff';
-            });
-            card.style.borderColor = '#2563eb';
-            card.style.background  = '#eff6ff';
-            hiddenInput.value = c.id;
-        });
-        card.addEventListener('mouseenter', () => { if (hiddenInput.value != c.id) card.style.background = '#f8fafc'; });
-        card.addEventListener('mouseleave', () => { if (hiddenInput.value != c.id) card.style.background = '#fff'; });
+        card.dataset.max = c.num_animales;
+        card.innerHTML  = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
+                <div>
+                    <div style="font-weight:700;font-size:.88rem">${c.nombre}</div>
+                    <div style="font-size:.72rem;color:#6b7280">${c.nave_nombre}</div>
+                    <div style="font-size:.8rem;color:#374151;margin-top:.15rem"><strong>${c.num_animales}</strong> animales</div>
+                </div>
+                <div style="text-align:right;min-width:70px">
+                    <input type="number" class="cuadra-qty-input" min="0" max="${c.num_animales}"
+                           value="0" placeholder="0"
+                           style="width:70px;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.85rem;text-align:right"
+                           oninput="onQtyChange(this,'${tipo}')">
+                    <div style="font-size:.68rem;color:#9ca3af;margin-top:.15rem">máx ${c.num_animales}</div>
+                </div>
+            </div>`;
+        card.style.cssText = 'padding:.65rem .85rem;border:2px solid #e5e7eb;border-radius:.5rem;min-width:200px;background:#fff;transition:border-color .15s';
         cards.appendChild(card);
     });
 
     wrap.style.display = 'block';
+    actualizarTotalAnimales(tipo);
+}
+
+function onQtyChange(input, tipo) {
+    const card = input.closest('.cuadra-card-multi');
+    const max  = parseInt(card.dataset.max);
+    let val    = parseInt(input.value) || 0;
+    if (val < 0) val = 0;
+    if (val > max) { val = max; input.value = max; }
+    card.style.borderColor = val > 0 ? '#2563eb' : '#e5e7eb';
+    card.style.background  = val > 0 ? '#eff6ff' : '#fff';
+    actualizarTotalAnimales(tipo);
+}
+
+function actualizarTotalAnimales(tipo) {
+    const cards  = document.getElementById(tipo === 'venta' ? 'cuadrasVentaCards'  : 'cuadrasBajaCards');
+    const inputs = document.getElementById(tipo === 'venta' ? 'cuadrasVentaInputs' : 'cuadrasBajaInputs');
+    const numField = document.querySelector('input[name="num_animales"]');
+
+    let total = 0;
+    const hidden = [];
+    cards.querySelectorAll('.cuadra-card-multi').forEach(card => {
+        const qty = parseInt(card.querySelector('.cuadra-qty-input').value) || 0;
+        if (qty > 0) {
+            total += qty;
+            hidden.push({ id: card.dataset.id, num: qty });
+        }
+    });
+
+    if (numField) { numField.value = total; numField.readOnly = true; numField.style.background = '#f3f4f6'; }
+
+    // Generar hidden inputs para el POST
+    inputs.innerHTML = hidden.map((h, i) =>
+        `<input type="hidden" name="cuadras_origen_ids[]" value="${h.id}">
+         <input type="hidden" name="cuadras_origen_nums[]" value="${h.num}">`
+    ).join('');
+}
+
+function seleccionarLoteEntero(tipo) {
+    const cards = document.getElementById(tipo === 'venta' ? 'cuadrasVentaCards' : 'cuadrasBajaCards');
+    cards.querySelectorAll('.cuadra-card-multi').forEach(card => {
+        const input = card.querySelector('.cuadra-qty-input');
+        input.value = card.dataset.max;
+        card.style.borderColor = '#2563eb';
+        card.style.background  = '#eff6ff';
+    });
+    actualizarTotalAnimales(tipo);
 }
 
 async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = null, soloRE = false) {
