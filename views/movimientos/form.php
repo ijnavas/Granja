@@ -199,7 +199,7 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
             <label>Lote *</label>
             <select id="loteOrigenVenta" name="lote_origen_id" required onchange="cargarCuadrasDelLote(this.value, 'venta')">
                 <option value="">— Selecciona lote —</option>
-                <?php foreach ($lotes as $l): ?>
+                <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
                 <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
                     <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?><?= $l['nave_nombre'] ? ' · ' . e($l['nave_nombre']) : '' ?> (<?= number_format($l['num_animales']) ?> animales)
                 </option>
@@ -264,7 +264,7 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
                 <label>Lote *</label>
                 <select id="loteOrigenBaja" name="lote_origen_id" required onchange="cargarCuadrasDelLote(this.value, 'baja')">
                     <option value="">— Selecciona lote —</option>
-                    <?php foreach ($lotes as $l): ?>
+                    <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
                     <option value="<?= $l['id'] ?>">
                         <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?><?= $l['nave_nombre'] ? ' · ' . e($l['nave_nombre']) : '' ?> (<?= number_format($l['num_animales']) ?> animales)
                     </option>
