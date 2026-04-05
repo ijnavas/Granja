@@ -43,9 +43,9 @@ $mortalidad = $lote['num_animales_entrada']
     </div>
     <?php if ($lote['peso_medio_venta_kg']): ?>
     <div class="kpi-card">
-        <div class="kpi-label">Peso medio venta</div>
+        <div class="kpi-label">Peso canal medio</div>
         <div class="kpi-value"><?= number_format((float)$lote['peso_medio_venta_kg'], 1) ?> kg</div>
-        <div class="kpi-sub">canal</div>
+        <div class="kpi-sub">por animal</div>
     </div>
     <?php endif; ?>
     <?php if ($lote['precio_medio_eur']): ?>
