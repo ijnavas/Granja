@@ -39,6 +39,7 @@ use App\Controllers\ConfigController;
 use App\Controllers\PerfilController;
 use App\Controllers\PesajeController;
 use App\Controllers\AlmacenController;
+use App\Controllers\EscaneoController;
 
 Session::start();
 
@@ -126,6 +127,11 @@ $router->post('/movimientos',                       [MovimientoController::class
 $router->get('/movimientos/cuadras',                [MovimientoController::class, 'cuadrasPorNave']);
 $router->get('/movimientos/lotes-cuadra',           [MovimientoController::class, 'lotesPorCuadra']);
 $router->get('/movimientos/cuadras-lote',           [MovimientoController::class, 'cuadrasPorLote']);
+
+// Escaneo de cuaderno con IA
+$router->get('/escaneo',                            [EscaneoController::class, 'form']);
+$router->post('/escaneo/analizar',                  [EscaneoController::class, 'analizar']);
+$router->post('/escaneo/confirmar',                 [EscaneoController::class, 'confirmar']);
 $router->get('/movimientos/{id}/editar',            [MovimientoController::class, 'edit']);
 $router->post('/movimientos/{id}/actualizar',       [MovimientoController::class, 'update']);
 $router->post('/movimientos/{id}/eliminar',         [MovimientoController::class, 'delete']);
