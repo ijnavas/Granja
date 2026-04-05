@@ -105,6 +105,7 @@ class MovimientoController extends BaseController
             $this->redirect('movimientos/crear?tipo=' . $tipo);
         }
 
+        unset($data['cuadras_origen']);
         $this->model->create($data, $uid);
         Session::flash('success', 'Movimiento registrado correctamente.');
         $this->redirect('movimientos');
