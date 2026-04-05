@@ -215,6 +215,28 @@ class MovimientoController extends BaseController
     }
 
     // ── API AJAX: lotes de una cuadra ────────────────────────────
+    public function cuadrasPorLote(): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $loteId = (int)($_GET['lote_id'] ?? 0);
+        if (!$loteId) { echo json_encode([]); return; }
+
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT c.id, c.nombre, cl.num_animales,
+                   n.nombre AS nave_nombre
+            FROM cuadra_lote cl
+            JOIN cuadras c ON c.id = cl.cuadra_id
+            JOIN naves n   ON c.nave_id = n.id
+            WHERE cl.lote_id = :lote_id
+              AND cl.activo = 1
+              AND cl.num_animales > 0
+            ORDER BY n.nombre, c.nombre
+        ");
+        $stmt->execute(['lote_id' => $loteId]);
+        echo json_encode($stmt->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
     public function lotesPorCuadra(): void
     {
         auth_required();

@@ -237,29 +237,23 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
 
         <!-- VENTA -->
         <?php elseif ($tipoActual === 'venta'): ?>
-        <div class="form-section-title">Origen</div>
-        <div class="form-grid form-grid-3">
-            <div class="form-group">
-                <label>Nave origen</label>
-                <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
-                    <option value="">— Nave —</option>
-                    <?php foreach ($naves as $n): ?>
-                        <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Cuadra origen</label>
-                <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
-                    <option value="">— Cuadra —</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Lote *</label>
-                <select id="loteOrigen" name="lote_origen_id" required>
-                    <option value="">— Lote —</option>
-                </select>
-            </div>
+        <div class="form-section-title">Lote a vender</div>
+        <div class="form-group">
+            <label>Lote *</label>
+            <select id="loteOrigenVenta" name="lote_origen_id" required onchange="cargarCuadrasDelLote(this.value, 'venta')">
+                <option value="">— Selecciona lote —</option>
+                <?php foreach ($lotes as $l): ?>
+                <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
+                    <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?><?= $l['nave_nombre'] ? ' · ' . e($l['nave_nombre']) : '' ?> (<?= number_format($l['num_animales']) ?> animales)
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+
+        <input type="hidden" id="cuadraOrigenVentaHidden" name="cuadra_origen_id" value="">
+        <div id="cuadrasVentaWrap" style="display:none;margin-bottom:1rem">
+            <div class="form-section-title">Selecciona la cuadra de origen</div>
+            <div id="cuadrasVentaCards" style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.5rem"></div>
         </div>
         <div class="form-section-title" style="margin-top:.5rem">Datos de venta</div>
         <div class="form-grid form-grid-2">
@@ -301,30 +295,23 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
             <input type="hidden" name="cuadra_origen_id" value="<?= e($movimiento['cuadra_origen_id'] ?? '') ?>">
             <input type="hidden" name="motivo_baja"      value="<?= e($movimiento['motivo_baja'] ?? '') ?>">
         <?php else: ?>
-            <!-- Creación: cascada nave → cuadra → lote -->
+            <!-- Creación: primero lote, luego cuadras visuales -->
             <div class="form-section-title">Lote afectado</div>
-            <div class="form-grid form-grid-3">
-                <div class="form-group">
-                    <label>Nave</label>
-                    <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
-                        <option value="">— Nave —</option>
-                        <?php foreach ($naves as $n): ?>
-                            <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Cuadra</label>
-                    <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
-                        <option value="">— Cuadra —</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Lote *</label>
-                    <select id="loteOrigen" name="lote_origen_id" required>
-                        <option value="">— Lote —</option>
-                    </select>
-                </div>
+            <div class="form-group">
+                <label>Lote *</label>
+                <select id="loteOrigenBaja" name="lote_origen_id" required onchange="cargarCuadrasDelLote(this.value, 'baja')">
+                    <option value="">— Selecciona lote —</option>
+                    <?php foreach ($lotes as $l): ?>
+                    <option value="<?= $l['id'] ?>">
+                        <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?><?= $l['nave_nombre'] ? ' · ' . e($l['nave_nombre']) : '' ?> (<?= number_format($l['num_animales']) ?> animales)
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <input type="hidden" id="cuadraOrigenBajaHidden" name="cuadra_origen_id" value="">
+            <div id="cuadrasBajaWrap" style="display:none;margin-bottom:1rem">
+                <div class="form-section-title">Selecciona la cuadra de origen</div>
+                <div id="cuadrasBajaCards" style="display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.5rem"></div>
             </div>
             <div class="form-group">
                 <label>Motivo *</label>
@@ -404,6 +391,63 @@ async function cargarCuadras(naveId, selectId, loteSelectId, valorSeleccionado =
     if (loteSelectId) {
         document.getElementById(loteSelectId).innerHTML = '<option value="">— Lote —</option>';
     }
+}
+
+async function cargarCuadrasDelLote(loteId, tipo) {
+    const wrap        = document.getElementById(tipo === 'venta' ? 'cuadrasVentaWrap'    : 'cuadrasBajaWrap');
+    const cards       = document.getElementById(tipo === 'venta' ? 'cuadrasVentaCards'   : 'cuadrasBajaCards');
+    const hiddenInput = document.getElementById(tipo === 'venta' ? 'cuadraOrigenVentaHidden' : 'cuadraOrigenBajaHidden');
+
+    hiddenInput.value = '';
+    if (!loteId) { wrap.style.display = 'none'; cards.innerHTML = ''; return; }
+
+    const res  = await fetch(`<?= base_url('movimientos/cuadras-lote') ?>?lote_id=${loteId}`);
+    const data = await res.json();
+
+    cards.innerHTML = '';
+
+    if (data.length === 0) {
+        wrap.style.display = 'none';
+        return;
+    }
+
+    // Si solo hay una cuadra, seleccionarla automáticamente sin mostrar selector
+    if (data.length === 1) {
+        hiddenInput.value = data[0].id;
+        wrap.style.display = 'none';
+
+        // Mostrar badge informativo
+        cards.innerHTML = `<div style="font-size:.82rem;color:#6b7280;padding:.3rem 0">
+            Cuadra: <strong>${data[0].nombre}</strong> · ${data[0].nave_nombre} (${data[0].num_animales} animales) — seleccionada automáticamente
+        </div>`;
+        wrap.style.display = 'block';
+        return;
+    }
+
+    data.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'cuadra-card';
+        card.dataset.id = c.id;
+        card.innerHTML = `
+            <div style="font-weight:700;font-size:.9rem">${c.nombre}</div>
+            <div style="font-size:.75rem;color:#6b7280">${c.nave_nombre}</div>
+            <div style="font-size:1.1rem;font-weight:700;color:#1d4ed8;margin-top:.25rem">${c.num_animales} animales</div>`;
+        card.style.cssText = 'cursor:pointer;padding:.75rem 1rem;border:2px solid #e5e7eb;border-radius:.5rem;min-width:120px;text-align:center;transition:all .15s;background:#fff';
+        card.addEventListener('click', () => {
+            cards.querySelectorAll('.cuadra-card').forEach(el => {
+                el.style.borderColor = '#e5e7eb';
+                el.style.background  = '#fff';
+            });
+            card.style.borderColor = '#2563eb';
+            card.style.background  = '#eff6ff';
+            hiddenInput.value = c.id;
+        });
+        card.addEventListener('mouseenter', () => { if (hiddenInput.value != c.id) card.style.background = '#f8fafc'; });
+        card.addEventListener('mouseleave', () => { if (hiddenInput.value != c.id) card.style.background = '#fff'; });
+        cards.appendChild(card);
+    });
+
+    wrap.style.display = 'block';
 }
 
 async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = null, soloRE = false) {

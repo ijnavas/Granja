@@ -125,6 +125,7 @@ $router->get('/movimientos/crear',                  [MovimientoController::class
 $router->post('/movimientos',                       [MovimientoController::class, 'store']);
 $router->get('/movimientos/cuadras',                [MovimientoController::class, 'cuadrasPorNave']);
 $router->get('/movimientos/lotes-cuadra',           [MovimientoController::class, 'lotesPorCuadra']);
+$router->get('/movimientos/cuadras-lote',           [MovimientoController::class, 'cuadrasPorLote']);
 $router->get('/movimientos/{id}/editar',            [MovimientoController::class, 'edit']);
 $router->post('/movimientos/{id}/actualizar',       [MovimientoController::class, 'update']);
 $router->post('/movimientos/{id}/eliminar',         [MovimientoController::class, 'delete']);
