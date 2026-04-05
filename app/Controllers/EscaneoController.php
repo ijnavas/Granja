@@ -1,0 +1,161 @@
+<?php
+declare(strict_types=1);
+
+namespace App\Controllers;
+
+use App\Helpers\ClaudeVision;
+use App\Models\Lote;
+use App\Core\Session;
+
+class EscaneoController extends BaseController
+{
+    public function form(): void
+    {
+        auth_required();
+        $this->view('escaneo/form', [
+            'pageTitle' => 'Escanear cuaderno',
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function analizar(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('escaneo');
+        }
+
+        $file = $_FILES['foto'] ?? null;
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            Session::flash('error', 'No se ha subido ninguna imagen.');
+            $this->redirect('escaneo');
+        }
+
+        // Validar tipo
+        $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+        $mime = mime_content_type($file['tmp_name']);
+        if (!in_array($mime, $allowedMime)) {
+            Session::flash('error', 'Solo se permiten imágenes JPG, PNG o WEBP.');
+            $this->redirect('escaneo');
+        }
+
+        // Guardar imagen
+        $uploadDir = ROOT_PATH . '/uploads/escaneos/';
+        if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+
+        $ext      = pathinfo($file['name'], PATHINFO_EXTENSION) ?: 'jpg';
+        $filename = date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+        $destPath = $uploadDir . $filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+            Session::flash('error', 'Error al guardar la imagen.');
+            $this->redirect('escaneo');
+        }
+
+        // Analizar con Claude Vision
+        try {
+            $vision  = new ClaudeVision();
+            $datos   = $vision->analizarCuaderno($destPath);
+        } catch (\Exception $e) {
+            Session::flash('error', 'Error al analizar la imagen: ' . $e->getMessage());
+            $this->redirect('escaneo');
+        }
+
+        // Cargar lotes para el formulario de revisión
+        $uid   = Session::get('usuario_id');
+        $lotes = (new Lote())->allByUsuario($uid);
+
+        $this->view('escaneo/revision', [
+            'pageTitle' => 'Revisar datos escaneados',
+            'datos'     => $datos,
+            'imagen'    => 'uploads/escaneos/' . $filename,
+            'lotes'     => $lotes,
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function confirmar(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('escaneo');
+        }
+
+        $uid    = Session::get('usuario_id');
+        $fecha  = $this->postString('fecha') ?: date('Y-m-d');
+        $tipos  = $_POST['tipo']       ?? [];
+        $loteIds= $_POST['lote_id']    ?? [];
+        $cantidades = $_POST['cantidad'] ?? [];
+        $motivos    = $_POST['motivo']   ?? [];
+        $cuadraIds  = $_POST['cuadra_origen_id'] ?? [];
+
+        $registrados = 0;
+        $errores     = [];
+
+        $movModel = new \App\Models\Movimiento();
+        $loteModel = new \App\Models\Lote();
+
+        foreach ($loteIds as $i => $loteId) {
+            $loteId   = (int)$loteId;
+            $cantidad = (int)($cantidades[$i] ?? 0);
+            $tipo     = $tipos[$i] ?? '';
+            $cuadraId = (int)($cuadraIds[$i] ?? 0) ?: null;
+
+            if (!$loteId || $cantidad <= 0 || !$tipo) continue;
+
+            // Omitir si el checkbox de confirmar no está marcado
+            if (!isset($_POST['confirmar'][$i])) continue;
+
+            $data = [
+                'tipo'              => $tipo,
+                'fecha'             => $fecha,
+                'lote_origen_id'    => $loteId,
+                'lote_destino_id'   => null,
+                'cuadra_origen_id'  => $cuadraId,
+                'cuadra_destino_id' => null,
+                'num_animales'      => $cantidad,
+                'peso_canal_kg'     => null,
+                'precio_eur'        => null,
+                'tipo_venta'        => null,
+                'motivo_baja'       => $motivos[$i] ?? null,
+                'observaciones'     => 'Registrado desde escaneo de cuaderno',
+            ];
+
+            try {
+                // Aplicar efecto en lote/cuadras
+                $db = \App\Core\Database::getInstance();
+                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")
+                   ->execute(['n' => $cantidad, 'id' => $loteId]);
+                if ($cuadraId) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                       ->execute(['n' => $cantidad, 'cid' => $cuadraId, 'lid' => $loteId]);
+                    $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                       ->execute(['cid' => $cuadraId, 'lid' => $loteId]);
+                }
+                // Cerrar lote si se queda vacío
+                $rest = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
+                $rest->execute(['id' => $loteId]);
+                if ((int)$rest->fetchColumn() <= 0) {
+                    $db->prepare("UPDATE lotes SET estado='cerrado', fecha_cierre=CURDATE() WHERE id=:id")
+                       ->execute(['id' => $loteId]);
+                }
+
+                $movModel->create($data, $uid);
+                $registrados++;
+            } catch (\Exception $e) {
+                $errores[] = "Fila {$i}: " . $e->getMessage();
+            }
+        }
+
+        if ($registrados > 0) {
+            Session::flash('success', "{$registrados} movimiento(s) registrado(s) correctamente.");
+        }
+        if (!empty($errores)) {
+            Session::flash('error', implode(' / ', $errores));
+        }
+
+        $this->redirect('movimientos');
+    }
+}
