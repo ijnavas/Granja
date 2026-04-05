@@ -106,9 +106,11 @@ class Lote
 
     public function create(array $data): int
     {
+        // Guardar num_animales_entrada para el histórico
+        $data['num_animales_entrada'] = $data['num_animales'] ?? 0;
         $stmt = $this->db->prepare("
-            INSERT INTO lotes (nave_id, granja_id, tipo_animal_id, raza_id, codigo, num_animales, peso_entrada_kg, fecha_entrada, fecha_nacimiento, observaciones)
-            VALUES (:nave_id, :granja_id, :tipo_animal_id, :raza_id, :codigo, :num_animales, :peso_entrada_kg, :fecha_entrada, :fecha_nacimiento, :observaciones)
+            INSERT INTO lotes (nave_id, granja_id, tipo_animal_id, raza_id, codigo, num_animales, num_animales_entrada, peso_entrada_kg, fecha_entrada, fecha_nacimiento, observaciones)
+            VALUES (:nave_id, :granja_id, :tipo_animal_id, :raza_id, :codigo, :num_animales, :num_animales_entrada, :peso_entrada_kg, :fecha_entrada, :fecha_nacimiento, :observaciones)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();
@@ -194,6 +196,122 @@ class Lote
         ");
         $stmt->execute(['uid' => $userId]);
         return $stmt->rowCount();
+    }
+
+    public function cerrar(int $id, int $userId): bool
+    {
+        $stmt = $this->db->prepare("
+            UPDATE lotes l
+            LEFT JOIN naves n  ON l.nave_id   = n.id
+            LEFT JOIN granjas g ON n.granja_id = g.id
+            LEFT JOIN granjas g2 ON l.granja_id = g2.id
+            SET l.estado = 'cerrado', l.fecha_cierre = CURDATE()
+            WHERE l.id = :id AND (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+        ");
+        return $stmt->execute(['id' => $id, 'uid' => $userId, 'uid2' => $userId]);
+    }
+
+    public function cerrarSiVacio(int $id): void
+    {
+        $stmt = $this->db->prepare("SELECT num_animales FROM lotes WHERE id = :id");
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+        if ($row && (int)$row['num_animales'] === 0) {
+            $this->db->prepare("UPDATE lotes SET estado = 'cerrado', fecha_cierre = CURDATE() WHERE id = :id AND estado = 'activo'")
+                     ->execute(['id' => $id]);
+        }
+    }
+
+    public function allCerradosByUsuario(int $userId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT l.*,
+                   ta.nombre  AS tipo_animal_nombre,
+                   n.nombre   AS nave_nombre,
+                   COALESCE(g.nombre, g2.nombre) AS granja_nombre,
+                   r.nombre   AS raza_nombre,
+                   -- Resumen ventas
+                   SUM(CASE WHEN m.tipo = 'venta' THEN m.num_animales ELSE 0 END) AS total_vendidos,
+                   SUM(CASE WHEN m.tipo = 'venta' THEN m.num_animales * COALESCE(m.precio_eur, 0) ELSE 0 END) AS ingreso_total,
+                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.num_animales * m.precio_eur ELSE 0 END)
+                       / NULLIF(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.num_animales ELSE 0 END), 0), 2) AS precio_medio_eur,
+                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.num_animales * m.peso_canal_kg ELSE 0 END)
+                       / NULLIF(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.num_animales ELSE 0 END), 0), 2) AS peso_medio_venta_kg,
+                   -- Resumen bajas
+                   SUM(CASE WHEN m.tipo = 'baja' THEN m.num_animales ELSE 0 END) AS total_bajas
+            FROM lotes l
+            JOIN tipos_animal ta ON l.tipo_animal_id = ta.id
+            LEFT JOIN naves n    ON l.nave_id    = n.id
+            LEFT JOIN granjas g  ON n.granja_id  = g.id
+            LEFT JOIN granjas g2 ON l.granja_id  = g2.id
+            LEFT JOIN razas_porcino r ON l.raza_id = r.id
+            LEFT JOIN movimientos m ON m.lote_origen_id = l.id
+            WHERE l.estado = 'cerrado'
+              AND (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+            GROUP BY l.id
+            ORDER BY COALESCE(l.fecha_cierre, l.fecha_entrada) DESC
+        ");
+        $stmt->execute(['uid' => $userId, 'uid2' => $userId]);
+        return $stmt->fetchAll();
+    }
+
+    public function historicoDetalle(int $id, int $userId): ?array
+    {
+        // Datos del lote
+        $stmt = $this->db->prepare("
+            SELECT l.*,
+                   ta.nombre  AS tipo_animal_nombre,
+                   n.nombre   AS nave_nombre,
+                   COALESCE(g.nombre, g2.nombre) AS granja_nombre,
+                   r.nombre   AS raza_nombre,
+                   SUM(CASE WHEN m.tipo = 'venta' THEN m.num_animales ELSE 0 END) AS total_vendidos,
+                   SUM(CASE WHEN m.tipo = 'venta' THEN m.num_animales * COALESCE(m.precio_eur, 0) ELSE 0 END) AS ingreso_total,
+                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.num_animales * m.precio_eur ELSE 0 END)
+                       / NULLIF(SUM(CASE WHEN m.tipo = 'venta' AND m.precio_eur > 0 THEN m.num_animales ELSE 0 END), 0), 2) AS precio_medio_eur,
+                   ROUND(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.num_animales * m.peso_canal_kg ELSE 0 END)
+                       / NULLIF(SUM(CASE WHEN m.tipo = 'venta' AND m.peso_canal_kg > 0 THEN m.num_animales ELSE 0 END), 0), 2) AS peso_medio_venta_kg,
+                   SUM(CASE WHEN m.tipo = 'baja'  THEN m.num_animales ELSE 0 END) AS total_bajas
+            FROM lotes l
+            JOIN tipos_animal ta ON l.tipo_animal_id = ta.id
+            LEFT JOIN naves n    ON l.nave_id    = n.id
+            LEFT JOIN granjas g  ON n.granja_id  = g.id
+            LEFT JOIN granjas g2 ON l.granja_id  = g2.id
+            LEFT JOIN razas_porcino r ON l.raza_id = r.id
+            LEFT JOIN movimientos m ON m.lote_origen_id = l.id
+            WHERE l.id = :id AND (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+            GROUP BY l.id
+        ");
+        $stmt->execute(['id' => $id, 'uid' => $userId, 'uid2' => $userId]);
+        $lote = $stmt->fetch();
+        if (!$lote) return null;
+
+        // Timeline: movimientos
+        $stmt2 = $this->db->prepare("
+            SELECT m.*, u.nombre AS usuario_nombre,
+                   cd.nombre AS cuadra_destino_nombre,
+                   nd.nombre AS nave_destino_nombre
+            FROM movimientos m
+            LEFT JOIN usuarios u ON m.usuario_id = u.id
+            LEFT JOIN cuadras cd ON m.cuadra_destino_id = cd.id
+            LEFT JOIN naves nd   ON cd.nave_id = nd.id
+            WHERE m.lote_origen_id = :id
+            ORDER BY m.fecha DESC, m.id DESC
+        ");
+        $stmt2->execute(['id' => $id]);
+        $lote['movimientos'] = $stmt2->fetchAll();
+
+        // Timeline: pesajes
+        $stmt3 = $this->db->prepare("
+            SELECT p.*, u.nombre AS usuario_nombre
+            FROM pesajes p
+            LEFT JOIN usuarios u ON p.usuario_id = u.id
+            WHERE p.lote_id = :id
+            ORDER BY p.fecha DESC
+        ");
+        $stmt3->execute(['id' => $id]);
+        $lote['pesajes'] = $stmt3->fetchAll();
+
+        return $lote;
     }
 
     public function tiposAnimal(): array

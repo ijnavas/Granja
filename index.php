@@ -99,6 +99,8 @@ $router->get('/lotes/crear',                [LoteController::class, 'create']);
 $router->post('/lotes',                     [LoteController::class, 'store']);
 $router->get('/lotes/tabla-semana',          [LoteController::class, 'tablaSemana']);
 $router->post('/lotes/raza',                 [LoteController::class, 'crearRaza']);
+$router->get('/lotes/historico',            [LoteController::class, 'historico']);
+$router->get('/lotes/{id}/historico',       [LoteController::class, 'historicoShow']);
 $router->get('/lotes/{id}/editar',          [LoteController::class, 'edit']);
 $router->post('/lotes/{id}/actualizar',     [LoteController::class, 'update']);
 $router->post('/lotes/{id}/ajustar',        [LoteController::class, 'ajustar']);

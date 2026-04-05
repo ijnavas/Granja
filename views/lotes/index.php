@@ -8,6 +8,7 @@
                    style="width:15px;height:15px;cursor:pointer">
             Mostrar cerrados
         </label>
+        <a href="<?= base_url('lotes/historico') ?>" class="btn btn-secondary">Histórico</a>
         <a href="<?= base_url('lotes/crear') ?>" class="btn btn-primary">+ Nuevo lote</a>
     </div>
 </div>
