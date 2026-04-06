@@ -32,12 +32,13 @@ class ClaudeVision
         $prompt = <<<PROMPT
 Analiza esta imagen de un cuaderno de control de granja porcina. Extrae todos los datos que veas escritos.
 
-El cuaderno tiene:
-- Fecha (arriba a la derecha, formato DD-MM-YY o DD-MM-YYYY)
-- Sección izquierda con columnas: LOTE | BAJAS | NAVE/CUADRA | y posible motivo escrito debajo
-  * Si en la columna LOTE aparece texto como "SIN BAJAS", "NO BAJAS", "0 BAJAS" o similar, significa que no hay bajas → devuelve bajas=[]
-- Sección derecha con columnas: LOTE | ORIGEN | DESTINO | CANTIDAD (traslados)
-- Sección inferior: PIENSO | NAVE/CUADRA
+El cuaderno puede tener algunas o todas estas secciones:
+- Fecha (arriba, formato DD-MM-YY o DD-MM-YYYY)
+- BAJAS: columnas LOTE | CANTIDAD | NAVE/CUADRA | MOTIVO
+  * Si aparece texto como "SIN BAJAS", "NO BAJAS", "0 BAJAS" → devuelve bajas=[]
+- TRASLADOS: columnas LOTE | ORIGEN | DESTINO | CANTIDAD
+- PESAJES: columnas LOTE | CUADRA | PESO MEDIO (kg) | Nº ANIMALES PESADOS
+- PIENSO/SILOS: columnas SILO (nombre o número) | KG | PROVEEDOR | ALBARÁN
 
 Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto adicional:
 {
@@ -58,15 +59,25 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
       "cantidad": número
     }
   ],
-  "pienso": [
+  "pesajes": [
     {
-      "tipo": "texto del pienso",
-      "nave_cuadra": "nave/cuadra"
+      "lote": "código numérico del lote",
+      "cuadra": "nave/cuadra, ej: C7-58 o null",
+      "peso_medio_kg": número con decimales,
+      "num_animales": número entero o null
+    }
+  ],
+  "reposiciones_silo": [
+    {
+      "silo": "nombre o número del silo tal como aparece escrito",
+      "cantidad_kg": número,
+      "proveedor": "nombre del proveedor o null",
+      "albaran": "número de albarán o null"
     }
   ]
 }
 
-Si una sección está vacía o indica explícitamente que no hay datos, devuelve array vacío [].
+Si una sección está vacía o no aparece en el documento, devuelve array vacío [].
 Si no puedes leer un valor con certeza escribe null.
 PROMPT;
 
