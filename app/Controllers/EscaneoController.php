@@ -215,22 +215,24 @@ class EscaneoController extends BaseController
 
         // ── Recargas de silo ─────────────────────────────────────
         $siloModel     = new Silo();
-        $siloIds       = $_POST['silo_id']     ?? [];
-        $cantidadesKg  = $_POST['cantidad_kg'] ?? [];
-        $proveedores   = $_POST['proveedor_s'] ?? [];
-        $albaranes     = $_POST['albaran_s']   ?? [];
+        $siloIds       = $_POST['silo_id']       ?? [];
+        $cantidadesKg  = $_POST['cantidad_kg']   ?? [];
+        $tiposPienso   = $_POST['tipo_pienso_s'] ?? [];
+        $proveedores   = $_POST['proveedor_s']   ?? [];
+        $albaranes     = $_POST['albaran_s']     ?? [];
         $silosGuardados = 0;
 
         foreach ($siloIds as $k => $siloId) {
             if (!isset($_POST['confirmar_s'][$k])) continue;
-            $siloId   = (int)$siloId;
-            $cantKg   = (float)str_replace(',', '.', $cantidadesKg[$k] ?? '0');
+            $siloId    = (int)$siloId;
+            $cantKg    = (float)str_replace(',', '.', $cantidadesKg[$k] ?? '0');
+            $tipoPienso= trim($tiposPienso[$k] ?? '') ?: null;
             $proveedor = trim($proveedores[$k] ?? '') ?: null;
             $albaran   = trim($albaranes[$k]   ?? '') ?: null;
             if (!$siloId || $cantKg <= 0) continue;
             $obs = $albaran ? "Albarán: {$albaran}" : null;
             try {
-                $siloModel->addRecarga($siloId, $cantKg, $fecha, $proveedor, $obs, $uid);
+                $siloModel->addRecarga($siloId, $cantKg, $fecha, $proveedor, $obs, $uid, $tipoPienso);
                 $silosGuardados++;
             } catch (\Exception $e) {
                 $errores[] = "Silo fila {$k}: " . $e->getMessage();

@@ -39,6 +39,9 @@ El cuaderno puede tener algunas o todas estas secciones:
 - TRASLADOS: columnas LOTE | ORIGEN | DESTINO | CANTIDAD
 - PESAJES: columnas LOTE | CUADRA | PESO MEDIO (kg) | Nº ANIMALES PESADOS
 - PIENSO/SILOS: columnas SILO (nombre o número) | KG | PROVEEDOR | ALBARÁN
+  * En albaranes de pienso: la columna CANTIDAD es los kg, CONCEPTO-REFERENCIA es el tipo de pienso,
+    y el código de silo suele aparecer en la columna IMPORTE/PRECIO (ej: "2A", "1A", "S1").
+    El número de albarán aparece arriba del documento (campo "Nº" o la fecha en formato "D de M de AA").
 
 Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto adicional:
 {
@@ -70,6 +73,7 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
   "reposiciones_silo": [
     {
       "silo": "nombre o número del silo tal como aparece escrito",
+      "tipo_pienso": "tipo/concepto del pienso, ej: PRECRECIMIENTO SOPA, CRECIMIENTO SOPA, o null",
       "cantidad_kg": número,
       "proveedor": "nombre del proveedor o null",
       "albaran": "número de albarán o null"

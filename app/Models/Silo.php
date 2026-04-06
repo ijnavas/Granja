@@ -117,16 +117,17 @@ class Silo
         return $stmt->fetchAll();
     }
 
-    public function addRecarga(int $siloId, float $cantidadKg, string $fecha, ?string $proveedor, ?string $obs, int $userId): int
+    public function addRecarga(int $siloId, float $cantidadKg, string $fecha, ?string $proveedor, ?string $obs, int $userId, ?string $tipoPienso = null): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, proveedor, observaciones, usuario_id)
-            VALUES (:silo_id, :fecha, :cantidad_kg, :proveedor, :observaciones, :usuario_id)
+            INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, observaciones, usuario_id)
+            VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :observaciones, :usuario_id)
         ");
         $stmt->execute([
             'silo_id'      => $siloId,
             'fecha'        => $fecha,
             'cantidad_kg'  => $cantidadKg,
+            'tipo_pienso'  => $tipoPienso,
             'proveedor'    => $proveedor,
             'observaciones'=> $obs,
             'usuario_id'   => $userId,
