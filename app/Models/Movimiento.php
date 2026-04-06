@@ -16,8 +16,32 @@ class Movimiento
     }
 
     // ── Listado ──────────────────────────────────────────────────
-    public function allByUsuario(int $userId, int $limit = 100): array
+    public function allByUsuario(int $userId, array $filtros = []): array
     {
+        $conditions = ['(g.usuario_id = :uid OR gn.usuario_id = :uid2)'];
+        $params = ['uid' => $userId, 'uid2' => $userId];
+
+        if (!empty($filtros['fecha_desde'])) {
+            $conditions[] = 'm.fecha >= :fecha_desde';
+            $params['fecha_desde'] = $filtros['fecha_desde'];
+        }
+        if (!empty($filtros['fecha_hasta'])) {
+            $conditions[] = 'm.fecha <= :fecha_hasta';
+            $params['fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        if (!empty($filtros['tipo'])) {
+            $conditions[] = 'm.tipo = :tipo';
+            $params['tipo'] = $filtros['tipo'];
+        }
+        if (!empty($filtros['lote'])) {
+            $conditions[] = '(lo.codigo LIKE :lote OR ld.codigo LIKE :lote2)';
+            $params['lote']  = '%' . $filtros['lote'] . '%';
+            $params['lote2'] = '%' . $filtros['lote'] . '%';
+        }
+
+        $where = implode(' AND ', $conditions);
+        $limit = empty($filtros) ? 200 : 1000;
+
         $stmt = $this->db->prepare("
             SELECT m.*,
                    lo.codigo  AS lote_origen_codigo,
@@ -38,13 +62,15 @@ class Movimiento
             LEFT JOIN naves  nlo ON lo.nave_id = nlo.id
             LEFT JOIN granjas gn ON nlo.granja_id = gn.id
             JOIN usuarios u ON m.usuario_id = u.id
-            WHERE g.usuario_id = :uid OR gn.usuario_id = :uid2
+            WHERE {$where}
             ORDER BY m.fecha DESC, m.created_at DESC
             LIMIT :lim
         ");
-        $stmt->bindValue('uid',  $userId, PDO::PARAM_INT);
-        $stmt->bindValue('uid2', $userId, PDO::PARAM_INT);
-        $stmt->bindValue('lim',  $limit,  PDO::PARAM_INT);
+
+        foreach ($params as $k => $v) {
+            $stmt->bindValue($k, $v);
+        }
+        $stmt->bindValue('lim', $limit, PDO::PARAM_INT);
         $stmt->execute();
         return $stmt->fetchAll();
     }
