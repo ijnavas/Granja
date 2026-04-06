@@ -91,6 +91,8 @@ $router->post('/silos/{id}/eliminar',       [SiloController::class, 'delete']);
 $router->get('/almacen',                              [AlmacenController::class, 'index']);
 $router->get('/almacen/{id}',                         [AlmacenController::class, 'show']);
 $router->post('/almacen/{id}/recarga',                [AlmacenController::class, 'storeRecarga']);
+$router->get('/almacen/recargas/{rid}/editar',        [AlmacenController::class, 'editRecarga']);
+$router->post('/almacen/recargas/{rid}/actualizar',   [AlmacenController::class, 'updateRecarga']);
 $router->post('/almacen/{id}/recarga/{rid}/eliminar', [AlmacenController::class, 'deleteRecarga']);
 $router->post('/almacen/{id}/pedido',                 [AlmacenController::class, 'pedido']);
 
