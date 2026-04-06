@@ -19,11 +19,14 @@ class Inventario
     {
         $stmt = $this->db->prepare("
             SELECT i.*,
-                   COUNT(il.id)            AS num_lineas,
+                   COUNT(DISTINCT il.id)   AS num_lineas,
                    SUM(il.num_animales)    AS total_animales,
-                   SUM(il.valor_total_eur) AS valor_total
+                   SUM(il.valor_total_eur) AS valor_total,
+                   COUNT(DISTINCT ins.id)  AS num_silos,
+                   SUM(ins.stock_kg)       AS total_kg_silos
             FROM inventarios i
-            LEFT JOIN inventario_lineas il ON il.inventario_id = i.id
+            LEFT JOIN inventario_lineas il  ON il.inventario_id  = i.id
+            LEFT JOIN inventario_silos  ins ON ins.inventario_id = i.id
             WHERE i.usuario_id = :uid
             GROUP BY i.id
             ORDER BY i.fecha DESC, i.created_at DESC
@@ -87,6 +90,58 @@ class Inventario
     public function delete(int $id): void
     {
         $this->db->prepare("DELETE FROM inventarios WHERE id = :id")->execute(['id' => $id]);
+    }
+
+    // ── Líneas de silos (inventario pienso) ──────────────────────
+
+    public function lineasSilos(int $inventarioId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT * FROM inventario_silos
+            WHERE inventario_id = :id
+            ORDER BY granja_nombre, silo_nombre
+        ");
+        $stmt->execute(['id' => $inventarioId]);
+        return $stmt->fetchAll();
+    }
+
+    public function insertLineaSilo(int $inventarioId, array $linea): void
+    {
+        $stmt = $this->db->prepare("
+            INSERT INTO inventario_silos
+                (inventario_id, silo_id, silo_nombre, granja_nombre,
+                 tipo_pienso, stock_kg, capacidad_kg, stock_minimo_kg, pct_stock)
+            VALUES
+                (:inventario_id, :silo_id, :silo_nombre, :granja_nombre,
+                 :tipo_pienso, :stock_kg, :capacidad_kg, :stock_minimo_kg, :pct_stock)
+        ");
+        $stmt->execute(array_merge(['inventario_id' => $inventarioId], $linea));
+    }
+
+    public function calcularLineasPienso(int $userId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT s.id AS silo_id, s.nombre AS silo_nombre,
+                   g.nombre AS granja_nombre,
+                   s.stock_actual_kg  AS stock_kg,
+                   s.capacidad_kg,
+                   s.stock_minimo_kg,
+                   ROUND((s.stock_actual_kg / NULLIF(s.capacidad_kg, 0)) * 100) AS pct_stock,
+                   GROUP_CONCAT(DISTINCT r.tipo_pienso ORDER BY r.fecha DESC SEPARATOR ' / ') AS tipo_pienso
+            FROM silos s
+            JOIN granjas g ON s.granja_id = g.id
+            LEFT JOIN silo_recargas r ON r.silo_id = s.id
+                AND r.tipo_pienso IS NOT NULL
+                AND r.fecha = (
+                    SELECT MAX(r2.fecha) FROM silo_recargas r2
+                    WHERE r2.silo_id = s.id AND r2.tipo_pienso IS NOT NULL
+                )
+            WHERE g.usuario_id = :uid AND s.activo = 1
+            GROUP BY s.id
+            ORDER BY g.nombre, s.nombre
+        ");
+        $stmt->execute(['uid' => $userId]);
+        return $stmt->fetchAll();
     }
 
     // ── Cálculo de líneas a una fecha dada ───────────────────────
