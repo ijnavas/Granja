@@ -30,8 +30,17 @@ class MovimientoController extends BaseController
     {
         auth_required();
         $uid = Session::get('usuario_id');
+
+        $filtros = array_filter([
+            'fecha_desde' => trim($_GET['fecha_desde'] ?? ''),
+            'fecha_hasta' => trim($_GET['fecha_hasta'] ?? ''),
+            'tipo'        => trim($_GET['tipo']        ?? ''),
+            'lote'        => trim($_GET['lote']        ?? ''),
+        ]);
+
         $this->view('movimientos/index', [
-            'movimientos' => $this->model->allByUsuario($uid),
+            'movimientos' => $this->model->allByUsuario($uid, $filtros),
+            'filtros'     => $filtros,
             'pageTitle'   => 'Movimientos',
             'success'     => Session::getFlash('success'),
             'error'       => Session::getFlash('error'),

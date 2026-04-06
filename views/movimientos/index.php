@@ -7,14 +7,16 @@ $etiquetas = [
     'venta'              => ['label' => 'Venta',             'color' => '#d1fae5', 'text' => '#065f46'],
     'baja'               => ['label' => 'Baja',              'color' => '#fee2e2', 'text' => '#991b1b'],
 ];
+$filtros = $filtros ?? [];
+$hayFiltros = !empty(array_filter($filtros));
 ?>
 
 <div class="page-header">
     <h2>Movimientos</h2>
-    <div style="display:flex;gap:.5rem">
-        <?php foreach ($etiquetas as $tipo => $e): ?>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <?php foreach ($etiquetas as $tipo => $et): ?>
         <a href="<?= base_url('movimientos/crear?tipo=' . $tipo) ?>" class="btn btn-secondary btn-sm">
-            + <?= $e['label'] ?>
+            + <?= $et['label'] ?>
         </a>
         <?php endforeach; ?>
     </div>
@@ -27,9 +29,56 @@ $etiquetas = [
     <div class="alert-flash alert-error"><?= e($error) ?></div>
 <?php endif; ?>
 
+<!-- ── Filtros ──────────────────────────────────────────────── -->
+<form method="GET" action="<?= base_url('movimientos') ?>"
+      style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;margin-bottom:1rem;padding:.75rem 1rem;background:#f9fafb;border:1px solid #e5e7eb;border-radius:.5rem">
+
+    <div style="display:flex;flex-direction:column;gap:.2rem">
+        <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Desde</label>
+        <input type="date" name="fecha_desde" value="<?= e($filtros['fecha_desde'] ?? '') ?>"
+               style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem">
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:.2rem">
+        <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Hasta</label>
+        <input type="date" name="fecha_hasta" value="<?= e($filtros['fecha_hasta'] ?? '') ?>"
+               style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem">
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:.2rem">
+        <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Tipo</label>
+        <select name="tipo" style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem;min-width:140px">
+            <option value="">Todos</option>
+            <?php foreach ($etiquetas as $t => $et): ?>
+            <option value="<?= $t ?>" <?= ($filtros['tipo'] ?? '') === $t ? 'selected' : '' ?>><?= $et['label'] ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:.2rem">
+        <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Lote</label>
+        <input type="text" name="lote" value="<?= e($filtros['lote'] ?? '') ?>"
+               placeholder="Código de lote…"
+               style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem;min-width:130px">
+    </div>
+
+    <div style="display:flex;gap:.4rem;align-self:flex-end">
+        <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+        <?php if ($hayFiltros): ?>
+        <a href="<?= base_url('movimientos') ?>" class="btn btn-secondary btn-sm">Limpiar</a>
+        <?php endif; ?>
+    </div>
+
+    <?php if ($hayFiltros): ?>
+    <div style="align-self:flex-end;font-size:.8rem;color:#6b7280;margin-left:auto">
+        <?= count($movimientos) ?> resultado<?= count($movimientos) !== 1 ? 's' : '' ?>
+    </div>
+    <?php endif; ?>
+</form>
+
 <div class="list-card">
 <?php if (empty($movimientos)): ?>
-    <div class="empty-state">No hay movimientos registrados todavía.</div>
+    <div class="empty-state">No hay movimientos<?= $hayFiltros ? ' con esos filtros' : ' registrados todavía' ?>.</div>
 <?php else: ?>
     <table class="list-table">
         <thead>
@@ -46,12 +95,15 @@ $etiquetas = [
         </thead>
         <tbody>
             <?php foreach ($movimientos as $m): ?>
-            <?php $e = $etiquetas[$m['tipo']] ?? ['label' => $m['tipo'], 'color' => '#f3f4f6', 'text' => '#374151']; ?>
+            <?php $et = $etiquetas[$m['tipo']] ?? ['label' => $m['tipo'], 'color' => '#f3f4f6', 'text' => '#374151']; ?>
+            <?php
+                $cuadraOrig = trim(($m['nave_origen_nombre'] ?? '') . ($m['cuadra_origen_nombre'] ? ' · ' . $m['cuadra_origen_nombre'] : ''));
+            ?>
             <tr style="cursor:pointer" onclick="window.location='<?= base_url("movimientos/{$m['id']}/editar") ?>'">
                 <td><?= date('d/m/Y', strtotime($m['fecha'])) ?></td>
                 <td>
-                    <span style="background:<?= $e['color'] ?>;color:<?= $e['text'] ?>;padding:.2rem .6rem;border-radius:20px;font-size:.75rem;font-weight:600">
-                        <?= $e['label'] ?>
+                    <span style="background:<?= $et['color'] ?>;color:<?= $et['text'] ?>;padding:.2rem .6rem;border-radius:20px;font-size:.75rem;font-weight:600">
+                        <?= $et['label'] ?>
                     </span>
                 </td>
                 <td><span style="font-family:monospace;font-weight:600"><?= e($m['lote_origen_codigo']) ?></span></td>
@@ -68,15 +120,16 @@ $etiquetas = [
                 <td style="font-size:.82rem;color:#6b7280">
                     <?php if ($m['tipo'] === 'venta'): ?>
                         <?= $m['tipo_venta'] === 'matadero' ? '🏭 Matadero' : '👤 Tercero' ?>
+                        <?php if ($cuadraOrig): ?> · <?= e($cuadraOrig) ?><?php endif; ?>
                         <?php if ($m['precio_eur']): ?> · <?= number_format($m['precio_eur'], 2) ?> €<?php endif; ?>
                     <?php elseif ($m['tipo'] === 'traslado_cuadra'): ?>
-                        <?php
-                            $orig = trim(($m['nave_origen_nombre'] ?? '') . ($m['cuadra_origen_nombre'] ? ' · ' . $m['cuadra_origen_nombre'] : ''));
-                            $dest = trim(($m['nave_destino_nombre'] ?? '') . ($m['cuadra_destino_nombre'] ? ' · ' . $m['cuadra_destino_nombre'] : ''));
-                        ?>
-                        <?= e($orig) ?> → <?= e($dest) ?>
-                    <?php elseif ($m['tipo'] === 'baja' && !empty($m['motivo_baja'])): ?>
-                        <?= $m['motivo_baja'] === 'enfermedad' ? '🤒 Enfermedad' : '⚰ Sacrificio' ?>
+                        <?php $cuadraDest = trim(($m['nave_destino_nombre'] ?? '') . ($m['cuadra_destino_nombre'] ? ' · ' . $m['cuadra_destino_nombre'] : '')); ?>
+                        <?= e($cuadraOrig) ?> → <?= e($cuadraDest) ?>
+                    <?php elseif ($m['tipo'] === 'baja'): ?>
+                        <?php if (!empty($m['motivo_baja'])): ?>
+                            <?= $m['motivo_baja'] === 'enfermedad' ? '🤒 Enfermedad' : '⚰ Sacrificio' ?>
+                        <?php endif; ?>
+                        <?php if ($cuadraOrig): ?> · <?= e($cuadraOrig) ?><?php endif; ?>
                     <?php endif; ?>
                 </td>
                 <td style="font-size:.82rem;color:#6b7280"><?= e($m['usuario_nombre']) ?></td>
