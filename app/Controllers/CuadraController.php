@@ -115,23 +115,24 @@ class CuadraController extends BaseController
         }
 
         $naveId    = (int)$this->post('nave_id');
-        $cantidad  = (int)$this->post('cantidad', 0);
-        $prefijo   = capitalizar($this->postString('prefijo'));
         $inicio    = (int)$this->post('inicio', 1);
+        $cantidad  = (int)$this->post('cantidad', 0);
+        $prefijo   = $this->postString('prefijo');   // ya viene sin capitalizar raro
         $capacidad = (int)$this->post('capacidad_maxima', 0);
         $ancho     = $this->post('ancho_m') ?: null;
         $alto      = $this->post('alto_m')  ?: null;
         $largo     = $this->post('largo_m') ?: null;
-        $ceros     = (int)$this->post('ceros', 0); // relleno de ceros: 01, 02...
+        $ceros     = (int)$this->post('ceros', 0);
 
-        if (!$naveId || $cantidad < 1 || $cantidad > 100) {
-            Session::flash('error', 'Nave obligatoria y cantidad entre 1 y 100.');
+        if (!$naveId || $cantidad < 1 || $cantidad > 500) {
+            Session::flash('error', 'Nave obligatoria y rango entre 1 y 500 cuadras.');
             $this->redirect('cuadras/masiva');
         }
 
+        $creadas = 0;
         for ($i = $inicio; $i < $inicio + $cantidad; $i++) {
             $numero = $ceros > 0 ? str_pad((string)$i, $ceros, '0', STR_PAD_LEFT) : (string)$i;
-            $nombre = trim($prefijo . ' ' . $numero);
+            $nombre = trim($prefijo . $numero);
             $this->model->create([
                 'nave_id'          => $naveId,
                 'nombre'           => $nombre,
@@ -141,9 +142,10 @@ class CuadraController extends BaseController
                 'largo_m'          => $largo,
                 'descripcion'      => null,
             ]);
+            $creadas++;
         }
 
-        Session::flash('success', "Se han creado {$cantidad} cuadras correctamente.");
+        Session::flash('success', "Se han creado {$creadas} cuadras correctamente.");
         $this->redirect('cuadras?nave=' . $naveId);
     }
 
