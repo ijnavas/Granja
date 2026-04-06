@@ -27,7 +27,7 @@ foreach ($lotes as $l) {
     if ((int)$l['num_animales'] <= 0) continue;
     $lotesJs[$l['id']] = [
         'num_animales'  => (int)$l['num_animales'],
-        'fecha_entrada' => $l['fecha_entrada'] ?? null,
+        'fecha_nacimiento' => $l['fecha_nacimiento'] ?? null,
         'codigo'        => $l['codigo'],
     ];
 }
@@ -100,7 +100,7 @@ foreach ($lotes as $l) {
                         <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
                         <option value="<?= $l['id'] ?>"
                                 data-animales="<?= (int)$l['num_animales'] ?>"
-                                data-entrada="<?= e($l['fecha_entrada'] ?? '') ?>"
+                                data-entrada="<?= e($l['fecha_nacimiento'] ?? '') ?>"
                                 <?= $sugerido && $sugerido['id'] == $l['id'] ? 'selected' : '' ?>>
                             <?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?>)
                         </option>
@@ -190,7 +190,7 @@ foreach ($lotes as $l) {
                         <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
                         <option value="<?= $l['id'] ?>"
                                 data-animales="<?= (int)$l['num_animales'] ?>"
-                                data-entrada="<?= e($l['fecha_entrada'] ?? '') ?>"
+                                data-entrada="<?= e($l['fecha_nacimiento'] ?? '') ?>"
                                 <?= $sugerido && $sugerido['id'] == $l['id'] ? 'selected' : '' ?>>
                             <?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?>)
                         </option>
@@ -383,11 +383,11 @@ function validarFormulario() {
 
         const loteData = LOTES_DATA[loteEl.value];
 
-        // Validar fecha >= fecha_entrada del lote
-        if (loteData && loteData.fecha_entrada && fechaVal) {
-            if (fechaVal < loteData.fecha_entrada) {
+        // Validar fecha >= fecha_nacimiento del lote
+        if (loteData && loteData.fecha_nacimiento && fechaVal) {
+            if (fechaVal < loteData.fecha_nacimiento) {
                 errores.push('Fila ' + filaNum + ': la fecha ' + fechaVal + ' es anterior a la entrada del lote '
-                    + loteData.codigo + ' (' + loteData.fecha_entrada + ').');
+                    + loteData.codigo + ' (' + loteData.fecha_nacimiento + ').');
             }
         }
 
