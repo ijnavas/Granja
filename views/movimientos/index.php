@@ -70,7 +70,11 @@ $etiquetas = [
                         <?= $m['tipo_venta'] === 'matadero' ? '🏭 Matadero' : '👤 Tercero' ?>
                         <?php if ($m['precio_eur']): ?> · <?= number_format($m['precio_eur'], 2) ?> €<?php endif; ?>
                     <?php elseif ($m['tipo'] === 'traslado_cuadra'): ?>
-                        <?= e($m['nave_origen_nombre'] ?? '') ?> → <?= e($m['nave_destino_nombre'] ?? '') ?>
+                        <?php
+                            $orig = trim(($m['nave_origen_nombre'] ?? '') . ($m['cuadra_origen_nombre'] ? ' · ' . $m['cuadra_origen_nombre'] : ''));
+                            $dest = trim(($m['nave_destino_nombre'] ?? '') . ($m['cuadra_destino_nombre'] ? ' · ' . $m['cuadra_destino_nombre'] : ''));
+                        ?>
+                        <?= e($orig) ?> → <?= e($dest) ?>
                     <?php elseif ($m['tipo'] === 'baja' && !empty($m['motivo_baja'])): ?>
                         <?= $m['motivo_baja'] === 'enfermedad' ? '🤒 Enfermedad' : '⚰ Sacrificio' ?>
                     <?php endif; ?>
