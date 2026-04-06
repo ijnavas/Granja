@@ -55,7 +55,7 @@ class RecevtService
             $enc = substr($data, 16);
             $dec = openssl_decrypt($enc, 'AES-128-CBC', $key, OPENSSL_RAW_DATA, $iv);
             return $dec !== false ? $dec : '';
-        } catch (\Throwable) {
+        } catch (\Throwable $e) {
             return '';
         }
     }
@@ -662,8 +662,8 @@ class RecevtService
 
     private function absoluteUrl(string $url): string
     {
-        if (str_starts_with($url, 'http')) return $url;
-        if (str_starts_with($url, '/'))   return self::BASE_URL . $url;
+        if (strpos($url, 'http') === 0) return $url;
+        if (strpos($url, '/') === 0)   return self::BASE_URL . $url;
         return self::BASE_URL . '/' . $url;
     }
 

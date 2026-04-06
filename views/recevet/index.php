@@ -151,15 +151,8 @@ if (!($req['dom']     ?? true)) $faltantes[] = 'DOM (necesario para procesar el 
     <div class="list-card" style="font-size:.8rem;font-family:monospace;max-height:400px;overflow-y:auto">
         <?php foreach ($logs as $entry): ?>
             <?php
-            $color = match($entry['type']) {
-                'success' => '#166534',
-                'error'   => '#dc2626',
-                default   => '#374151',
-            };
-            $bg = match($entry['type']) {
-                'error' => '#fff1f2',
-                default => 'transparent',
-            };
+            $color = $entry['type'] === 'success' ? '#166534' : ($entry['type'] === 'error' ? '#dc2626' : '#374151');
+            $bg    = $entry['type'] === 'error' ? '#fff1f2' : 'transparent';
             ?>
             <div style="padding:.3rem .75rem;background:<?= $bg ?>;border-bottom:1px solid #f3f4f6;color:<?= $color ?>">
                 <span style="color:#9ca3af;margin-right:.5rem"><?= $entry['ts'] ?></span>
