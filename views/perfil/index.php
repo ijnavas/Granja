@@ -70,6 +70,37 @@
     </form>
 </div>
 
+<!-- Credenciales Recevet -->
+<div class="form-card" style="margin-top:1.5rem;max-width:900px">
+    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Credenciales Recevet
+    </div>
+    <form method="POST" action="<?= base_url('perfil/recevet') ?>">
+        <?= csrf_field() ?>
+        <div class="form-grid form-grid-2">
+            <div class="form-group">
+                <label>Usuario Recevet</label>
+                <input type="text" name="recevet_usuario"
+                       value="<?= e($user['recevet_usuario'] ?? '') ?>"
+                       placeholder="Tu usuario de recevet.es"
+                       autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label>Contraseña Recevet</label>
+                <input type="password" name="recevet_password"
+                       placeholder="<?= !empty($user['recevet_password_enc']) ? '••••••••  (guardada)' : 'Tu contraseña de recevet.es' ?>"
+                       autocomplete="current-password">
+                <span class="form-hint">Se guarda cifrada. Déjala en blanco para no cambiarla.</span>
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Guardar credenciales Recevet</button>
+            <a href="<?= base_url('recevet') ?>" class="btn btn-secondary">Ir a Recevet</a>
+        </div>
+    </form>
+</div>
+
 </div>
 
 <script>

@@ -97,6 +97,12 @@
             <span class="nav-tooltip">Informes</span>
         </a>
 
+        <a href="<?= base_url('recevet') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/recevet') ? 'active' : '' ?>">
+            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><circle cx="7" cy="8" r="1" fill="currentColor"/><circle cx="7" cy="12" r="1" fill="currentColor"/><circle cx="7" cy="16" r="1" fill="currentColor"/></svg></span>
+            <span class="nav-label">Recevet</span>
+            <span class="nav-tooltip">Libro de Tratamientos</span>
+        </a>
+
         <?php if (es_admin()): ?>
         <div class="nav-section-label">Sistema</div>
         <a href="<?= base_url('configuracion/razas') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/configuracion') ? 'active' : '' ?>">

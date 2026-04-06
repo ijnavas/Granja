@@ -45,8 +45,8 @@ class Granja
     public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO granjas (usuario_id, nombre, codigo_rega, capacidad_max, especie, direccion, municipio, provincia, codigo_postal, tipo_produccion, latitud, longitud)
-            VALUES (:usuario_id, :nombre, :codigo_rega, :capacidad_max, :especie, :direccion, :municipio, :provincia, :codigo_postal, :tipo_produccion, :latitud, :longitud)
+            INSERT INTO granjas (usuario_id, nombre, codigo_rega, capacidad_max, especie, direccion, municipio, provincia, codigo_postal, tipo_produccion, latitud, longitud, recevet_explotacion)
+            VALUES (:usuario_id, :nombre, :codigo_rega, :capacidad_max, :especie, :direccion, :municipio, :provincia, :codigo_postal, :tipo_produccion, :latitud, :longitud, :recevet_explotacion)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();
@@ -56,17 +56,18 @@ class Granja
     {
         $stmt = $this->db->prepare("
             UPDATE granjas SET
-                nombre          = :nombre,
-                codigo_rega     = :codigo_rega,
-                capacidad_max   = :capacidad_max,
-                especie         = :especie,
-                direccion       = :direccion,
-                municipio       = :municipio,
-                provincia       = :provincia,
-                codigo_postal   = :codigo_postal,
-                tipo_produccion = :tipo_produccion,
-                latitud         = :latitud,
-                longitud        = :longitud
+                nombre               = :nombre,
+                codigo_rega          = :codigo_rega,
+                capacidad_max        = :capacidad_max,
+                especie              = :especie,
+                direccion            = :direccion,
+                municipio            = :municipio,
+                provincia            = :provincia,
+                codigo_postal        = :codigo_postal,
+                tipo_produccion      = :tipo_produccion,
+                latitud              = :latitud,
+                longitud             = :longitud,
+                recevet_explotacion  = :recevet_explotacion
             WHERE id = :id AND usuario_id = :usuario_id
         ");
         $data['id'] = $id;

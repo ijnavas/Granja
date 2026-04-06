@@ -40,6 +40,7 @@ use App\Controllers\PerfilController;
 use App\Controllers\PesajeController;
 use App\Controllers\AlmacenController;
 use App\Controllers\EscaneoController;
+use App\Controllers\RecevtController;
 
 Session::start();
 
@@ -162,6 +163,11 @@ $router->post('/pesajes/{id}/eliminar',                     [PesajeController::c
 $router->get('/perfil',                                     [PerfilController::class, 'show']);
 $router->post('/perfil/info',                               [PerfilController::class, 'updateInfo']);
 $router->post('/perfil/password',                           [PerfilController::class, 'updatePassword']);
+$router->post('/perfil/recevet',                            [PerfilController::class, 'updateRecevet']);
+
+// Recevet
+$router->get('/recevet',                                    [RecevtController::class, 'index']);
+$router->post('/recevet/sincronizar',                       [RecevtController::class, 'sincronizar']);
 
 $router->get('/configuracion',                              [ConfigController::class, 'index']);
 $router->get('/configuracion/razas',                        [ConfigController::class, 'razas']);
