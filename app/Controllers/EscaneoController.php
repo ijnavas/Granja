@@ -85,11 +85,12 @@ class EscaneoController extends BaseController
 
         $uid    = Session::get('usuario_id');
         $fecha  = $this->postString('fecha') ?: date('Y-m-d');
-        $tipos  = $_POST['tipo']       ?? [];
-        $loteIds= $_POST['lote_id']    ?? [];
-        $cantidades = $_POST['cantidad'] ?? [];
-        $motivos    = $_POST['motivo']   ?? [];
-        $cuadraIds  = $_POST['cuadra_origen_id'] ?? [];
+        $tipos          = $_POST['tipo']              ?? [];
+        $loteIds        = $_POST['lote_id']           ?? [];
+        $cantidades     = $_POST['cantidad']          ?? [];
+        $motivos        = $_POST['motivo']            ?? [];
+        $cuadraIds      = $_POST['cuadra_origen_id']  ?? [];
+        $cuadraDestinoIds = $_POST['cuadra_destino_id'] ?? [];
 
         $registrados = 0;
         $errores     = [];
@@ -112,13 +113,15 @@ class EscaneoController extends BaseController
             }
             if ($cantidad <= 0 || !$tipo) continue;
 
+            $cuadraDestinoId = (int)($cuadraDestinoIds[$i] ?? 0) ?: null;
+
             $data = [
                 'tipo'              => $tipo,
                 'fecha'             => $fecha,
                 'lote_origen_id'    => $loteId,
                 'lote_destino_id'   => null,
                 'cuadra_origen_id'  => $cuadraId,
-                'cuadra_destino_id' => null,
+                'cuadra_destino_id' => $cuadraDestinoId,
                 'num_animales'      => $cantidad,
                 'peso_canal_kg'     => null,
                 'precio_eur'        => null,
@@ -128,22 +131,42 @@ class EscaneoController extends BaseController
             ];
 
             try {
-                // Aplicar efecto en lote/cuadras
                 $db = \App\Core\Database::getInstance();
-                $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")
-                   ->execute(['n' => $cantidad, 'id' => $loteId]);
-                if ($cuadraId) {
-                    $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
-                       ->execute(['n' => $cantidad, 'cid' => $cuadraId, 'lid' => $loteId]);
-                    $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
-                       ->execute(['cid' => $cuadraId, 'lid' => $loteId]);
-                }
-                // Cerrar lote si se queda vacío
-                $rest = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
-                $rest->execute(['id' => $loteId]);
-                if ((int)$rest->fetchColumn() <= 0) {
-                    $db->prepare("UPDATE lotes SET estado='cerrado', fecha_cierre=CURDATE() WHERE id=:id")
-                       ->execute(['id' => $loteId]);
+
+                if ($tipo === 'baja') {
+                    // Descuenta del lote
+                    $db->prepare("UPDATE lotes SET num_animales=GREATEST(0,num_animales-:n) WHERE id=:id")
+                       ->execute(['n' => $cantidad, 'id' => $loteId]);
+                    // Descuenta de la cuadra origen
+                    if ($cuadraId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                           ->execute(['n' => $cantidad, 'cid' => $cuadraId, 'lid' => $loteId]);
+                        $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                           ->execute(['cid' => $cuadraId, 'lid' => $loteId]);
+                    }
+                    // Cerrar lote si se queda vacío
+                    $rest = $db->prepare("SELECT num_animales FROM lotes WHERE id=:id");
+                    $rest->execute(['id' => $loteId]);
+                    if ((int)$rest->fetchColumn() <= 0) {
+                        $db->prepare("UPDATE lotes SET estado='cerrado', fecha_cierre=CURDATE() WHERE id=:id")
+                           ->execute(['id' => $loteId]);
+                    }
+
+                } elseif ($tipo === 'traslado_cuadra') {
+                    // El total del lote no cambia, solo mueve entre cuadras
+                    if ($cuadraId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales=GREATEST(0,num_animales-:n) WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1")
+                           ->execute(['n' => $cantidad, 'cid' => $cuadraId, 'lid' => $loteId]);
+                        $db->prepare("UPDATE cuadra_lote SET activo=0 WHERE cuadra_id=:cid AND lote_id=:lid AND num_animales=0")
+                           ->execute(['cid' => $cuadraId, 'lid' => $loteId]);
+                    }
+                    if ($cuadraDestinoId) {
+                        // Upsert en cuadra destino
+                        $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, activo)
+                                      VALUES (:cid, :lid, :n, 1)
+                                      ON DUPLICATE KEY UPDATE num_animales=num_animales+:n2, activo=1")
+                           ->execute(['cid' => $cuadraDestinoId, 'lid' => $loteId, 'n' => $cantidad, 'n2' => $cantidad]);
+                    }
                 }
 
                 $movModel->create($data, $uid);

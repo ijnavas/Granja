@@ -158,8 +158,9 @@ foreach ($lotes as $l) {
                     <th style="padding:.4rem .75rem;text-align:center;width:36px">✓</th>
                     <th style="padding:.4rem .75rem">Lote leído</th>
                     <th style="padding:.4rem .75rem">Lote sistema</th>
-                    <th style="padding:.4rem .75rem;text-align:right;width:70px">Cant.</th>
-                    <th style="padding:.4rem .75rem">Origen → Destino</th>
+                    <th style="padding:.4rem .75rem;text-align:right;width:65px">Cant.</th>
+                    <th style="padding:.4rem .75rem">Cuadra origen</th>
+                    <th style="padding:.4rem .75rem">Cuadra destino</th>
                 </tr>
             </thead>
             <tbody>
@@ -173,7 +174,14 @@ foreach ($lotes as $l) {
                     <input type="hidden" name="tipo[<?= $idx ?>]" value="traslado_cuadra">
                     <input type="hidden" name="motivo[<?= $idx ?>]" value="">
                 </td>
-                <td style="padding:.4rem .75rem;font-family:monospace;color:#6b7280"><?= e((string)($t['lote'] ?? '—')) ?></td>
+                <td style="padding:.4rem .75rem;font-family:monospace;color:#6b7280">
+                    <?= e((string)($t['lote'] ?? '—')) ?>
+                    <?php if (!empty($t['origen']) || !empty($t['destino'])): ?>
+                        <div style="font-size:.72rem;color:#9ca3af">
+                            <?= e((string)($t['origen'] ?? '')) ?> → <?= e((string)($t['destino'] ?? '')) ?>
+                        </div>
+                    <?php endif; ?>
+                </td>
                 <td style="padding:.4rem .75rem">
                     <select name="lote_id[<?= $idx ?>]" id="lote-<?= $idx ?>"
                             onchange="onLoteCambio(<?= $idx ?>)"
@@ -193,11 +201,22 @@ foreach ($lotes as $l) {
                     <input type="number" name="cantidad[<?= $idx ?>]" id="cant-<?= $idx ?>"
                            value="<?= (int)($t['cantidad'] ?? 0) ?>"
                            min="1"
-                           style="width:65px;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.85rem;text-align:right">
+                           style="width:65px;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.85rem;text-align:right"
+                           oninput="validarCantidad(<?= $idx ?>)">
                 </td>
-                <td style="padding:.4rem .75rem;font-size:.78rem;color:#6b7280">
-                    <?= e((string)($t['origen'] ?? '')) ?> → <?= e((string)($t['destino'] ?? '')) ?>
-                    <input type="hidden" name="cuadra_origen_id[<?= $idx ?>]" value="">
+                <td style="padding:.4rem .75rem">
+                    <select name="cuadra_origen_id[<?= $idx ?>]" id="cuadra-<?= $idx ?>"
+                            onchange="validarCantidad(<?= $idx ?>)"
+                            style="font-size:.82rem;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;width:100%">
+                        <option value="">— Cargando —</option>
+                    </select>
+                </td>
+                <td style="padding:.4rem .75rem">
+                    <select name="cuadra_destino_id[<?= $idx ?>]" id="cuadra-destino-<?= $idx ?>"
+                            data-texto-leido="<?= e((string)($t['destino'] ?? '')) ?>"
+                            style="font-size:.82rem;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;width:100%">
+                        <option value="">— Cargando —</option>
+                    </select>
                 </td>
             </tr>
             <?php endforeach; ?>
@@ -223,29 +242,70 @@ foreach ($lotes as $l) {
 const LOTES_DATA = <?= json_encode($lotesJs, JSON_UNESCAPED_UNICODE) ?>;
 const BASE_URL   = '<?= base_url('') ?>';
 
+// Cache de todas las cuadras (para destino de traslados)
+let _todasCuadras = null;
+function getTodasCuadras() {
+    if (_todasCuadras) return Promise.resolve(_todasCuadras);
+    return fetch(BASE_URL + 'movimientos/todas-cuadras')
+        .then(r => r.json())
+        .then(data => { _todasCuadras = data; return data; });
+}
+
+// Normaliza texto para comparar (quita espacios, puntos, guiones, minúsculas)
+function normalizar(s) {
+    return (s || '').toLowerCase().replace(/[\s.\-]/g, '');
+}
+
+// Rellena un <select> con cuadras y pre-selecciona la que coincida con textoLeido
+function rellenarCuadras(sel, cuadras, textoLeido, placeholder) {
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">' + placeholder + '</option>';
+    const norm = normalizar(textoLeido);
+    let sugerida = null;
+    cuadras.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        const info = c.num_animales > 0 ? ' (' + c.num_animales + ')' : '';
+        opt.textContent = c.nombre + ' · ' + c.nave_nombre + info;
+        opt.dataset.animales = c.num_animales;
+        sel.appendChild(opt);
+        if (norm && normalizar(c.nombre).includes(norm)) sugerida = c.id;
+    });
+    // Restaurar selección previa o sugerir
+    if (prev && [...sel.options].some(o => o.value === prev)) {
+        sel.value = prev;
+    } else if (sugerida) {
+        sel.value = sugerida;
+    }
+}
+
 // Cargar cuadras cuando cambia el lote
 function onLoteCambio(idx) {
-    const loteId = document.getElementById('lote-' + idx)?.value || '';
-    const sel    = document.getElementById('cuadra-' + idx);
-    if (!sel) return;
+    const loteId   = document.getElementById('lote-' + idx)?.value || '';
+    const selOrigen  = document.getElementById('cuadra-' + idx);
+    const selDestino = document.getElementById('cuadra-destino-' + idx);
 
-    // Resetear
-    sel.innerHTML = '<option value="">— Todas —</option>';
+    // Cargar cuadras origen (solo las del lote)
+    if (selOrigen) {
+        selOrigen.innerHTML = '<option value="">— Todas —</option>';
+        if (loteId) {
+            fetch(BASE_URL + 'movimientos/cuadras-lote?lote_id=' + loteId)
+                .then(r => r.json())
+                .then(cuadras => {
+                    rellenarCuadras(selOrigen, cuadras, selOrigen.dataset.textoLeido || '', '— Todas —');
+                    validarCantidad(idx);
+                });
+        }
+    }
 
-    if (!loteId) return;
-
-    fetch(BASE_URL + 'movimientos/cuadras-lote?lote_id=' + loteId)
-        .then(r => r.json())
-        .then(cuadras => {
-            cuadras.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = c.nombre + ' · ' + c.nave_nombre + ' (' + c.num_animales + ')';
-                opt.dataset.animales = c.num_animales;
-                sel.appendChild(opt);
-            });
-        })
-        .catch(() => {});
+    // Cargar cuadras destino (todas las del sistema)
+    if (selDestino) {
+        selDestino.innerHTML = '<option value="">— Selecciona —</option>';
+        const textoDestino = selDestino.dataset.textoLeido || '';
+        getTodasCuadras().then(cuadras => {
+            rellenarCuadras(selDestino, cuadras, textoDestino, '— Selecciona —');
+        });
+    }
 
     validarCantidad(idx);
 }
@@ -257,13 +317,11 @@ function validarCantidad(idx) {
     const cuadSel = document.getElementById('cuadra-' + idx);
     if (!loteEl || !cantEl) return;
 
-    const loteId  = loteEl.value;
+    const loteId   = loteEl.value;
     const loteData = LOTES_DATA[loteId];
     if (!loteData) { cantEl.max = ''; cantEl.style.borderColor = '#d1d5db'; return; }
 
     let maxAnimales = loteData.num_animales;
-
-    // Si hay cuadra seleccionada, limitar por la cuadra
     if (cuadSel && cuadSel.value) {
         const optCuadra = cuadSel.options[cuadSel.selectedIndex];
         const cuadAnim = parseInt(optCuadra.dataset.animales || '0');
@@ -283,47 +341,43 @@ function validarFormulario() {
 
     checks.forEach(chk => {
         if (!chk.checked) return;
-        const idx  = chk.name.match(/\[(\d+)\]/)[1];
+        const idx     = chk.name.match(/\[(\d+)\]/)[1];
         const loteEl  = document.getElementById('lote-' + idx);
         const cantEl  = document.getElementById('cant-' + idx);
         const cuadSel = document.getElementById('cuadra-' + idx);
+        const filaNum = parseInt(idx) + 1;
 
         if (!loteEl || !loteEl.value) {
-            errores.push('Fila ' + (parseInt(idx) + 1) + ': selecciona el lote en el desplegable.');
+            errores.push('Fila ' + filaNum + ': selecciona el lote en el desplegable.');
             return;
         }
 
         const loteData = LOTES_DATA[loteEl.value];
-        const filaNum  = parseInt(idx) + 1;
 
-        // Validar fecha: el lote debe estar dado de alta en esa fecha
+        // Validar fecha >= fecha_entrada del lote
         if (loteData && loteData.fecha_entrada && fechaVal) {
             if (fechaVal < loteData.fecha_entrada) {
-                const loteCod = loteData.codigo || ('lote ' + loteEl.value);
-                errores.push('Fila ' + filaNum + ': la fecha ' + fechaVal + ' es anterior a la entrada del lote ' + loteCod + ' (' + loteData.fecha_entrada + ').');
+                errores.push('Fila ' + filaNum + ': la fecha ' + fechaVal + ' es anterior a la entrada del lote '
+                    + loteData.codigo + ' (' + loteData.fecha_entrada + ').');
             }
         }
 
-        // Validar cantidad vs lote
+        // Validar cantidad
         if (loteData && cantEl) {
             const cant = parseInt(cantEl.value || '0');
-            let max    = loteData.num_animales;
-
-            if (cuadSel && cuadSel.value) {
-                const opt = cuadSel.options[cuadSel.selectedIndex];
-                const cuadAnim = parseInt(opt.dataset.animales || '0');
-                if (cuadAnim > 0) {
-                    max = Math.min(max, cuadAnim);
-                    if (cant > cuadAnim) {
-                        errores.push('Fila ' + filaNum + ': la cantidad (' + cant + ') supera los animales de la cuadra (' + cuadAnim + ').');
-                    }
-                }
-            }
-            if (cant > loteData.num_animales) {
-                errores.push('Fila ' + filaNum + ': la cantidad (' + cant + ') supera los animales del lote (' + loteData.num_animales + ').');
-            }
             if (cant <= 0) {
                 errores.push('Fila ' + filaNum + ': la cantidad debe ser mayor que 0.');
+            } else {
+                if (cant > loteData.num_animales) {
+                    errores.push('Fila ' + filaNum + ': la cantidad (' + cant + ') supera los animales del lote (' + loteData.num_animales + ').');
+                }
+                if (cuadSel && cuadSel.value) {
+                    const opt = cuadSel.options[cuadSel.selectedIndex];
+                    const cuadAnim = parseInt(opt.dataset.animales || '0');
+                    if (cuadAnim > 0 && cant > cuadAnim) {
+                        errores.push('Fila ' + filaNum + ': la cantidad (' + cant + ') supera los animales de la cuadra origen (' + cuadAnim + ').');
+                    }
+                }
             }
         }
     });

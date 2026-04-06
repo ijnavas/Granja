@@ -266,6 +266,27 @@ class MovimientoController extends BaseController
         echo json_encode($stmt->fetchAll(\PDO::FETCH_ASSOC));
     }
 
+    public function todasLasCuadras(): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $uid = \App\Core\Session::get('usuario_id');
+
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT c.id, c.nombre, n.nombre AS nave_nombre,
+                   COALESCE(SUM(CASE WHEN cl.activo=1 THEN cl.num_animales ELSE 0 END), 0) AS num_animales
+            FROM cuadras c
+            JOIN naves n   ON c.nave_id = n.id
+            JOIN granjas g ON n.granja_id = g.id
+            LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id
+            WHERE g.usuario_id = :uid
+            GROUP BY c.id, c.nombre, n.nombre
+            ORDER BY n.nombre, c.nombre
+        ");
+        $stmt->execute(['uid' => $uid]);
+        echo json_encode($stmt->fetchAll(\PDO::FETCH_ASSOC));
+    }
+
     public function lotesPorCuadra(): void
     {
         auth_required();
