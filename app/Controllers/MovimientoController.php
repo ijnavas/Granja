@@ -46,7 +46,8 @@ class MovimientoController extends BaseController
         $tipo = $_GET['tipo'] ?? 'traslado_cuadra';
 
         // Recuperar datos anteriores si hubo error de validación
-        $old = Session::getFlash('old') ?? null;
+        $old = $_SESSION['_old_input'] ?? null;
+        unset($_SESSION['_old_input']);
         $oldNaveOrigen  = null;
         $oldNaveDestino = null;
         if ($old) {
@@ -123,7 +124,7 @@ class MovimientoController extends BaseController
             $this->aplicarMovimiento($tipo, $data, $uid);
         } catch (\Exception $e) {
             Session::flash('error', $e->getMessage());
-            Session::flash('old', $_POST);   // conservar datos del formulario
+            $_SESSION['_old_input'] = $_POST;   // conservar datos del formulario
             $this->redirect('movimientos/crear?tipo=' . $tipo);
         }
 

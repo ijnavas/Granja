@@ -70,10 +70,14 @@ class InventarioController extends BaseController
             $this->redirect('inventarios/crear');
         }
 
+        // Columnas reales de inventario_lineas (excluir claves de preview)
+        $colsPermitidas = ['lote_id','cuadra_id','nave_id','granja_id','estado_animal',
+                           'num_animales','peso_kg','peso_total_kg','coste_eur','valor_total_eur','semana_tabla'];
+
         $id = $this->model->create($uid, $fecha, $nombre, $tipo);
         foreach ($lineas as $l) {
-            // Quitar claves de preview (_*)
-            $linea = array_filter($l, fn($k) => !str_starts_with($k, '_'), ARRAY_FILTER_USE_KEY);
+            // Quitar claves de preview (_* y campos auxiliares no almacenados)
+            $linea = array_intersect_key($l, array_flip($colsPermitidas));
             $this->model->insertLinea($id, $linea);
         }
 
