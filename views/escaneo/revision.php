@@ -310,6 +310,7 @@ foreach ($lotes as $l) {
                     <th style="padding:.4rem .75rem;text-align:center;width:36px">✓</th>
                     <th style="padding:.4rem .75rem">Silo leído</th>
                     <th style="padding:.4rem .75rem">Silo sistema</th>
+                    <th style="padding:.4rem .75rem">Tipo pienso</th>
                     <th style="padding:.4rem .75rem;text-align:right;width:100px">Cantidad (kg)</th>
                     <th style="padding:.4rem .75rem">Proveedor</th>
                     <th style="padding:.4rem .75rem">Albarán</th>
@@ -343,6 +344,12 @@ foreach ($lotes as $l) {
                         </option>
                         <?php endforeach; ?>
                     </select>
+                </td>
+                <td style="padding:.4rem .75rem">
+                    <input type="text" name="tipo_pienso_s[<?= $k ?>]"
+                           value="<?= e((string)($rs['tipo_pienso'] ?? '')) ?>"
+                           placeholder="Tipo de pienso…"
+                           style="width:100%;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.82rem">
                 </td>
                 <td style="padding:.4rem .75rem;text-align:right">
                     <input type="number" name="cantidad_kg[<?= $k ?>]"
