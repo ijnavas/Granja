@@ -34,7 +34,7 @@ class Usuario
     public function findById(int $id): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT id, nombre, apellidos, email, movil, email_pedidos, recevet_usuario, recevet_password_enc, activo, created_at FROM usuarios WHERE id = :id LIMIT 1'
+            'SELECT * FROM usuarios WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
