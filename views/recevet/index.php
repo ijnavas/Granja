@@ -13,6 +13,26 @@
     <div class="alert-flash alert-error"><?= e($error) ?></div>
 <?php endif; ?>
 
+<?php
+// Aviso de requisitos faltantes
+$req = $requisitos ?? [];
+$faltantes = [];
+if (!($req['curl']    ?? true)) $faltantes[] = 'cURL (necesario para conectar con recevet.es)';
+if (!($req['openssl'] ?? true)) $faltantes[] = 'OpenSSL (necesario para cifrar la contraseña)';
+if (!($req['dom']     ?? true)) $faltantes[] = 'DOM (necesario para procesar el HTML de recevet.es)';
+?>
+<?php if (!empty($faltantes)): ?>
+<div class="alert-flash alert-error" style="margin-bottom:1rem">
+    <strong>Extensiones PHP no disponibles en este servidor:</strong>
+    <ul style="margin:.4rem 0 0 1.2rem;padding:0">
+        <?php foreach ($faltantes as $f): ?>
+        <li><?= e($f) ?></li>
+        <?php endforeach; ?>
+    </ul>
+    Contacta con tu hosting para habilitarlas.
+</div>
+<?php endif; ?>
+
 <!-- Estado de configuración -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem">
 
