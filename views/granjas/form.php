@@ -43,6 +43,16 @@ $tieneCoords = !empty($granja['latitud']) && !empty($granja['longitud']);
                 </div>
             </div>
 
+            <div class="form-group" style="max-width:320px">
+                <label>Código explotación Recevet</label>
+                <input type="text" name="recevet_explotacion"
+                       value="<?= e($granja['recevet_explotacion'] ?? '') ?>"
+                       placeholder="ES410040000003"
+                       maxlength="30"
+                       style="font-family:monospace">
+                <span class="form-hint">Código de la explotación tal como aparece en <a href="https://www.recevet.es" target="_blank">recevet.es</a> (Libro de Tratamientos).</span>
+            </div>
+
             <div class="form-grid form-grid-2">
                 <div class="form-group">
                     <label>Especie principal *</label>

@@ -57,18 +57,19 @@ class GranjaController extends BaseController
             $this->redirect('granjas/crear');
         }
         $this->model->create([
-            'usuario_id'      => Session::get('usuario_id'),
-            'nombre'          => $nombre,
-            'codigo_rega'     => $this->postString('codigo_rega'),
-            'capacidad_max'   => $this->post('capacidad_max') ? (int)$this->post('capacidad_max') : null,
-            'especie'         => $this->postString('especie') ?: null,
-            'direccion'       => capitalizar($this->postString('direccion')),
-            'municipio'       => capitalizar($this->postString('municipio')),
-            'provincia'       => capitalizar($this->postString('provincia')),
-            'codigo_postal'   => $this->postString('codigo_postal'),
-            'tipo_produccion' => $this->postString('tipo_produccion'),
-            'latitud'         => $this->post('latitud')  ? (float)$this->post('latitud')  : null,
-            'longitud'        => $this->post('longitud') ? (float)$this->post('longitud') : null,
+            'usuario_id'           => Session::get('usuario_id'),
+            'nombre'               => $nombre,
+            'codigo_rega'          => $this->postString('codigo_rega'),
+            'capacidad_max'        => $this->post('capacidad_max') ? (int)$this->post('capacidad_max') : null,
+            'especie'              => $this->postString('especie') ?: null,
+            'direccion'            => capitalizar($this->postString('direccion')),
+            'municipio'            => capitalizar($this->postString('municipio')),
+            'provincia'            => capitalizar($this->postString('provincia')),
+            'codigo_postal'        => $this->postString('codigo_postal'),
+            'tipo_produccion'      => $this->postString('tipo_produccion'),
+            'latitud'              => $this->post('latitud')  ? (float)$this->post('latitud')  : null,
+            'longitud'             => $this->post('longitud') ? (float)$this->post('longitud') : null,
+            'recevet_explotacion'  => $this->postString('recevet_explotacion') ?: null,
         ]);
         Session::flash('success', 'Granja creada correctamente.');
         $this->redirect('granjas');
@@ -99,17 +100,18 @@ class GranjaController extends BaseController
             $this->redirect("granjas/{$id}/editar");
         }
         $this->model->update((int)$id, Session::get('usuario_id'), [
-            'nombre'          => $nombre,
-            'codigo_rega'     => $this->postString('codigo_rega'),
-            'capacidad_max'   => $this->post('capacidad_max') ? (int)$this->post('capacidad_max') : null,
-            'especie'         => $this->postString('especie') ?: null,
-            'direccion'       => capitalizar($this->postString('direccion')),
-            'municipio'       => capitalizar($this->postString('municipio')),
-            'provincia'       => capitalizar($this->postString('provincia')),
-            'codigo_postal'   => $this->postString('codigo_postal'),
-            'tipo_produccion' => $this->postString('tipo_produccion'),
-            'latitud'         => $this->post('latitud')  ? (float)$this->post('latitud')  : null,
-            'longitud'        => $this->post('longitud') ? (float)$this->post('longitud') : null,
+            'nombre'               => $nombre,
+            'codigo_rega'          => $this->postString('codigo_rega'),
+            'capacidad_max'        => $this->post('capacidad_max') ? (int)$this->post('capacidad_max') : null,
+            'especie'              => $this->postString('especie') ?: null,
+            'direccion'            => capitalizar($this->postString('direccion')),
+            'municipio'            => capitalizar($this->postString('municipio')),
+            'provincia'            => capitalizar($this->postString('provincia')),
+            'codigo_postal'        => $this->postString('codigo_postal'),
+            'tipo_produccion'      => $this->postString('tipo_produccion'),
+            'latitud'              => $this->post('latitud')  ? (float)$this->post('latitud')  : null,
+            'longitud'             => $this->post('longitud') ? (float)$this->post('longitud') : null,
+            'recevet_explotacion'  => $this->postString('recevet_explotacion') ?: null,
         ]);
         Session::flash('success', 'Granja actualizada correctamente.');
         $this->redirect("granjas/{$id}");

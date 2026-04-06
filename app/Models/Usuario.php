@@ -34,11 +34,18 @@ class Usuario
     public function findById(int $id): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT id, nombre, apellidos, email, movil, email_pedidos, activo, created_at FROM usuarios WHERE id = :id LIMIT 1'
+            'SELECT id, nombre, apellidos, email, movil, email_pedidos, recevet_usuario, recevet_password_enc, activo, created_at FROM usuarios WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
         return $row ?: null;
+    }
+
+    public function updateRecevet(int $id, string $usuario, ?string $passwordEnc): void
+    {
+        $this->db->prepare(
+            'UPDATE usuarios SET recevet_usuario = :usuario, recevet_password_enc = :password_enc WHERE id = :id'
+        )->execute(['usuario' => $usuario, 'password_enc' => $passwordEnc, 'id' => $id]);
     }
 
     public function updateEmailPedidos(int $id, string $email): void

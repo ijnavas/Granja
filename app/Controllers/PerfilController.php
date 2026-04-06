@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Usuario;
+use App\Services\RecevtService;
 use App\Core\Session;
 
 class PerfilController extends BaseController
@@ -113,6 +114,37 @@ class PerfilController extends BaseController
         }
 
         Session::flash('success', 'Contraseña cambiada correctamente.');
+        $this->redirect('perfil');
+    }
+
+    public function updateRecevet(): void
+    {
+        auth_required();
+        $uid = Session::get('usuario_id');
+
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('perfil');
+        }
+
+        $recevtUsuario  = trim($this->postString('recevet_usuario'));
+        $recevtPassword = $this->postString('recevet_password');
+
+        if (empty($recevtUsuario)) {
+            Session::flash('error', 'El usuario de Recevet no puede estar vacío.');
+            $this->redirect('perfil');
+        }
+
+        $user        = $this->model->findById($uid);
+        $passwordEnc = $user['recevet_password_enc'] ?? null; // Mantener la anterior si no se cambia
+
+        if (!empty($recevtPassword)) {
+            $passwordEnc = RecevtService::encryptPassword($recevtPassword);
+        }
+
+        $this->model->updateRecevet($uid, $recevtUsuario, $passwordEnc);
+
+        Session::flash('success', 'Credenciales de Recevet guardadas correctamente.');
         $this->redirect('perfil');
     }
 }
