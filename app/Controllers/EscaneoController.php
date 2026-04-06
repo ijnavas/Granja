@@ -5,6 +5,8 @@ namespace App\Controllers;
 
 use App\Helpers\ClaudeVision;
 use App\Models\Lote;
+use App\Models\Pesaje;
+use App\Models\Silo;
 use App\Core\Session;
 
 class EscaneoController extends BaseController
@@ -62,15 +64,17 @@ class EscaneoController extends BaseController
             $this->redirect('escaneo');
         }
 
-        // Cargar lotes para el formulario de revisión
+        // Cargar lotes y silos para el formulario de revisión
         $uid   = Session::get('usuario_id');
         $lotes = (new Lote())->allByUsuario($uid);
+        $silos = (new Silo())->allByUsuario($uid);
 
         $this->view('escaneo/revision', [
             'pageTitle' => 'Revisar datos escaneados',
             'datos'     => $datos,
             'imagen'    => 'uploads/escaneos/' . $filename,
             'lotes'     => $lotes,
+            'silos'     => $silos,
             'error'     => Session::getFlash('error'),
         ]);
     }
@@ -176,10 +180,73 @@ class EscaneoController extends BaseController
             }
         }
 
-        if ($registrados > 0) {
-            Session::flash('success', "{$registrados} movimiento(s) registrado(s) correctamente.");
+        // ── Pesajes ──────────────────────────────────────────────
+        $pesajeModel    = new Pesaje();
+        $loteIdsPesaje  = $_POST['lote_id_p']   ?? [];
+        $cuadraIdsPesaje= $_POST['cuadra_id_p'] ?? [];
+        $pesosKg        = $_POST['peso_kg']      ?? [];
+        $numAnimalesPes = $_POST['num_anim_p']   ?? [];
+        $pesajesGuardados = 0;
+
+        foreach ($loteIdsPesaje as $j => $loteId) {
+            if (!isset($_POST['confirmar_p'][$j])) continue;
+            $loteId  = (int)$loteId;
+            $pesoKg  = (float)str_replace(',', '.', $pesosKg[$j] ?? '0');
+            $numAnim = (int)($numAnimalesPesaje[$j] ?? 0);
+            $cuadraId = (int)($cuadraIdsPesaje[$j] ?? 0) ?: null;
+            if (!$loteId || $pesoKg <= 0) continue;
+            try {
+                $pesajeModel->create([
+                    'lote_id'              => $loteId,
+                    'cuadra_id'            => $cuadraId,
+                    'fecha'                => $fecha,
+                    'peso_medio_kg'        => $pesoKg,
+                    'num_animales_pesados'  => $numAnim ?: 0,
+                    'consumo_pienso_kg'    => null,
+                    'ic_real'              => null,
+                    'observaciones'        => 'Registrado desde escaneo',
+                    'usuario_id'           => $uid,
+                ]);
+                $pesajesGuardados++;
+            } catch (\Exception $e) {
+                $errores[] = "Pesaje fila {$j}: " . $e->getMessage();
+            }
+        }
+
+        // ── Recargas de silo ─────────────────────────────────────
+        $siloModel     = new Silo();
+        $siloIds       = $_POST['silo_id']     ?? [];
+        $cantidadesKg  = $_POST['cantidad_kg'] ?? [];
+        $proveedores   = $_POST['proveedor_s'] ?? [];
+        $albaranes     = $_POST['albaran_s']   ?? [];
+        $silosGuardados = 0;
+
+        foreach ($siloIds as $k => $siloId) {
+            if (!isset($_POST['confirmar_s'][$k])) continue;
+            $siloId   = (int)$siloId;
+            $cantKg   = (float)str_replace(',', '.', $cantidadesKg[$k] ?? '0');
+            $proveedor = trim($proveedores[$k] ?? '') ?: null;
+            $albaran   = trim($albaranes[$k]   ?? '') ?: null;
+            if (!$siloId || $cantKg <= 0) continue;
+            $obs = $albaran ? "Albarán: {$albaran}" : null;
+            try {
+                $siloModel->addRecarga($siloId, $cantKg, $fecha, $proveedor, $obs, $uid);
+                $silosGuardados++;
+            } catch (\Exception $e) {
+                $errores[] = "Silo fila {$k}: " . $e->getMessage();
+            }
+        }
+
+        // ── Resumen ───────────────────────────────────────────────
+        $partes = [];
+        if ($registrados)     $partes[] = "{$registrados} movimiento(s)";
+        if ($pesajesGuardados) $partes[] = "{$pesajesGuardados} pesaje(s)";
+        if ($silosGuardados)  $partes[] = "{$silosGuardados} recarga(s) de silo";
+
+        if (!empty($partes)) {
+            Session::flash('success', implode(', ', $partes) . ' registrado(s) correctamente.');
         } elseif (empty($errores)) {
-            Session::flash('error', 'No se procesó ningún movimiento. Asegúrate de seleccionar el lote en el desplegable.');
+            Session::flash('error', 'No se procesó nada. Asegúrate de seleccionar los desplegables.');
         }
         if (!empty($errores)) {
             Session::flash('error', implode(' | ', $errores));

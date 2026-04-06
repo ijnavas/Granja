@@ -112,8 +112,8 @@ class Pesaje
     public function create(array $data): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO pesajes (lote_id, fecha, peso_medio_kg, num_animales_pesados, consumo_pienso_kg, ic_real, observaciones, usuario_id)
-            VALUES (:lote_id, :fecha, :peso_medio_kg, :num_animales_pesados, :consumo_pienso_kg, :ic_real, :observaciones, :usuario_id)
+            INSERT INTO pesajes (lote_id, cuadra_id, fecha, peso_medio_kg, num_animales_pesados, consumo_pienso_kg, ic_real, observaciones, usuario_id)
+            VALUES (:lote_id, :cuadra_id, :fecha, :peso_medio_kg, :num_animales_pesados, :consumo_pienso_kg, :ic_real, :observaciones, :usuario_id)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();

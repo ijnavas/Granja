@@ -1,7 +1,10 @@
 <?php
-$bajas     = $datos['bajas']     ?? [];
-$traslados = $datos['traslados'] ?? [];
-$fecha     = $datos['fecha']     ?? date('Y-m-d');
+$bajas             = $datos['bajas']             ?? [];
+$traslados         = $datos['traslados']         ?? [];
+$pesajes           = $datos['pesajes']           ?? [];
+$reposicionesSilo  = $datos['reposiciones_silo'] ?? [];
+$fecha             = $datos['fecha']             ?? date('Y-m-d');
+$silos             = $silos ?? [];
 
 // Mapas de búsqueda para sugerir lote por código
 $lotesPorCodigo = [];
@@ -226,11 +229,151 @@ foreach ($lotes as $l) {
     </div>
     <?php endif; ?>
 
-    <?php if (empty($bajas) && empty($traslados)): ?>
-    <div class="alert-flash alert-error">No se detectaron movimientos en la imagen. Prueba con una foto más nítida.</div>
+    <?php if (!empty($pesajes)): ?>
+    <div class="list-card" style="margin-bottom:1.25rem">
+        <div style="padding:.75rem 1rem;border-bottom:1px solid #e5e7eb;font-size:.75rem;font-weight:700;text-transform:uppercase;color:#6b7280">
+            Pesajes detectados
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+            <thead>
+                <tr style="background:#f9fafb;font-size:.72rem;text-transform:uppercase;color:#6b7280">
+                    <th style="padding:.4rem .75rem;text-align:center;width:36px">✓</th>
+                    <th style="padding:.4rem .75rem">Lote leído</th>
+                    <th style="padding:.4rem .75rem">Lote sistema</th>
+                    <th style="padding:.4rem .75rem">Cuadra</th>
+                    <th style="padding:.4rem .75rem;text-align:right;width:90px">Peso medio</th>
+                    <th style="padding:.4rem .75rem;text-align:right;width:80px">Nº pesados</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($pesajes as $j => $p):
+                $sugerido = sugerirLote((string)($p['lote'] ?? ''), $lotesPorCodigo);
+            ?>
+            <tr style="border-bottom:1px solid #f3f4f6">
+                <td style="padding:.4rem .75rem;text-align:center">
+                    <input type="checkbox" name="confirmar_p[<?= $j ?>]" value="1" checked>
+                </td>
+                <td style="padding:.4rem .75rem;font-family:monospace;color:#6b7280">
+                    <?= e((string)($p['lote'] ?? '—')) ?>
+                    <?php if (!empty($p['cuadra'])): ?>
+                        <div style="font-size:.72rem;color:#9ca3af"><?= e($p['cuadra']) ?></div>
+                    <?php endif; ?>
+                </td>
+                <td style="padding:.4rem .75rem">
+                    <select name="lote_id_p[<?= $j ?>]" id="lote-p-<?= $j ?>"
+                            onchange="onLotePesajeCambio(<?= $j ?>)"
+                            style="font-size:.82rem;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;width:100%">
+                        <option value="">— Selecciona —</option>
+                        <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
+                        <option value="<?= $l['id'] ?>"
+                                <?= $sugerido && $sugerido['id'] == $l['id'] ? 'selected' : '' ?>>
+                            <?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?>)
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </td>
+                <td style="padding:.4rem .75rem">
+                    <select name="cuadra_id_p[<?= $j ?>]" id="cuadra-p-<?= $j ?>"
+                            data-texto-leido="<?= e((string)($p['cuadra'] ?? '')) ?>"
+                            style="font-size:.82rem;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;width:100%">
+                        <option value="">— Todas —</option>
+                    </select>
+                </td>
+                <td style="padding:.4rem .75rem;text-align:right">
+                    <input type="number" name="peso_kg[<?= $j ?>]"
+                           value="<?= e((string)($p['peso_medio_kg'] ?? '')) ?>"
+                           min="0.1" step="0.001" required
+                           style="width:80px;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.85rem;text-align:right">
+                    <span style="font-size:.75rem;color:#9ca3af">kg</span>
+                </td>
+                <td style="padding:.4rem .75rem;text-align:right">
+                    <input type="number" name="num_anim_p[<?= $j ?>]"
+                           value="<?= (int)($p['num_animales'] ?? 0) ?>"
+                           min="0"
+                           style="width:65px;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.85rem;text-align:right">
+                </td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!empty($reposicionesSilo)): ?>
+    <div class="list-card" style="margin-bottom:1.25rem">
+        <div style="padding:.75rem 1rem;border-bottom:1px solid #e5e7eb;font-size:.75rem;font-weight:700;text-transform:uppercase;color:#6b7280">
+            Recargas de silo detectadas
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:.85rem">
+            <thead>
+                <tr style="background:#f9fafb;font-size:.72rem;text-transform:uppercase;color:#6b7280">
+                    <th style="padding:.4rem .75rem;text-align:center;width:36px">✓</th>
+                    <th style="padding:.4rem .75rem">Silo leído</th>
+                    <th style="padding:.4rem .75rem">Silo sistema</th>
+                    <th style="padding:.4rem .75rem;text-align:right;width:100px">Cantidad (kg)</th>
+                    <th style="padding:.4rem .75rem">Proveedor</th>
+                    <th style="padding:.4rem .75rem">Albarán</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($reposicionesSilo as $k => $rs):
+                // Sugerir silo por nombre/número
+                $siloLeido = strtolower(trim((string)($rs['silo'] ?? '')));
+                $siloSugerido = null;
+                foreach ($silos as $s) {
+                    if (strtolower(trim($s['nombre'])) === $siloLeido ||
+                        preg_match('/\d+/', $siloLeido, $mS) && preg_match('/\d+/', $s['nombre'], $mN) && $mS[0] === $mN[0]) {
+                        $siloSugerido = $s;
+                        break;
+                    }
+                }
+            ?>
+            <tr style="border-bottom:1px solid #f3f4f6">
+                <td style="padding:.4rem .75rem;text-align:center">
+                    <input type="checkbox" name="confirmar_s[<?= $k ?>]" value="1" checked>
+                </td>
+                <td style="padding:.4rem .75rem;color:#6b7280"><?= e((string)($rs['silo'] ?? '—')) ?></td>
+                <td style="padding:.4rem .75rem">
+                    <select name="silo_id[<?= $k ?>]"
+                            style="font-size:.82rem;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;width:100%">
+                        <option value="">— Selecciona —</option>
+                        <?php foreach ($silos as $s): ?>
+                        <option value="<?= $s['id'] ?>" <?= $siloSugerido && $siloSugerido['id'] == $s['id'] ? 'selected' : '' ?>>
+                            <?= e($s['nombre']) ?> (<?= e($s['granja_nombre']) ?>)
+                        </option>
+                        <?php endforeach; ?>
+                    </select>
+                </td>
+                <td style="padding:.4rem .75rem;text-align:right">
+                    <input type="number" name="cantidad_kg[<?= $k ?>]"
+                           value="<?= e((string)($rs['cantidad_kg'] ?? '')) ?>"
+                           min="1" step="0.01" required
+                           style="width:90px;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.85rem;text-align:right">
+                </td>
+                <td style="padding:.4rem .75rem">
+                    <input type="text" name="proveedor_s[<?= $k ?>]"
+                           value="<?= e((string)($rs['proveedor'] ?? '')) ?>"
+                           placeholder="Proveedor…"
+                           style="width:100%;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.82rem">
+                </td>
+                <td style="padding:.4rem .75rem">
+                    <input type="text" name="albaran_s[<?= $k ?>]"
+                           value="<?= e((string)($rs['albaran'] ?? '')) ?>"
+                           placeholder="Albarán…"
+                           style="width:100%;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;font-size:.82rem">
+                </td>
+            </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+    <?php endif; ?>
+
+    <?php if (empty($bajas) && empty($traslados) && empty($pesajes) && empty($reposicionesSilo)): ?>
+    <div class="alert-flash alert-error">No se detectaron datos en la imagen. Prueba con una foto más nítida.</div>
     <?php else: ?>
     <div class="form-actions">
-        <button type="submit" class="btn btn-primary" onclick="return validarFormulario()">Confirmar y registrar movimientos</button>
+        <button type="submit" class="btn btn-primary" onclick="return validarFormulario()">Confirmar y registrar</button>
         <a href="<?= base_url('escaneo') ?>" class="btn btn-secondary">Cancelar</a>
     </div>
     <?php endif; ?>
@@ -418,11 +561,28 @@ function validarFormulario() {
     return true;
 }
 
+// Cargar cuadras para pesajes cuando cambia el lote
+function onLotePesajeCambio(j) {
+    const loteId = document.getElementById('lote-p-' + j)?.value || '';
+    const sel    = document.getElementById('cuadra-p-' + j);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Todas —</option>';
+    if (!loteId) return;
+    const textoLeido = sel.dataset.textoLeido || '';
+    fetch(BASE_URL + 'movimientos/cuadras-lote?lote_id=' + loteId)
+        .then(r => r.json())
+        .then(cuadras => rellenarCuadras(sel, cuadras, textoLeido, '— Todas —'));
+}
+
 // Al cargar la página, inicializar cuadras para los lotes preseleccionados
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('select[id^="lote-"]').forEach(sel => {
         const idx = sel.id.replace('lote-', '');
         if (sel.value) onLoteCambio(parseInt(idx));
+    });
+    document.querySelectorAll('select[id^="lote-p-"]').forEach(sel => {
+        const j = sel.id.replace('lote-p-', '');
+        if (sel.value) onLotePesajeCambio(parseInt(j));
     });
 });
 </script>
