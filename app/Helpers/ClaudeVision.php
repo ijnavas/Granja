@@ -9,11 +9,8 @@ class ClaudeVision
 
     public function __construct()
     {
-        $configFile = ROOT_PATH . '/../config.local.php';
-        if (file_exists($configFile)) {
-            require_once $configFile;
-        }
-        $this->apiKey = defined('ANTHROPIC_API_KEY') ? ANTHROPIC_API_KEY : '';
+        $cfg = require ROOT_PATH . '/config.php';
+        $this->apiKey = $cfg['anthropic']['api_key'] ?? '';
     }
 
     /**
