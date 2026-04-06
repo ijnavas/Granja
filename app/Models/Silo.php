@@ -117,11 +117,84 @@ class Silo
         return $stmt->fetchAll();
     }
 
+    public function allRecargasUsuario(int $userId, array $filtros = []): array
+    {
+        $conditions = ['g.usuario_id = :uid'];
+        $params = ['uid' => $userId];
+
+        if (!empty($filtros['fecha_desde'])) {
+            $conditions[] = 'r.fecha >= :fecha_desde';
+            $params['fecha_desde'] = $filtros['fecha_desde'];
+        }
+        if (!empty($filtros['fecha_hasta'])) {
+            $conditions[] = 'r.fecha <= :fecha_hasta';
+            $params['fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        if (!empty($filtros['silo_id'])) {
+            $conditions[] = 'r.silo_id = :silo_id';
+            $params['silo_id'] = (int)$filtros['silo_id'];
+        }
+        if (!empty($filtros['tipo_pienso'])) {
+            $conditions[] = 'r.tipo_pienso LIKE :tipo_pienso';
+            $params['tipo_pienso'] = '%' . $filtros['tipo_pienso'] . '%';
+        }
+
+        $where = implode(' AND ', $conditions);
+        $stmt = $this->db->prepare("
+            SELECT r.*, s.nombre AS silo_nombre, g.nombre AS granja_nombre,
+                   u.nombre AS usuario_nombre
+            FROM silo_recargas r
+            JOIN silos s    ON r.silo_id = s.id
+            JOIN granjas g  ON s.granja_id = g.id
+            JOIN usuarios u ON r.usuario_id = u.id
+            WHERE {$where}
+            ORDER BY r.fecha DESC, r.id DESC
+            LIMIT 500
+        ");
+        foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+        $stmt->execute();
+        return $stmt->fetchAll();
+    }
+
+    public function findRecarga(int $recargaId): ?array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM silo_recargas WHERE id = :id");
+        $stmt->execute(['id' => $recargaId]);
+        return $stmt->fetch() ?: null;
+    }
+
+    public function updateRecarga(int $recargaId, array $data, float $cantidadAnterior, int $siloAnterior): void
+    {
+        $stmt = $this->db->prepare("
+            UPDATE silo_recargas
+            SET silo_id = :silo_id, fecha = :fecha, cantidad_kg = :cantidad_kg,
+                tipo_pienso = :tipo_pienso, proveedor = :proveedor,
+                albaran = :albaran, observaciones = :observaciones
+            WHERE id = :id
+        ");
+        $data['id'] = $recargaId;
+        $stmt->execute($data);
+
+        // Ajustar stocks
+        if ($siloAnterior === (int)$data['silo_id']) {
+            // Mismo silo: ajuste de diferencia
+            $ajuste = (float)$data['cantidad_kg'] - $cantidadAnterior;
+            $this->db->prepare("UPDATE silos SET stock_actual_kg = GREATEST(0, stock_actual_kg + :aj) WHERE id = :id")
+                ->execute(['aj' => $ajuste, 'id' => $data['silo_id']]);
+        } else {
+            // Silo cambió: revertir del anterior y sumar al nuevo
+            $this->db->prepare("UPDATE silos SET stock_actual_kg = GREATEST(0, stock_actual_kg - :kg) WHERE id = :id")
+                ->execute(['kg' => $cantidadAnterior, 'id' => $siloAnterior]);
+            $this->db->prepare("UPDATE silos SET stock_actual_kg = stock_actual_kg + :kg WHERE id = :id")
+                ->execute(['kg' => (float)$data['cantidad_kg'], 'id' => $data['silo_id']]);
+        }
+    }
+
     public function addRecarga(int $siloId, float $cantidadKg, string $fecha, ?string $proveedor, ?string $obs, int $userId, ?string $tipoPienso = null): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, observaciones, usuario_id)
-            VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :observaciones, :usuario_id)
+            INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, albaran, observaciones, usuario_id)
+            VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :albaran, :observaciones, :usuario_id)
         ");
         $stmt->execute([
             'silo_id'      => $siloId,
@@ -129,6 +202,7 @@ class Silo
             'cantidad_kg'  => $cantidadKg,
             'tipo_pienso'  => $tipoPienso,
             'proveedor'    => $proveedor,
+            'albaran'      => null,
             'observaciones'=> $obs,
             'usuario_id'   => $userId,
         ]);

@@ -19,8 +19,23 @@ class AlmacenController extends BaseController
     public function index(): void
     {
         auth_required();
-        $silos = $this->model->allByUsuario(Session::get('usuario_id'));
-        $this->view('almacen/index', ['silos' => $silos, 'pageTitle' => 'Almacén de pienso']);
+        $uid = Session::get('usuario_id');
+
+        $filtros = array_filter([
+            'fecha_desde' => trim($_GET['fecha_desde'] ?? ''),
+            'fecha_hasta' => trim($_GET['fecha_hasta'] ?? ''),
+            'silo_id'     => trim($_GET['silo_id']     ?? ''),
+            'tipo_pienso' => trim($_GET['tipo_pienso'] ?? ''),
+        ]);
+
+        $this->view('almacen/index', [
+            'silos'    => $this->model->allByUsuario($uid),
+            'recargas' => $this->model->allRecargasUsuario($uid, $filtros),
+            'filtros'  => $filtros,
+            'pageTitle' => 'Almacén de pienso',
+            'success'  => Session::getFlash('success'),
+            'error'    => Session::getFlash('error'),
+        ]);
     }
 
     public function show(string $id): void
@@ -55,19 +70,82 @@ class AlmacenController extends BaseController
         $silo = $this->model->find((int)$id, $uid);
         if (!$silo) $this->redirect('almacen');
 
-        $cantidad  = (float) $this->postString('cantidad_kg');
-        $fecha     = $this->postString('fecha') ?: date('Y-m-d');
-        $proveedor = $this->postString('proveedor') ?: null;
-        $obs       = $this->postString('observaciones') ?: null;
+        $cantidad   = (float) $this->postString('cantidad_kg');
+        $fecha      = $this->postString('fecha') ?: date('Y-m-d');
+        $tipoPienso = $this->postString('tipo_pienso') ?: null;
+        $proveedor  = $this->postString('proveedor') ?: null;
+        $obs        = $this->postString('observaciones') ?: null;
 
         if ($cantidad <= 0) {
             Session::flash('error', 'La cantidad debe ser mayor que 0.');
             $this->redirect("almacen/{$id}");
         }
 
-        $this->model->addRecarga((int)$id, $cantidad, $fecha, $proveedor, $obs, $uid);
+        $this->model->addRecarga((int)$id, $cantidad, $fecha, $proveedor, $obs, $uid, $tipoPienso);
         Session::flash('success', number_format($cantidad, 0) . ' kg añadidos al silo.');
         $this->redirect("almacen/{$id}");
+    }
+
+    public function editRecarga(string $recargaId): void
+    {
+        auth_required();
+        $uid     = Session::get('usuario_id');
+        $recarga = $this->model->findRecarga((int)$recargaId);
+        if (!$recarga) $this->redirect('almacen');
+
+        // Verificar que pertenece al usuario
+        $silo = $this->model->find((int)$recarga['silo_id'], $uid);
+        if (!$silo) $this->redirect('almacen');
+
+        $this->view('almacen/edit_recarga', [
+            'recarga'   => $recarga,
+            'silos'     => $this->model->allByUsuario($uid),
+            'pageTitle' => 'Editar recarga',
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function updateRecarga(string $recargaId): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('almacen');
+        }
+
+        $uid     = Session::get('usuario_id');
+        $recarga = $this->model->findRecarga((int)$recargaId);
+        if (!$recarga) $this->redirect('almacen');
+
+        $silo = $this->model->find((int)$recarga['silo_id'], $uid);
+        if (!$silo) $this->redirect('almacen');
+
+        $nuevoSiloId = (int)$this->post('silo_id');
+        // Verificar que el nuevo silo también pertenece al usuario
+        $nuevoSilo = $this->model->find($nuevoSiloId, $uid);
+        if (!$nuevoSilo) {
+            Session::flash('error', 'Silo no válido.');
+            $this->redirect("almacen/recargas/{$recargaId}/editar");
+        }
+
+        $cantidad = (float)str_replace(',', '.', $this->postString('cantidad_kg'));
+        if ($cantidad <= 0) {
+            Session::flash('error', 'La cantidad debe ser mayor que 0.');
+            $this->redirect("almacen/recargas/{$recargaId}/editar");
+        }
+
+        $this->model->updateRecarga((int)$recargaId, [
+            'silo_id'      => $nuevoSiloId,
+            'fecha'        => $this->postString('fecha') ?: date('Y-m-d'),
+            'cantidad_kg'  => $cantidad,
+            'tipo_pienso'  => $this->postString('tipo_pienso') ?: null,
+            'proveedor'    => $this->postString('proveedor') ?: null,
+            'albaran'      => $this->postString('albaran') ?: null,
+            'observaciones'=> $this->postString('observaciones') ?: null,
+        ], (float)$recarga['cantidad_kg'], (int)$recarga['silo_id']);
+
+        Session::flash('success', 'Recarga actualizada correctamente.');
+        $this->redirect('almacen');
     }
 
     public function deleteRecarga(string $id, string $recargaId): void
