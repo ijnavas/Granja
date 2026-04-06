@@ -123,7 +123,7 @@ class Nave
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
             WHERE c.nave_id = :nave_id AND c.activa = 1
             GROUP BY c.id
-            ORDER BY c.nombre
+            ORDER BY LENGTH(c.nombre), c.nombre
         ");
         $stmt->execute(['nave_id' => $naveId]);
         return $stmt->fetchAll();
