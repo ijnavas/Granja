@@ -103,10 +103,14 @@ class EscaneoController extends BaseController
             $tipo     = $tipos[$i] ?? '';
             $cuadraId = (int)($cuadraIds[$i] ?? 0) ?: null;
 
-            if (!$loteId || $cantidad <= 0 || !$tipo) continue;
-
             // Omitir si el checkbox de confirmar no está marcado
             if (!isset($_POST['confirmar'][$i])) continue;
+
+            if (!$loteId) {
+                $errores[] = "Fila " . ((int)$i + 1) . ": no se seleccionó ningún lote.";
+                continue;
+            }
+            if ($cantidad <= 0 || !$tipo) continue;
 
             $data = [
                 'tipo'              => $tipo,
@@ -151,9 +155,11 @@ class EscaneoController extends BaseController
 
         if ($registrados > 0) {
             Session::flash('success', "{$registrados} movimiento(s) registrado(s) correctamente.");
+        } elseif (empty($errores)) {
+            Session::flash('error', 'No se procesó ningún movimiento. Asegúrate de seleccionar el lote en el desplegable.');
         }
         if (!empty($errores)) {
-            Session::flash('error', implode(' / ', $errores));
+            Session::flash('error', implode(' | ', $errores));
         }
 
         $this->redirect('movimientos');

@@ -166,7 +166,7 @@ function sugerirLote(string $codigoLeido, array $lotesPorCodigo): ?array {
     <div class="alert-flash alert-error">No se detectaron movimientos en la imagen. Prueba con una foto más nítida.</div>
     <?php else: ?>
     <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Confirmar y registrar movimientos</button>
+        <button type="submit" class="btn btn-primary" onclick="return validarLotes()">Confirmar y registrar movimientos</button>
         <a href="<?= base_url('escaneo') ?>" class="btn btn-secondary">Cancelar</a>
     </div>
     <?php endif; ?>
@@ -174,3 +174,24 @@ function sugerirLote(string $codigoLeido, array $lotesPorCodigo): ?array {
 </form>
 </div>
 </div>
+
+<script>
+function validarLotes() {
+    // Verificar que cada fila confirmada tenga un lote seleccionado
+    const checks = document.querySelectorAll('input[name^="confirmar["]');
+    let errores = [];
+    checks.forEach(chk => {
+        if (!chk.checked) return;
+        const idx = chk.name.match(/\[(\d+)\]/)[1];
+        const sel = document.querySelector('select[name="lote_id[' + idx + ']"]');
+        if (sel && !sel.value) {
+            errores.push('Fila ' + (parseInt(idx) + 1) + ': selecciona el lote en el desplegable.');
+        }
+    });
+    if (errores.length > 0) {
+        alert('Por favor corrige lo siguiente:\n\n' + errores.join('\n'));
+        return false;
+    }
+    return true;
+}
+</script>
