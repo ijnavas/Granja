@@ -8,14 +8,10 @@
 <?php endif; ?>
 
 <div class="form-card" style="max-width:520px">
-    <div style="font-size:.875rem;color:#6b7280;margin-bottom:1.25rem">
-        Sube una foto del cuaderno de control diario. Claude analizará la imagen y extraerá automáticamente los movimientos, bajas y traslados para que los revises antes de confirmar.
-    </div>
-
     <form method="POST" action="<?= base_url('escaneo/analizar') ?>" enctype="multipart/form-data">
         <?= csrf_field() ?>
         <div class="form-group">
-            <label>Foto del cuaderno *</label>
+            <label>Sube el documento a analizar *</label>
             <input type="file" name="foto" accept="image/jpeg,image/png,image/webp" required
                    onchange="previewFoto(this)">
             <span class="form-hint">JPG, PNG o WEBP — máx. 10 MB</span>
