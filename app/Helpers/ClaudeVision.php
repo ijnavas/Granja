@@ -35,6 +35,7 @@ Analiza esta imagen de un cuaderno de control de granja porcina. Extrae todos lo
 El cuaderno tiene:
 - Fecha (arriba a la derecha, formato DD-MM-YY o DD-MM-YYYY)
 - Sección izquierda con columnas: LOTE | BAJAS | NAVE/CUADRA | y posible motivo escrito debajo
+  * Si en la columna LOTE aparece texto como "SIN BAJAS", "NO BAJAS", "0 BAJAS" o similar, significa que no hay bajas → devuelve bajas=[]
 - Sección derecha con columnas: LOTE | ORIGEN | DESTINO | CANTIDAD (traslados)
 - Sección inferior: PIENSO | NAVE/CUADRA
 
@@ -43,17 +44,17 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
   "fecha": "YYYY-MM-DD o null si no se ve",
   "bajas": [
     {
-      "lote": "código del lote, ej: 34",
+      "lote": "código numérico del lote, ej: 34",
       "cantidad": número,
       "nave_cuadra": "texto de nave/cuadra, ej: C7-74",
-      "motivo": "texto del motivo si aparece, ej: enfermedad, canibalismo, sacrificio, o null"
+      "motivo": "enfermedad, canibalismo, sacrificio, aplastamiento u otro según lo escrito, o null"
     }
   ],
   "traslados": [
     {
-      "lote": "código del lote",
-      "origen": "nave/cuadra origen",
-      "destino": "nave/cuadra destino",
+      "lote": "código numérico del lote",
+      "origen": "nave/cuadra origen, ej: C7-61",
+      "destino": "nave/cuadra destino, ej: C7-58",
       "cantidad": número
     }
   ],
@@ -65,7 +66,8 @@ Responde ÚNICAMENTE con un JSON válido con esta estructura exacta, sin texto a
   ]
 }
 
-Si alguna sección está vacía devuelve array vacío []. Si no puedes leer un valor con certeza escribe null.
+Si una sección está vacía o indica explícitamente que no hay datos, devuelve array vacío [].
+Si no puedes leer un valor con certeza escribe null.
 PROMPT;
 
         $payload = json_encode([

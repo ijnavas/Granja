@@ -127,6 +127,7 @@ $router->post('/movimientos',                       [MovimientoController::class
 $router->get('/movimientos/cuadras',                [MovimientoController::class, 'cuadrasPorNave']);
 $router->get('/movimientos/lotes-cuadra',           [MovimientoController::class, 'lotesPorCuadra']);
 $router->get('/movimientos/cuadras-lote',           [MovimientoController::class, 'cuadrasPorLote']);
+$router->get('/movimientos/todas-cuadras',          [MovimientoController::class, 'todasLasCuadras']);
 
 // Escaneo de cuaderno con IA
 $router->get('/escaneo',                            [EscaneoController::class, 'form']);
