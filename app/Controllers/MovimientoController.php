@@ -231,7 +231,7 @@ class MovimientoController extends BaseController
             LEFT JOIN lotes l ON cl.lote_id = l.id AND l.estado = 'activo'
             WHERE c.nave_id IN ({$ph}) AND c.activa = 1
             GROUP BY c.id
-            ORDER BY c.nombre
+            ORDER BY LENGTH(c.nombre), c.nombre
         ");
         $stmt->execute($naveIds);
         $rows = $stmt->fetchAll(\PDO::FETCH_ASSOC);
@@ -260,7 +260,7 @@ class MovimientoController extends BaseController
             WHERE cl.lote_id = :lote_id
               AND cl.activo = 1
               AND cl.num_animales > 0
-            ORDER BY n.nombre, c.nombre
+            ORDER BY n.nombre, LENGTH(c.nombre), c.nombre
         ");
         $stmt->execute(['lote_id' => $loteId]);
         echo json_encode($stmt->fetchAll(\PDO::FETCH_ASSOC));
@@ -281,7 +281,7 @@ class MovimientoController extends BaseController
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id
             WHERE g.usuario_id = :uid
             GROUP BY c.id, c.nombre, n.nombre
-            ORDER BY n.nombre, c.nombre
+            ORDER BY n.nombre, LENGTH(c.nombre), c.nombre
         ");
         $stmt->execute(['uid' => $uid]);
         echo json_encode($stmt->fetchAll(\PDO::FETCH_ASSOC));

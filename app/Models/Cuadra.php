@@ -25,7 +25,7 @@ class Cuadra
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
             WHERE c.nave_id = :nave_id AND c.activa = 1
             GROUP BY c.id
-            ORDER BY c.nombre
+            ORDER BY LENGTH(c.nombre), c.nombre
         ");
         $stmt->execute(['nave_id' => $naveId]);
         return $stmt->fetchAll();
@@ -52,7 +52,7 @@ class Cuadra
             $params['nave_id'] = $naveId;
         }
 
-        $sql .= " GROUP BY c.id ORDER BY g.nombre, n.nombre, c.nombre";
+        $sql .= " GROUP BY c.id ORDER BY g.nombre, n.nombre, LENGTH(c.nombre), c.nombre";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();
@@ -141,7 +141,7 @@ class Cuadra
             JOIN naves n   ON c.nave_id    = n.id
             JOIN granjas g ON n.granja_id  = g.id
             WHERE cl.lote_id = :lote_id AND cl.activo = 1
-            ORDER BY c.nombre
+            ORDER BY LENGTH(c.nombre), c.nombre
         ");
         $stmt->execute(['lote_id' => $loteId]);
         return $stmt->fetchAll();
@@ -203,7 +203,7 @@ class Cuadra
             $sql .= " AND c.nave_id = :nave_id";
             $params['nave_id'] = $naveId;
         }
-        $sql .= " ORDER BY g.nombre, n.nombre, c.nombre";
+        $sql .= " ORDER BY g.nombre, n.nombre, LENGTH(c.nombre), c.nombre";
         $stmt = $this->db->prepare($sql);
         $stmt->execute($params);
         return $stmt->fetchAll();

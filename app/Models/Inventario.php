@@ -56,7 +56,7 @@ class Inventario
             LEFT JOIN naves n   ON il.nave_id   = n.id
             LEFT JOIN granjas g ON il.granja_id = g.id
             WHERE il.inventario_id = :id
-            ORDER BY g.nombre, n.nombre, c.nombre, l.codigo
+            ORDER BY g.nombre, n.nombre, LENGTH(c.nombre), c.nombre, l.codigo
         ");
         $stmt->execute(['id' => $inventarioId]);
         return $stmt->fetchAll();
@@ -139,7 +139,7 @@ class Inventario
             WHERE g.usuario_id      = :uid
               AND l.fecha_nacimiento <= :fecha3
               AND l.fecha_nacimiento IS NOT NULL
-            ORDER BY g.nombre, n.nombre, c.nombre, l.codigo
+            ORDER BY g.nombre, n.nombre, LENGTH(c.nombre), c.nombre, l.codigo
         ");
         $stmt->execute(['uid' => $userId, 'fecha1' => $fecha, 'fecha2' => $fecha, 'fecha3' => $fecha, 'fecha4' => $fecha]);
         $rows = $stmt->fetchAll();
