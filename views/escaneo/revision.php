@@ -206,6 +206,7 @@ foreach ($lotes as $l) {
                 </td>
                 <td style="padding:.4rem .75rem">
                     <select name="cuadra_origen_id[<?= $idx ?>]" id="cuadra-<?= $idx ?>"
+                            data-texto-leido="<?= e((string)($t['origen'] ?? '')) ?>"
                             onchange="validarCantidad(<?= $idx ?>)"
                             style="font-size:.82rem;padding:.25rem .4rem;border:1.5px solid #d1d5db;border-radius:.35rem;width:100%">
                         <option value="">— Cargando —</option>
@@ -242,40 +243,68 @@ foreach ($lotes as $l) {
 const LOTES_DATA = <?= json_encode($lotesJs, JSON_UNESCAPED_UNICODE) ?>;
 const BASE_URL   = '<?= base_url('') ?>';
 
-// Cache de todas las cuadras (para destino de traslados)
-let _todasCuadras = null;
+// Cache de todas las cuadras — guardamos la Promise para evitar doble fetch en carga simultánea
+let _todasCuadrasPromise = null;
 function getTodasCuadras() {
-    if (_todasCuadras) return Promise.resolve(_todasCuadras);
-    return fetch(BASE_URL + 'movimientos/todas-cuadras')
-        .then(r => r.json())
-        .then(data => { _todasCuadras = data; return data; });
+    if (!_todasCuadrasPromise) {
+        _todasCuadrasPromise = fetch(BASE_URL + 'movimientos/todas-cuadras').then(r => r.json());
+    }
+    return _todasCuadrasPromise;
 }
 
-// Normaliza texto para comparar (quita espacios, puntos, guiones, minúsculas)
+// Normaliza texto: minúsculas, sin espacios/puntos/guiones/barras
 function normalizar(s) {
-    return (s || '').toLowerCase().replace(/[\s.\-]/g, '');
+    return (s || '').toLowerCase().replace(/[\s.\-\/]/g, '');
+}
+
+// Extrae el último grupo de dígitos de un string  ej: "C7-61" → "61", "C61" → "61"
+function ultimoNumero(s) {
+    const m = normalizar(s).match(/\d+/g);
+    return m ? m[m.length - 1] : null;
+}
+
+// Sugerir cuadra: primero coincidencia exacta, luego por último número
+function sugerirIdCuadra(textoLeido, cuadras) {
+    if (!textoLeido) return null;
+    const norm = normalizar(textoLeido);
+    const numLeido = ultimoNumero(textoLeido);
+
+    // 1. Coincidencia exacta normalizada
+    for (const c of cuadras) {
+        if (normalizar(c.nombre) === norm) return c.id;
+    }
+    // 2. Texto leído contiene el nombre de la cuadra (p.ej. "C761" ⊃ no, pero "c7-61" y "C61")
+    for (const c of cuadras) {
+        const normC = normalizar(c.nombre);
+        if (norm.includes(normC) && normC.length > 1) return c.id;
+    }
+    // 3. Coincidencia por último número (C7-61 → 61, C61 → 61)
+    if (numLeido) {
+        for (const c of cuadras) {
+            if (ultimoNumero(c.nombre) === numLeido) return c.id;
+        }
+    }
+    return null;
 }
 
 // Rellena un <select> con cuadras y pre-selecciona la que coincida con textoLeido
 function rellenarCuadras(sel, cuadras, textoLeido, placeholder) {
     const prev = sel.value;
     sel.innerHTML = '<option value="">' + placeholder + '</option>';
-    const norm = normalizar(textoLeido);
-    let sugerida = null;
     cuadras.forEach(c => {
         const opt = document.createElement('option');
         opt.value = c.id;
-        const info = c.num_animales > 0 ? ' (' + c.num_animales + ')' : '';
+        const info = parseInt(c.num_animales) > 0 ? ' (' + c.num_animales + ')' : '';
         opt.textContent = c.nombre + ' · ' + c.nave_nombre + info;
         opt.dataset.animales = c.num_animales;
         sel.appendChild(opt);
-        if (norm && normalizar(c.nombre).includes(norm)) sugerida = c.id;
     });
-    // Restaurar selección previa o sugerir
+    // Restaurar selección previa o sugerir por texto leído
+    const sugerida = sugerirIdCuadra(textoLeido, cuadras);
     if (prev && [...sel.options].some(o => o.value === prev)) {
         sel.value = prev;
     } else if (sugerida) {
-        sel.value = sugerida;
+        sel.value = String(sugerida);
     }
 }
 
