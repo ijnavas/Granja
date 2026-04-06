@@ -580,4 +580,115 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 });
 <?php endif; ?>
+
+<?php if (!$esEdicion && !empty($old)): ?>
+// ── Restaurar datos tras error de validación ──────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+
+    // Fecha
+    <?php if (!empty($old['fecha'])): ?>
+    const _fecha = document.querySelector('input[name="fecha"]');
+    if (_fecha) _fecha.value = <?= json_encode($old['fecha']) ?>;
+    <?php endif; ?>
+
+    // Observaciones / campos de texto simples
+    <?php if (!empty($old['observaciones'])): ?>
+    const _obs = document.querySelector('textarea[name="observaciones"]');
+    if (_obs) _obs.value = <?= json_encode($old['observaciones']) ?>;
+    <?php endif; ?>
+
+    <?php if ($tipoActual === 'traslado_cuadra'): ?>
+    // ── Traslado: nave origen → cuadra → lote ──────────────────
+    <?php if ($oldNaveOrigen): ?>
+    const _naveOrig = document.getElementById('naveOrigen');
+    if (_naveOrig) {
+        _naveOrig.value = <?= (int)$oldNaveOrigen ?>;
+        await cargarCuadras(<?= (int)$oldNaveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= (int)($old['cuadra_origen_id'] ?? 0) ?>);
+        <?php if (!empty($old['cuadra_origen_id'])): ?>
+        await cargarLotesDeCuadra(<?= (int)$old['cuadra_origen_id'] ?>, 'loteOrigen', <?= (int)($old['lote_origen_id'] ?? 0) ?>);
+        <?php endif; ?>
+    }
+    <?php endif; ?>
+    <?php if ($oldNaveDestino): ?>
+    const _naveDest = document.getElementById('naveDestino');
+    if (_naveDest) {
+        _naveDest.value = <?= (int)$oldNaveDestino ?>;
+        await cargarCuadras(<?= (int)$oldNaveDestino ?>, 'cuadraDestino', null, <?= (int)($old['cuadra_destino_id'] ?? 0) ?>);
+    }
+    <?php endif; ?>
+    // Cantidad
+    <?php if (!empty($old['num_animales'])): ?>
+    const _num = document.querySelector('input[name="num_animales"]');
+    if (_num && !_num.readOnly) _num.value = <?= (int)$old['num_animales'] ?>;
+    <?php endif; ?>
+
+    <?php elseif ($tipoActual === 'venta' || $tipoActual === 'baja'): ?>
+    // ── Venta / Baja: lote → cuadras multi ─────────────────────
+    <?php if (!empty($old['lote_origen_id'])): ?>
+    const _loteVB = document.querySelector('select[name="lote_origen_id"]');
+    if (_loteVB) {
+        _loteVB.value = <?= (int)$old['lote_origen_id'] ?>;
+        await cargarCuadrasDelLote(<?= (int)$old['lote_origen_id'] ?>, '<?= e($tipoActual) ?>');
+        // Restaurar cantidades por cuadra
+        const _ids  = <?= json_encode(array_values($old['cuadras_origen_ids']  ?? [])) ?>;
+        const _nums = <?= json_encode(array_values($old['cuadras_origen_nums'] ?? [])) ?>;
+        const _cards = document.querySelectorAll('.cuadra-card-multi');
+        _cards.forEach(card => {
+            const idx = _ids.indexOf(card.dataset.id);
+            if (idx !== -1 && _nums[idx] > 0) {
+                const inp = card.querySelector('.cuadra-qty-input');
+                if (inp) { inp.value = _nums[idx]; onQtyChange(inp, '<?= e($tipoActual) ?>'); }
+            }
+        });
+    }
+    <?php endif; ?>
+    <?php if ($tipoActual === 'venta'): ?>
+    <?php if (!empty($old['precio_eur'])): ?>
+    const _precio = document.querySelector('input[name="precio_eur"]');
+    if (_precio) _precio.value = <?= json_encode($old['precio_eur']) ?>;
+    <?php endif; ?>
+    <?php if (!empty($old['peso_canal_kg'])): ?>
+    const _peso = document.querySelector('input[name="peso_canal_kg"]');
+    if (_peso) _peso.value = <?= json_encode($old['peso_canal_kg']) ?>;
+    <?php endif; ?>
+    <?php if (!empty($old['tipo_venta'])): ?>
+    const _tv = document.querySelector('select[name="tipo_venta"]');
+    if (_tv) _tv.value = <?= json_encode($old['tipo_venta']) ?>;
+    <?php endif; ?>
+    <?php elseif ($tipoActual === 'baja'): ?>
+    <?php if (!empty($old['motivo_baja'])): ?>
+    const _motivo = document.querySelector('select[name="motivo_baja"]');
+    if (_motivo) _motivo.value = <?= json_encode($old['motivo_baja']) ?>;
+    <?php endif; ?>
+    <?php endif; ?>
+
+    <?php elseif (in_array($tipoActual, ['entrada_reposicion', 'entrada_madres'])): ?>
+    // ── Entrada reposición / madres: nave → cuadra → lote ──────
+    <?php if ($oldNaveOrigen): ?>
+    const _naveR = document.getElementById('naveOrigen');
+    if (_naveR) {
+        _naveR.value = <?= (int)$oldNaveOrigen ?>;
+        await cargarCuadras(<?= (int)$oldNaveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= (int)($old['cuadra_origen_id'] ?? 0) ?>);
+        <?php if (!empty($old['cuadra_origen_id'])): ?>
+        await cargarLotesDeCuadra(<?= (int)$old['cuadra_origen_id'] ?>, 'loteOrigen',
+            <?= (int)($old['lote_origen_id'] ?? 0) ?>,
+            <?= $tipoActual === 'entrada_madres' ? 'true' : 'false' ?>);
+        <?php endif; ?>
+    }
+    <?php endif; ?>
+    <?php if (!empty($old['num_animales'])): ?>
+    const _numR = document.querySelector('input[name="num_animales"]');
+    if (_numR) _numR.value = <?= (int)$old['num_animales'] ?>;
+    <?php endif; ?>
+
+    <?php elseif ($tipoActual === 'entrada_cebo'): ?>
+    // ── Entrada cebo: solo lote ─────────────────────────────────
+    <?php if (!empty($old['lote_origen_id'])): ?>
+    const _loteCebo = document.querySelector('select[name="lote_origen_id"]');
+    if (_loteCebo) _loteCebo.value = <?= (int)$old['lote_origen_id'] ?>;
+    <?php endif; ?>
+    <?php endif; ?>
+
+});
+<?php endif; ?>
 </script>

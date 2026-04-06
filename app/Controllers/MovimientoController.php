@@ -45,14 +45,35 @@ class MovimientoController extends BaseController
         $uid  = Session::get('usuario_id');
         $tipo = $_GET['tipo'] ?? 'traslado_cuadra';
 
+        // Recuperar datos anteriores si hubo error de validación
+        $old = Session::getFlash('old') ?? null;
+        $oldNaveOrigen  = null;
+        $oldNaveDestino = null;
+        if ($old) {
+            $db = \App\Core\Database::getInstance();
+            if (!empty($old['cuadra_origen_id'])) {
+                $s = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
+                $s->execute(['id' => (int)$old['cuadra_origen_id']]);
+                $oldNaveOrigen = $s->fetchColumn() ?: null;
+            }
+            if (!empty($old['cuadra_destino_id'])) {
+                $s = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
+                $s->execute(['id' => (int)$old['cuadra_destino_id']]);
+                $oldNaveDestino = $s->fetchColumn() ?: null;
+            }
+        }
+
         $this->view('movimientos/form', [
-            'movimiento' => null,
-            'tipo'       => $tipo,
-            'lotes'      => $this->loteModel->allByUsuario($uid),
-            'naves'      => $this->naveModel->allByUsuario($uid),
-            'estados'    => $this->model->estadosAnimal(),
-            'pageTitle'  => 'Nuevo movimiento',
-            'error'      => Session::getFlash('error'),
+            'movimiento'     => null,
+            'tipo'           => $tipo,
+            'lotes'          => $this->loteModel->allByUsuario($uid),
+            'naves'          => $this->naveModel->allByUsuario($uid),
+            'estados'        => $this->model->estadosAnimal(),
+            'pageTitle'      => 'Nuevo movimiento',
+            'error'          => Session::getFlash('error'),
+            'old'            => $old,
+            'oldNaveOrigen'  => $oldNaveOrigen,
+            'oldNaveDestino' => $oldNaveDestino,
         ]);
     }
 
@@ -102,6 +123,7 @@ class MovimientoController extends BaseController
             $this->aplicarMovimiento($tipo, $data, $uid);
         } catch (\Exception $e) {
             Session::flash('error', $e->getMessage());
+            Session::flash('old', $_POST);   // conservar datos del formulario
             $this->redirect('movimientos/crear?tipo=' . $tipo);
         }
 
