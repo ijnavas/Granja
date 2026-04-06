@@ -13,9 +13,9 @@
     <form method="POST" action="<?= base_url('inventarios') ?>" id="formInventario">
         <?= csrf_field() ?>
 
-        <div class="form-group">
+        <div class="form-group" id="grupoFecha">
             <label>Fecha del inventario *</label>
-            <input type="date" name="fecha" id="fechaInv" required
+            <input type="date" name="fecha" id="fechaInv"
                    value="<?= date('Y-m-d') ?>"
                    onchange="cargarPreview()">
             <span class="form-hint">Normalmente a final de mes</span>
@@ -28,7 +28,7 @@
 
         <div class="form-group">
             <label>Tipo de inventario</label>
-            <div style="display:flex;gap:1rem;margin-top:.25rem">
+            <div style="display:flex;gap:1rem;margin-top:.25rem;flex-wrap:wrap">
                 <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-weight:400">
                     <input type="radio" name="tipo" value="cuadra" checked onchange="cargarPreview()">
                     Por cuadra
@@ -37,8 +37,12 @@
                     <input type="radio" name="tipo" value="global" onchange="cargarPreview()">
                     Global (por lote)
                 </label>
+                <label style="display:flex;align-items:center;gap:.4rem;cursor:pointer;font-weight:400">
+                    <input type="radio" name="tipo" value="pienso" onchange="cargarPreview()">
+                    Pienso (silos)
+                </label>
             </div>
-            <span class="form-hint">Por cuadra: una fila por lote + cuadra. Global: una fila por lote.</span>
+            <span class="form-hint">Por cuadra: una fila por lote + cuadra. Global: una fila por lote. Pienso: snapshot de silos.</span>
         </div>
 
         <div class="form-actions" style="margin-top:1.5rem">
@@ -84,6 +88,21 @@ function getTipo() {
     const r = document.querySelector('input[name="tipo"]:checked');
     return r ? r.value : 'cuadra';
 }
+
+// ── Fecha visible/oculta según tipo ─────────────────────────────
+function toggleFechaField() {
+    const tipo  = getTipo();
+    const grupo = document.getElementById('grupoFecha');
+    if (tipo === 'pienso') {
+        grupo.style.display = 'none';
+    } else {
+        grupo.style.display = '';
+    }
+}
+
+document.querySelectorAll('input[name="tipo"]').forEach(r => {
+    r.addEventListener('change', toggleFechaField);
+});
 
 function sortData(data) {
     return [...data].sort((a, b) => {
@@ -152,6 +171,47 @@ function renderTable() {
     document.getElementById('previewPanel').innerHTML = html;
 }
 
+function renderTablePienso() {
+    let totalKg = 0;
+    previewData.forEach(s => { totalKg += parseFloat(s.stock_kg) || 0; });
+
+    let html = '<div class="list-card" style="font-size:.82rem">';
+    html += `<div style="padding:.75rem 1rem;background:#fefce8;border-bottom:1px solid #fde68a;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700;color:#92400e">${previewData.length} silo${previewData.length !== 1 ? 's' : ''}</span>
+        <span style="font-weight:700;color:#92400e">${totalKg.toLocaleString('es-ES', {maximumFractionDigits:0})} kg en total</span>
+    </div>`;
+    html += '<table style="width:100%;border-collapse:collapse">';
+    html += `<thead><tr style="background:#f9fafb;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">
+        <th style="padding:.5rem .75rem;text-align:left;font-weight:600;color:#6b7280">Granja</th>
+        <th style="padding:.5rem .75rem;text-align:left;font-weight:600;color:#6b7280">Silo</th>
+        <th style="padding:.5rem .75rem;text-align:left;font-weight:600;color:#6b7280">Tipo pienso</th>
+        <th style="padding:.5rem .75rem;text-align:right;font-weight:600;color:#6b7280">Stock actual</th>
+        <th style="padding:.5rem .75rem;text-align:right;font-weight:600;color:#6b7280">Capacidad</th>
+        <th style="padding:.5rem .75rem;text-align:right;font-weight:600;color:#6b7280">Mínimo</th>
+        <th style="padding:.5rem .75rem;text-align:center;font-weight:600;color:#6b7280">% Lleno</th>
+    </tr></thead><tbody>`;
+
+    previewData.forEach((s, i) => {
+        const bg    = i % 2 === 0 ? '#fff' : '#f9fafb';
+        const pct   = parseInt(s.pct_stock) || 0;
+        const alerta = parseFloat(s.stock_kg) <= parseFloat(s.stock_minimo_kg);
+        const color  = alerta ? '#dc2626' : (pct < 30 ? '#d97706' : '#16a34a');
+        const tipo   = s.tipo_pienso || '<span style="color:#d1d5db">—</span>';
+        html += `<tr style="background:${bg};border-bottom:1px solid #f3f4f6">
+            <td style="padding:.45rem .75rem;color:#6b7280;font-size:.8rem">${s.granja_nombre}</td>
+            <td style="padding:.45rem .75rem;font-weight:600">${s.silo_nombre}</td>
+            <td style="padding:.45rem .75rem;color:#374151">${tipo}</td>
+            <td style="padding:.45rem .75rem;text-align:right;font-weight:600;color:${color}">${parseFloat(s.stock_kg).toLocaleString('es-ES', {maximumFractionDigits:0})} kg</td>
+            <td style="padding:.45rem .75rem;text-align:right;color:#6b7280">${parseFloat(s.capacidad_kg).toLocaleString('es-ES', {maximumFractionDigits:0})} kg</td>
+            <td style="padding:.45rem .75rem;text-align:right;color:#6b7280">${parseFloat(s.stock_minimo_kg).toLocaleString('es-ES', {maximumFractionDigits:0})} kg</td>
+            <td style="padding:.45rem .75rem;text-align:center;font-weight:700;color:${color}">${pct}%</td>
+        </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    document.getElementById('previewPanel').innerHTML = html;
+}
+
 function setSort(col) {
     if (sortCol === col) {
         sortDir *= -1;
@@ -165,28 +225,38 @@ function setSort(col) {
 async function cargarPreview() {
     const fecha = document.getElementById('fechaInv').value;
     const tipo  = getTipo();
-    if (!fecha) return;
+
+    // Para pienso no hace falta fecha
+    if (tipo !== 'pienso' && !fecha) return;
 
     const panel = document.getElementById('previewPanel');
     const btnG  = document.getElementById('btnGuardar');
     panel.innerHTML = '<div style="color:#9ca3af;font-size:.875rem">Cargando...</div>';
     btnG.disabled   = true;
 
-    const res  = await fetch(`<?= base_url('inventarios/preview') ?>?fecha=${fecha}&tipo=${tipo}`);
+    const url  = `<?= base_url('inventarios/preview') ?>?fecha=${fecha}&tipo=${tipo}`;
+    const res  = await fetch(url);
     previewData = await res.json();
 
     if (!previewData.length) {
-        panel.innerHTML = '<div style="color:#dc2626;font-size:.875rem">No hay lotes activos para esta fecha.</div>';
+        panel.innerHTML = '<div style="color:#dc2626;font-size:.875rem">' +
+            (tipo === 'pienso' ? 'No hay silos activos configurados.' : 'No hay lotes activos para esta fecha.') +
+            '</div>';
         return;
     }
 
-    sortCol = 'semana_tabla';
-    sortDir = 1;
-    renderTable();
+    if (tipo === 'pienso') {
+        renderTablePienso();
+    } else {
+        sortCol = 'semana_tabla';
+        sortDir = 1;
+        renderTable();
+    }
     btnG.disabled = false;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    toggleFechaField();
     const f = document.getElementById('fechaInv');
     if (f && f.value) cargarPreview();
 });

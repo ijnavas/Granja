@@ -6,12 +6,17 @@ $estadoLabels = [
     'madres'     => 'Madres',
 ];
 
-$esCuadra = ($inventario['tipo'] ?? 'cuadra') === 'cuadra';
+$tipo     = $inventario['tipo'] ?? 'cuadra';
+$esPienso = $tipo === 'pienso';
+$esCuadra = $tipo === 'cuadra';
 
-// Totales
+// Totales animales
 $totalAnimales = array_sum(array_column($lineas, 'num_animales'));
 $totalPeso     = array_sum(array_column($lineas, 'peso_total_kg'));
 $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
+
+// Totales pienso
+$totalKgSilos = array_sum(array_column($lineas_silos ?? [], 'stock_kg'));
 ?>
 
 <div class="page-header">
@@ -22,8 +27,13 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
                 <span><?= e($inventario['nombre']) ?></span>
                 <span style="color:#d1d5db">·</span>
             <?php endif; ?>
-            <span style="background:<?= $esCuadra ? '#eff6ff' : '#f0fdf4' ?>;color:<?= $esCuadra ? '#1d4ed8' : '#166534' ?>;font-size:.72rem;font-weight:700;padding:.2rem .5rem;border-radius:.25rem;text-transform:uppercase;letter-spacing:.05em">
-                <?= $esCuadra ? 'Por cuadra' : 'Global' ?>
+            <?php
+                $badgeBg    = $esPienso ? '#fefce8' : ($esCuadra ? '#eff6ff' : '#f0fdf4');
+                $badgeColor = $esPienso ? '#92400e'  : ($esCuadra ? '#1d4ed8' : '#166534');
+                $badgeLabel = $esPienso ? 'Pienso'   : ($esCuadra ? 'Por cuadra' : 'Global');
+            ?>
+            <span style="background:<?= $badgeBg ?>;color:<?= $badgeColor ?>;font-size:.72rem;font-weight:700;padding:.2rem .5rem;border-radius:.25rem;text-transform:uppercase;letter-spacing:.05em">
+                <?= $badgeLabel ?>
             </span>
         </div>
     </div>
@@ -51,6 +61,26 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
 <?php endif; ?>
 
 <!-- KPIs resumen -->
+<?php if ($esPienso): ?>
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
+    <div class="kpi-card">
+        <div class="kpi-label">Silos</div>
+        <div class="kpi-value"><?= count($lineas_silos) ?></div>
+        <div class="kpi-sub">activos en granja</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Stock total</div>
+        <div class="kpi-value"><?= number_format($totalKgSilos, 0) ?> kg</div>
+        <div class="kpi-sub">suma de todos los silos</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Silos bajo mínimo</div>
+        <?php $bajoMinimo = count(array_filter($lineas_silos, fn($s) => (float)$s['stock_kg'] <= (float)$s['stock_minimo_kg'])); ?>
+        <div class="kpi-value" style="color:<?= $bajoMinimo > 0 ? '#dc2626' : '#16a34a' ?>"><?= $bajoMinimo ?></div>
+        <div class="kpi-sub"><?= $bajoMinimo > 0 ? 'requieren atención' : 'todos en nivel correcto' ?></div>
+    </div>
+</div>
+<?php else: ?>
 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.5rem">
     <div class="kpi-card">
         <div class="kpi-label">Total animales</div>
@@ -68,8 +98,84 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
         <div class="kpi-sub">Según tabla de crecimiento</div>
     </div>
 </div>
+<?php endif; ?>
 
 <!-- Tabla detalle -->
+<?php if ($esPienso): ?>
+<div class="list-card">
+    <div style="padding:.75rem 1rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280">
+        Snapshot de silos
+    </div>
+    <?php if (empty($lineas_silos)): ?>
+        <div class="empty-state">Sin silos registrados.</div>
+    <?php else: ?>
+    <table class="list-table">
+        <thead>
+            <tr>
+                <th>Granja</th>
+                <th>Silo</th>
+                <th>Tipo pienso</th>
+                <th style="text-align:right">Stock (kg)</th>
+                <th style="text-align:right">Capacidad (kg)</th>
+                <th style="text-align:right">Mínimo (kg)</th>
+                <th style="text-align:center">% Lleno</th>
+                <th style="text-align:center">Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php
+            $granjaActual = null;
+            foreach ($lineas_silos as $s):
+                $esNuevaGranja = $s['granja_nombre'] !== $granjaActual;
+                if ($esNuevaGranja) $granjaActual = $s['granja_nombre'];
+                $pct    = (int)($s['pct_stock'] ?? 0);
+                $alerta = (float)$s['stock_kg'] <= (float)$s['stock_minimo_kg'];
+                $color  = $alerta ? '#dc2626' : ($pct < 30 ? '#d97706' : '#16a34a');
+            ?>
+            <?php if ($esNuevaGranja): ?>
+            <tr>
+                <td colspan="8" style="background:#fefce8;font-weight:700;font-size:.8rem;color:#92400e;padding:.4rem .75rem;border-bottom:1px solid #fde68a">
+                    <?= e($s['granja_nombre']) ?>
+                </td>
+            </tr>
+            <?php endif; ?>
+            <tr>
+                <td style="color:#9ca3af;font-size:.78rem"></td>
+                <td style="font-weight:600"><?= e($s['silo_nombre']) ?></td>
+                <td style="color:#374151"><?= $s['tipo_pienso'] ? e($s['tipo_pienso']) : '<span style="color:#d1d5db">—</span>' ?></td>
+                <td style="text-align:right;font-weight:600;color:<?= $color ?>"><?= number_format((float)$s['stock_kg'], 0) ?></td>
+                <td style="text-align:right;color:#6b7280"><?= number_format((float)$s['capacidad_kg'], 0) ?></td>
+                <td style="text-align:right;color:#6b7280"><?= number_format((float)$s['stock_minimo_kg'], 0) ?></td>
+                <td style="text-align:center">
+                    <div style="display:inline-flex;align-items:center;gap:.4rem">
+                        <div style="width:60px;height:6px;background:#e5e7eb;border-radius:99px;overflow:hidden">
+                            <div style="height:6px;width:<?= min($pct,100) ?>%;background:<?= $color ?>;border-radius:99px"></div>
+                        </div>
+                        <span style="font-weight:700;color:<?= $color ?>;font-size:.8rem"><?= $pct ?>%</span>
+                    </div>
+                </td>
+                <td style="text-align:center">
+                    <?php if ($alerta): ?>
+                        <span style="font-size:.72rem;font-weight:700;color:#dc2626;background:#fee2e2;padding:.15rem .5rem;border-radius:.25rem">Bajo mínimo</span>
+                    <?php else: ?>
+                        <span style="font-size:.72rem;color:#16a34a;background:#dcfce7;padding:.15rem .5rem;border-radius:.25rem">OK</span>
+                    <?php endif; ?>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+        <tfoot>
+            <tr style="background:#f9fafb;font-weight:700;border-top:2px solid #e5e7eb">
+                <td colspan="3" style="padding:.6rem .75rem;font-size:.82rem;color:#374151">TOTAL</td>
+                <td style="text-align:right;padding:.6rem .75rem"><?= number_format($totalKgSilos, 0) ?> kg</td>
+                <td colspan="4"></td>
+            </tr>
+        </tfoot>
+    </table>
+    <?php endif; ?>
+</div>
+
+<?php else: ?>
 <div class="list-card">
     <div style="padding:.75rem 1rem;background:#f9fafb;border-bottom:1px solid #e5e7eb;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280">
         <?= $esCuadra ? 'Detalle por lote y cuadra' : 'Detalle global por lote' ?>
@@ -147,6 +253,7 @@ $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
     </table>
     <?php endif; ?>
 </div>
+<?php endif; ?>
 
 <!-- Modal email -->
 <div id="modalEmail" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">

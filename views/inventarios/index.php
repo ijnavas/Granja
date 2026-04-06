@@ -19,27 +19,40 @@
             <tr>
                 <th>Fecha</th>
                 <th>Nombre</th>
-                <th style="text-align:right">Lotes</th>
-                <th style="text-align:right">Animales</th>
+                <th style="text-align:right">Líneas / Silos</th>
+                <th style="text-align:right">Animales / Stock</th>
                 <th style="text-align:right">Valor total</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
             <?php foreach ($inventarios as $inv): ?>
+            <?php
+                $tipo     = $inv['tipo'] ?? 'cuadra';
+                $esPienso = $tipo === 'pienso';
+                $esCuadra = $tipo === 'cuadra';
+                $badgeBg  = $esPienso ? '#fefce8' : ($esCuadra ? '#eff6ff' : '#f0fdf4');
+                $badgeColor = $esPienso ? '#92400e' : ($esCuadra ? '#1d4ed8' : '#166534');
+                $badgeLabel = $esPienso ? 'Pienso' : ($esCuadra ? 'Cuadra' : 'Global');
+            ?>
             <tr style="cursor:pointer" onclick="window.location='<?= base_url("inventarios/{$inv['id']}") ?>'">
                 <td><strong><?= date('d/m/Y', strtotime($inv['fecha'])) ?></strong></td>
                 <td style="color:#6b7280">
                     <?= $inv['nombre'] ? e($inv['nombre']) : '<span style="color:#d1d5db">—</span>' ?>
-                    <?php $esCuadra = ($inv['tipo'] ?? 'cuadra') === 'cuadra'; ?>
-                    <span style="margin-left:.4rem;background:<?= $esCuadra ? '#eff6ff' : '#f0fdf4' ?>;color:<?= $esCuadra ? '#1d4ed8' : '#166534' ?>;font-size:.68rem;font-weight:700;padding:.1rem .4rem;border-radius:.25rem;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle">
-                        <?= $esCuadra ? 'Cuadra' : 'Global' ?>
+                    <span style="margin-left:.4rem;background:<?= $badgeBg ?>;color:<?= $badgeColor ?>;font-size:.68rem;font-weight:700;padding:.1rem .4rem;border-radius:.25rem;text-transform:uppercase;letter-spacing:.04em;vertical-align:middle">
+                        <?= $badgeLabel ?>
                     </span>
                 </td>
-                <td style="text-align:right"><?= number_format($inv['num_lineas']) ?></td>
-                <td style="text-align:right;font-weight:600"><?= number_format($inv['total_animales']) ?></td>
+                <td style="text-align:right"><?= $esPienso ? number_format($inv['num_silos']) : number_format($inv['num_lineas']) ?></td>
+                <td style="text-align:right;font-weight:600">
+                    <?php if ($esPienso): ?>
+                        <?= $inv['total_kg_silos'] ? number_format((float)$inv['total_kg_silos'], 0) . ' kg' : '—' ?>
+                    <?php else: ?>
+                        <?= number_format($inv['total_animales']) ?>
+                    <?php endif; ?>
+                </td>
                 <td style="text-align:right;font-weight:600;color:#166534">
-                    <?= $inv['valor_total'] ? number_format((float)$inv['valor_total'], 2) . ' €' : '—' ?>
+                    <?= (!$esPienso && $inv['valor_total']) ? number_format((float)$inv['valor_total'], 2) . ' €' : '—' ?>
                 </td>
                 <td onclick="event.stopPropagation()">
                     <div class="actions">

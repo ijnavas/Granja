@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Models\Inventario;
+use App\Models\Silo;
 use App\Core\Session;
 
 class InventarioController extends BaseController
@@ -43,10 +44,15 @@ class InventarioController extends BaseController
     {
         auth_required();
         header('Content-Type: application/json');
-        $uid   = Session::get('usuario_id');
-        $fecha = $_GET['fecha'] ?? date('Y-m-d');
-        $tipo  = $_GET['tipo']  ?? 'cuadra';
-        $lineas = $this->model->calcularLineas($uid, $fecha, $tipo);
+        $uid  = Session::get('usuario_id');
+        $tipo = $_GET['tipo'] ?? 'cuadra';
+
+        if ($tipo === 'pienso') {
+            $lineas = $this->model->calcularLineasPienso($uid);
+        } else {
+            $fecha  = $_GET['fecha'] ?? date('Y-m-d');
+            $lineas = $this->model->calcularLineas($uid, $fecha, $tipo);
+        }
         echo json_encode($lineas);
     }
 
@@ -62,7 +68,25 @@ class InventarioController extends BaseController
         $uid    = Session::get('usuario_id');
         $fecha  = $this->postString('fecha') ?: date('Y-m-d');
         $nombre = trim($this->postString('nombre')) ?: null;
-        $tipo   = in_array($this->postString('tipo'), ['cuadra', 'global']) ? $this->postString('tipo') : 'cuadra';
+        $tipo   = in_array($this->postString('tipo'), ['cuadra', 'global', 'pienso'])
+                    ? $this->postString('tipo') : 'cuadra';
+
+        if ($tipo === 'pienso') {
+            $silos = $this->model->calcularLineasPienso($uid);
+            if (empty($silos)) {
+                Session::flash('error', 'No hay silos activos configurados.');
+                $this->redirect('inventarios/crear');
+            }
+            $id = $this->model->create($uid, $fecha, $nombre, 'pienso');
+            $colsSilo = ['silo_id','silo_nombre','granja_nombre','tipo_pienso',
+                         'stock_kg','capacidad_kg','stock_minimo_kg','pct_stock'];
+            foreach ($silos as $s) {
+                $linea = array_intersect_key($s, array_flip($colsSilo));
+                $this->model->insertLineaSilo($id, $linea);
+            }
+            Session::flash('success', 'Inventario de pienso generado correctamente.');
+            $this->redirect("inventarios/{$id}");
+        }
 
         $lineas = $this->model->calcularLineas($uid, $fecha, $tipo);
         if (empty($lineas)) {
@@ -93,11 +117,13 @@ class InventarioController extends BaseController
         $inv  = $this->model->find((int)$id, $uid);
         if (!$inv) $this->redirect('inventarios');
 
+        $esPienso = ($inv['tipo'] ?? '') === 'pienso';
         $this->view('inventarios/show', [
-            'inventario' => $inv,
-            'lineas'     => $this->model->lineas((int)$id),
-            'pageTitle'  => 'Inventario ' . date('d/m/Y', strtotime($inv['fecha'])),
-            'success'    => Session::getFlash('success'),
+            'inventario'   => $inv,
+            'lineas'       => $esPienso ? [] : $this->model->lineas((int)$id),
+            'lineas_silos' => $esPienso ? $this->model->lineasSilos((int)$id) : [],
+            'pageTitle'    => 'Inventario ' . date('d/m/Y', strtotime($inv['fecha'])),
+            'success'      => Session::getFlash('success'),
         ]);
     }
 
