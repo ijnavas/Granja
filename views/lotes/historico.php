@@ -48,8 +48,15 @@
                 <td style="text-align:right;font-weight:600">
                     <?= $l['ingreso_total'] > 0 ? number_format((float)$l['ingreso_total'], 2) . ' €' : '—' ?>
                 </td>
-                <td>
-                    <a href="<?= base_url("lotes/{$l['id']}/historico") ?>" class="btn btn-secondary btn-sm">Ver</a>
+                <td onclick="event.stopPropagation()">
+                    <div class="actions">
+                        <a href="<?= base_url("lotes/{$l['id']}/historico") ?>" class="btn btn-secondary btn-sm">Ver</a>
+                        <form method="POST" action="<?= base_url("lotes/{$l['id']}/borrar") ?>"
+                              onsubmit="return confirmarEliminar('<?= e($l['codigo']) ?>')">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
         <?php endforeach; ?>
@@ -57,3 +64,14 @@
     </table>
 </div>
 <?php endif; ?>
+
+<script>
+function confirmarEliminar(codigo) {
+    return confirm(
+        '⚠ ELIMINAR LOTE ' + codigo + '\n\n' +
+        'Esta acción NO se puede deshacer.\n' +
+        'Se borrarán todos los movimientos, pesajes y cuadras.\n\n' +
+        '¿Estás seguro?'
+    );
+}
+</script>

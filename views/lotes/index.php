@@ -110,9 +110,15 @@
                     <div class="actions">
                         <a href="<?= base_url("lotes/{$l['id']}/editar") ?>" class="btn btn-secondary btn-sm">Editar</a>
                         <a href="<?= base_url("pesajes/crear?lote_id={$l['id']}") ?>" class="btn btn-secondary btn-sm">Pesar</a>
-                        <form method="POST" action="<?= base_url("lotes/{$l['id']}/eliminar") ?>" onsubmit="return confirm('¿Cerrar este lote?')">
+                        <form method="POST" action="<?= base_url("lotes/{$l['id']}/eliminar") ?>"
+                              onsubmit="return confirm('¿Cerrar el lote <?= e($l['codigo']) ?>?\nSe guardará en el histórico.')">
                             <?= csrf_field() ?>
-                            <button type="submit" class="btn btn-danger btn-sm">Cerrar</button>
+                            <button type="submit" class="btn btn-secondary btn-sm">Cerrar</button>
+                        </form>
+                        <form method="POST" action="<?= base_url("lotes/{$l['id']}/borrar") ?>"
+                              onsubmit="return confirmarEliminar('<?= e($l['codigo']) ?>')">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
                         </form>
                     </div>
                 </td>
@@ -124,6 +130,19 @@
 </div>
 
 <script>
+function confirmarEliminar(codigo) {
+    return confirm(
+        '⚠ ELIMINAR LOTE ' + codigo + '\n\n' +
+        'Esta acción NO se puede deshacer.\n' +
+        'Se borrarán:\n' +
+        '  • Todos los movimientos (bajas, ventas, traslados)\n' +
+        '  • Todos los pesajes\n' +
+        '  • La asignación de cuadras\n' +
+        '  • El propio lote\n\n' +
+        '¿Estás seguro?'
+    );
+}
+
 // Ocultar cerrados por defecto al cargar
 document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".fila-cerrada").forEach(r => r.style.display = "none");
