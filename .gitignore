@@ -1,3 +1,5 @@
 config.local.php
 uploads/
 .claude/
+.DS_Store
+**/.DS_Store
