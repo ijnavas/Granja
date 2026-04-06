@@ -329,7 +329,27 @@ class LoteController extends BaseController
     {
         auth_required();
         $this->model->cerrar((int)$id, Session::get('usuario_id'));
-        Session::flash('success', 'Lote cerrado.');
+        Session::flash('success', 'Lote cerrado y guardado en histórico.');
+        $this->redirect('lotes');
+    }
+
+    public function borrar(string $id): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('lotes');
+        }
+        try {
+            $ok = $this->model->eliminarCompleto((int)$id, Session::get('usuario_id'));
+            if ($ok) {
+                Session::flash('success', 'Lote eliminado junto con todos sus movimientos, pesajes y cuadras.');
+            } else {
+                Session::flash('error', 'No se encontró el lote o no tienes permisos para eliminarlo.');
+            }
+        } catch (\Throwable $e) {
+            Session::flash('error', 'Error al eliminar: ' . $e->getMessage());
+        }
         $this->redirect('lotes');
     }
 

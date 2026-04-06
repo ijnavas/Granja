@@ -106,6 +106,7 @@ $router->get('/lotes/{id}/editar',          [LoteController::class, 'edit']);
 $router->post('/lotes/{id}/actualizar',     [LoteController::class, 'update']);
 $router->post('/lotes/{id}/ajustar',        [LoteController::class, 'ajustar']);
 $router->post('/lotes/{id}/eliminar',       [LoteController::class, 'delete']);
+$router->post('/lotes/{id}/borrar',         [LoteController::class, 'borrar']);
 
 // Cuadras
 $router->get('/cuadras',                        [CuadraController::class, 'index']);

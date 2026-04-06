@@ -198,6 +198,68 @@ class Lote
         return $stmt->rowCount();
     }
 
+    /**
+     * Elimina el lote y todo lo relacionado (movimientos, cuadras, pesajes).
+     * Usa transacción para garantizar integridad.
+     */
+    public function eliminarCompleto(int $id, int $userId): bool
+    {
+        // Verificar pertenencia
+        $stmt = $this->db->prepare("
+            SELECT l.id FROM lotes l
+            LEFT JOIN naves n   ON l.nave_id   = n.id
+            LEFT JOIN granjas g  ON n.granja_id  = g.id
+            LEFT JOIN granjas g2 ON l.granja_id  = g2.id
+            WHERE l.id = :id AND (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+        ");
+        $stmt->execute(['id' => $id, 'uid' => $userId, 'uid2' => $userId]);
+        if (!$stmt->fetch()) return false;
+
+        $this->db->beginTransaction();
+        try {
+            // 1. movimiento_cuadras (hijos de movimientos de este lote)
+            $this->db->prepare("
+                DELETE mc FROM movimiento_cuadras mc
+                JOIN movimientos m ON m.id = mc.movimiento_id
+                WHERE m.lote_origen_id = :id OR m.lote_destino_id = :id2
+            ")->execute(['id' => $id, 'id2' => $id]);
+
+            // 2. movimientos_historial
+            $this->db->prepare("
+                DELETE mh FROM movimientos_historial mh
+                JOIN movimientos m ON m.id = mh.movimiento_id
+                WHERE m.lote_origen_id = :id OR m.lote_destino_id = :id2
+            ")->execute(['id' => $id, 'id2' => $id]);
+
+            // 3. movimientos
+            $this->db->prepare("
+                DELETE FROM movimientos
+                WHERE lote_origen_id = :id OR lote_destino_id = :id2
+            ")->execute(['id' => $id, 'id2' => $id]);
+
+            // 4. cuadra_lote (libera las cuadras)
+            $this->db->prepare("
+                DELETE FROM cuadra_lote WHERE lote_id = :id
+            ")->execute(['id' => $id]);
+
+            // 5. pesajes
+            $this->db->prepare("
+                DELETE FROM pesajes WHERE lote_id = :id
+            ")->execute(['id' => $id]);
+
+            // 6. lote
+            $this->db->prepare("
+                DELETE FROM lotes WHERE id = :id
+            ")->execute(['id' => $id]);
+
+            $this->db->commit();
+            return true;
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
     public function cerrar(int $id, int $userId): bool
     {
         $stmt = $this->db->prepare("
