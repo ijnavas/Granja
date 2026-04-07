@@ -929,8 +929,11 @@ class RecevtService
 
     private function calcularFechaInicio(string $fechaDispensacion): string
     {
-        $ts = $this->esDateToTimestamp($fechaDispensacion);
-        return $ts !== null ? date('d/m/Y', $ts + 86400) : date('d/m/Y', strtotime('+1 day'));
+        $ts    = $this->esDateToTimestamp($fechaDispensacion);
+        $inicio = $ts !== null ? $ts + 86400 : strtotime('+1 day');
+        // No se pueden registrar fechas futuras: cap a hoy
+        $today = mktime(0, 0, 0);
+        return date('d/m/Y', min($inicio, $today));
     }
 
     private function calcularFechaFin(string $fechaInicio, int $diasTratamiento): ?string
