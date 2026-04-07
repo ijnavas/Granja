@@ -560,7 +560,7 @@ class RecevtService
         // IDs necesarios para el POST
         $idReceta      = (string)($fila['idReceta']      ?? '');
         $idRecetaLinea = (string)($fila['idRecetaLinea'] ?? '');
-        if (!$idReceta || !$idRecetaLinea) return null;
+        if (!$idReceta) return null; // idRecetaLinea puede ser vacío en algunas granjas
 
         // Fecha de dispensación — buscar en todos los campos
         $fechaDispensacion = null;
