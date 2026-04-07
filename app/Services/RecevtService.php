@@ -827,31 +827,50 @@ class RecevtService
             $this->addLog('info', "  Fin: {$fechaFin}" . ($diasValue > 1 ? " ({$diasValue} días)" : ''));
         }
 
-        // ── POST a actualizarLineaTratamiento ─────────────────────────────
-        $fields = [
-            'idLineaTratamiento' => $token,
-            $fechaInicioField    => $fechaInicio,
-        ];
-        if ($recetaEncoded) {
-            $fields['idReceta'] = $recetaEncoded;
-        }
+        // ── POST a actualizar_lineasTratamientos ──────────────────────────
+        // Estructura igual que jQuery $.param({ lineasTratamiento: [obtenerLineaTratamiento()] })
+        $campos  = ['fechaInicioTratamiento'];
+        $valores = ['fechaInicioTratamiento' => $fechaInicio];
         if ($fechaFin) {
-            $fields[$fechaFinField] = $fechaFin;
-        }
-        if ($diasField && $diasValue > 0) {
-            $fields[$diasField] = (string)$diasValue;
+            $campos[]                        = 'fechaFinTratamiento';
+            $valores['fechaFinTratamiento']  = $fechaFin;
         }
 
-        $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizarLineaTratamiento', $fields);
+        $postData = [
+            'lineasTratamiento' => [
+                [
+                    'identificador'     => $token,
+                    'campos'            => $campos,
+                    'valores'           => $valores,
+                    'algunCampoRelleno' => '1',
+                ],
+            ],
+        ];
+
+        $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizar_lineasTratamientos', $postData);
         if ($respuesta === null) {
-            $this->addLog('error', '  Error HTTP al enviar actualizarLineaTratamiento');
+            $this->addLog('error', '  Error HTTP al enviar actualizar_lineasTratamientos');
             return false;
         }
 
-        $respTrim = trim($respuesta);
-        if (stripos($respTrim, '"error"') !== false || strtolower($respTrim) === 'false' || $respTrim === '0') {
-            $this->addLog('error', '  Respuesta indica error: ' . substr($respTrim, 0, 200));
+        $this->addLog('info', '  Respuesta: ' . substr(trim($respuesta), 0, 300));
+
+        // La respuesta es JSON: {"TOKEN": {"campo": []}} donde [] vacío = sin errores
+        $json = json_decode($respuesta, true);
+        if (!is_array($json)) {
+            $this->addLog('error', '  Respuesta no es JSON: ' . substr($respuesta, 0, 200));
             return false;
+        }
+
+        // Verificar errores: cada campo debe tener array vacío
+        foreach ($json as $idLinea => $campos) {
+            if (!is_array($campos)) continue;
+            foreach ($campos as $campo => $errores) {
+                if (!empty($errores)) {
+                    $this->addLog('error', "  Error en campo {$campo}: " . implode(', ', (array)$errores));
+                    return false;
+                }
+            }
         }
 
         return true;
