@@ -13,52 +13,167 @@ class RecevtController extends BaseController
     public function index(): void
     {
         auth_required();
-        $uid  = Session::get('usuario_id');
+        $uid = Session::get('usuario_id');
 
-        // Comprobar extensiones necesarias
         $requisitos = $this->checkRequisitos();
 
         try {
             $usuario = (new Usuario())->findById($uid);
             $granjas = (new Granja())->allByUsuario($uid);
         } catch (\Throwable $e) {
-            // Probablemente las columnas SQL aún no existen
             error_log('RecevtController::index error: ' . $e->getMessage());
             $this->view('recevet/index', [
                 'pageTitle'      => 'Recevet',
                 'usuario'        => [],
                 'granjas'        => [],
                 'granjasRecevet' => [],
-                'credencialesOk' => false,
+                'sesionActiva'   => false,
                 'requisitos'     => $requisitos,
                 'success'        => Session::getFlash('success'),
-                'error'          => 'Error de base de datos: ' . $e->getMessage() . ' — ¿Has ejecutado las migraciones SQL?',
+                'error'          => 'Error de base de datos: ' . $e->getMessage(),
+                'esperandoCodigo' => false,
                 'logs'           => [],
             ]);
             return;
         }
 
-        $granjasRecevet = array_filter($granjas, fn($g) => !empty($g['recevet_explotacion']));
-        $cookieOk       = !empty($usuario['recevet_session_cookie']);
-        $credencialesOk = !empty($usuario['recevet_usuario']) && $cookieOk;
+        $granjasRecevet  = array_values(array_filter($granjas, fn($g) => !empty($g['recevet_explotacion'])));
+        $sesionActiva    = !empty($usuario['recevet_session_cookie']);
+        $esperandoCodigo = !empty($_SESSION['_recevet_2fa_pending']);
 
         $this->view('recevet/index', [
-            'pageTitle'      => 'Recevet',
-            'usuario'        => $usuario,
-            'granjas'        => $granjas,
-            'granjasRecevet' => array_values($granjasRecevet),
-            'credencialesOk' => $credencialesOk,
-            'cookieOk'       => $cookieOk,
-            'requisitos'     => $requisitos,
-            'success'        => Session::getFlash('success'),
-            'error'          => Session::getFlash('error'),
-            'logs'           => (function() {
+            'pageTitle'       => 'Recevet',
+            'usuario'         => $usuario,
+            'granjas'         => $granjas,
+            'granjasRecevet'  => $granjasRecevet,
+            'sesionActiva'    => $sesionActiva,
+            'requisitos'      => $requisitos,
+            'success'         => Session::getFlash('success'),
+            'error'           => Session::getFlash('error'),
+            'esperandoCodigo' => $esperandoCodigo,
+            'logs'            => (function () {
                 $logs = $_SESSION['_recevet_logs'] ?? [];
                 unset($_SESSION['_recevet_logs']);
                 return $logs;
             })(),
         ]);
     }
+
+    // ── Paso 1: Iniciar sesión (envía email con código) ────────────
+
+    public function iniciarSesion(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('recevet');
+        }
+
+        $uid      = Session::get('usuario_id');
+        $usuario  = $this->postString('recevet_usuario');
+        $password = $this->postString('recevet_password');
+
+        if (!$usuario || !$password) {
+            Session::flash('error', 'Introduce usuario y contraseña de Recevet.');
+            $this->redirect('recevet');
+        }
+
+        $service = new RecevtService($uid);
+        $result  = $service->iniciarLogin($usuario, $password);
+        $logs    = $service->getLogs();
+
+        if ($result['status'] === 'ok') {
+            // Login directo sin 2FA (dispositivo de confianza)
+            $cookie = $service->extractSessionCookieString();
+            (new Usuario())->updateRecevet($uid, $usuario, null, $cookie);
+            unset($_SESSION['_recevet_2fa_pending']);
+            $_SESSION['_recevet_logs'] = $logs;
+            Session::flash('success', 'Sesión iniciada correctamente en Recevet ✓');
+            $this->redirect('recevet');
+        }
+
+        if ($result['status'] === 'needs_2fa') {
+            // Guardar estado para el paso 2
+            $_SESSION['_recevet_2fa_pending'] = [
+                'usuario'     => $usuario,
+                'password'    => RecevtService::encryptPassword($password),
+                'controlForm' => $result['controlForm'] ?? '',
+            ];
+            $_SESSION['_recevet_logs'] = $logs;
+            $this->redirect('recevet');
+        }
+
+        // Error
+        $_SESSION['_recevet_logs'] = $logs;
+        Session::flash('error', $result['msg'] ?? 'Error al conectar con Recevet.');
+        $this->redirect('recevet');
+    }
+
+    // ── Paso 2: Verificar código 2FA ──────────────────────────────
+
+    public function verificarCodigo(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('recevet');
+        }
+
+        $pending = $_SESSION['_recevet_2fa_pending'] ?? null;
+        if (!$pending) {
+            Session::flash('error', 'Sesión de verificación expirada. Vuelve a iniciar.');
+            $this->redirect('recevet');
+        }
+
+        $uid     = Session::get('usuario_id');
+        $codigo  = trim($this->postString('codigo_2fa'));
+        $seguro  = ($this->postString('seguro') === '1');
+
+        if (!preg_match('/^\d{6}$/', $codigo)) {
+            Session::flash('error', 'El código debe tener exactamente 6 dígitos.');
+            $this->redirect('recevet');
+        }
+
+        $usuario  = $pending['usuario'];
+        $password = RecevtService::decryptPassword($pending['password']);
+
+        $service = new RecevtService($uid);
+        $result  = $service->verificarCodigo2fa($usuario, $password, $codigo, $pending['controlForm'], $seguro);
+        $logs    = $service->getLogs();
+
+        $_SESSION['_recevet_logs'] = $logs;
+
+        if ($result['status'] === 'ok') {
+            (new Usuario())->updateRecevet($uid, $usuario, null, $result['cookie']);
+            unset($_SESSION['_recevet_2fa_pending']);
+            Session::flash('success', 'Sesión de Recevet iniciada correctamente ✓');
+        } else {
+            Session::flash('error', $result['msg'] ?? 'Código incorrecto o expirado.');
+        }
+
+        $this->redirect('recevet');
+    }
+
+    // ── Cerrar sesión Recevet ─────────────────────────────────────
+
+    public function cerrarSesion(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('recevet');
+        }
+
+        $uid = Session::get('usuario_id');
+        $u   = (new Usuario())->findById($uid);
+        (new Usuario())->updateRecevet($uid, $u['recevet_usuario'] ?? '', null, '');
+        unset($_SESSION['_recevet_2fa_pending']);
+
+        Session::flash('success', 'Sesión de Recevet cerrada.');
+        $this->redirect('recevet');
+    }
+
+    // ── Sincronizar ───────────────────────────────────────────────
 
     public function sincronizar(): void
     {
@@ -68,10 +183,9 @@ class RecevtController extends BaseController
             $this->redirect('recevet');
         }
 
-        // Verificar extensiones
         $req = $this->checkRequisitos();
         if (!$req['curl']) {
-            Session::flash('error', 'La extensión cURL no está disponible en este servidor. Contacta con el hosting.');
+            Session::flash('error', 'La extensión cURL no está disponible.');
             $this->redirect('recevet');
         }
 
@@ -80,12 +194,12 @@ class RecevtController extends BaseController
         try {
             $usuario = (new Usuario())->findById($uid);
         } catch (\Throwable $e) {
-            Session::flash('error', 'Error de base de datos: ' . $e->getMessage() . ' — Ejecuta las migraciones SQL primero.');
+            Session::flash('error', 'Error de base de datos: ' . $e->getMessage());
             $this->redirect('recevet');
         }
 
         if (empty($usuario['recevet_session_cookie'])) {
-            Session::flash('error', 'Configura primero la cookie de sesión de Recevet en el perfil.');
+            Session::flash('error', 'Inicia sesión en Recevet primero.');
             $this->redirect('recevet');
         }
 
@@ -95,22 +209,19 @@ class RecevtController extends BaseController
             $this->redirect('recevet');
         }
 
-        $dryRun        = ($this->postString('dry_run') === '1');
-        $sessionCookie = $usuario['recevet_session_cookie'];
-
+        $dryRun  = ($this->postString('dry_run') === '1');
         $allLogs = [];
 
         try {
-            $service  = new RecevtService($sessionCookie);
-            $loggedIn = $service->login(
-                $usuario['recevet_usuario'] ?? '',
-                ''  // password ya no se necesita con cookie
-            );
+            $service  = new RecevtService(0, $usuario['recevet_session_cookie']);
+            $loggedIn = $service->login();
             $allLogs  = array_merge($allLogs, $service->getLogs());
 
             if (!$loggedIn) {
+                // Sesión caducada: limpiar cookie para que el usuario vuelva a loguear
+                (new Usuario())->updateRecevet($uid, $usuario['recevet_usuario'] ?? '', null, '');
                 $_SESSION['_recevet_logs'] = $allLogs;
-                Session::flash('error', 'No se pudo iniciar sesión en Recevet. Revisa las credenciales en tu perfil.');
+                Session::flash('error', 'La sesión de Recevet ha caducado. Vuelve a iniciar sesión.');
                 $this->redirect('recevet');
             }
 
@@ -130,24 +241,21 @@ class RecevtController extends BaseController
             }
         } catch (\Throwable $e) {
             $allLogs[] = ['type' => 'error', 'msg' => 'Excepción: ' . $e->getMessage(), 'ts' => date('H:i:s')];
-            error_log('RecevtController::sincronizar error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            error_log('RecevtController::sincronizar: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
         }
 
         $_SESSION['_recevet_logs'] = $allLogs;
 
         $errores = count(array_filter($allLogs, fn($l) => $l['type'] === 'error'));
-        if ($errores > 0) {
-            Session::flash('error', "Sincronización con {$errores} error(es). Revisa el log.");
-        } else {
-            Session::flash('success', $dryRun
-                ? 'Simulación completada. Revisa el log.'
-                : 'Sincronización completada correctamente.');
-        }
+        Session::flash(
+            $errores > 0 ? 'error' : 'success',
+            $errores > 0
+                ? "Sincronización con {$errores} error(es). Revisa el log."
+                : ($dryRun ? 'Simulación completada.' : 'Sincronización completada correctamente.')
+        );
 
         $this->redirect('recevet');
     }
-
-    // ── Comprueba si las extensiones PHP necesarias están disponibles ──
 
     private function checkRequisitos(): array
     {

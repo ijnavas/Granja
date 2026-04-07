@@ -6,61 +6,51 @@ namespace App\Services;
 /**
  * RecevtService — automatiza el Libro de Tratamientos en recevet.es
  *
- * Flujo:
- *  1. login()       → GET login → parsea form → POST credenciales
- *  2. sincronizar() → GET libro → selecciona explotación → rellena fechas → acepta
+ * Flujo de autenticación (dos pasos):
+ *  1. iniciarLogin()      → valida fingerprint → envía email con código 2FA
+ *  2. verificarCodigo2fa() → valida código → hace login final → devuelve cookie
+ *
+ * Flujo de sincronización (una vez autenticado):
+ *  1. login()       → verifica sesión con cookie guardada en BD
+ *  2. sincronizar() → selecciona explotación → rellena fechas → acepta
  */
 class RecevtService
 {
     private const BASE_URL  = 'https://www.recevet.es';
     private const LOGIN_URL = 'https://www.recevet.es/index.php';
     private const LIBRO_URL = 'https://www.recevet.es/index.php?operacion=listadoLineasTratamientos';
+    private const PC        = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.361920x1080es-ESEurope/Madrid';
     private const TIMEOUT   = 30;
 
     private string $cookieFile;
-    private array  $logs          = [];
-    private bool   $loggedIn      = false;
-    private string $sessionCookie = '';
-
-    public function __construct(string $sessionCookie = '')
-    {
-        $this->cookieFile    = sys_get_temp_dir() . '/recevet_' . session_id() . '.txt';
-        $this->sessionCookie = $sessionCookie;
-
-        // Pre-inyectar la cookie en el jar para que cURL la use desde el primer request
-        if ($sessionCookie !== '') {
-            $this->writeCookieToJar($sessionCookie);
-        }
-    }
+    private bool   $persistCookie; // no borrar en __destruct (flujo 2FA inter-request)
+    private array  $logs      = [];
+    private bool   $loggedIn  = false;
 
     /**
-     * Escribe la cookie de sesión en formato Netscape (que entiende cURL).
-     * El string puede ser el valor completo del header Cookie:
-     *   "PHPSESSID=abc123; otra=val"
-     * o solo el valor de PHPSESSID.
+     * @param int    $uid           ID del usuario (0 = sin persistencia entre requests)
+     * @param string $sessionCookie Cookie guardada en BD para sincronización
      */
-    private function writeCookieToJar(string $cookie): void
+    public function __construct(int $uid = 0, string $sessionCookie = '')
     {
-        $lines   = ["# Netscape HTTP Cookie File\n"];
-        $rawPairs = str_contains($cookie, '=') ? $cookie : 'PHPSESSID=' . $cookie;
-
-        foreach (explode(';', $rawPairs) as $pair) {
-            $pair  = trim($pair);
-            $eqPos = strpos($pair, '=');
-            if ($eqPos === false) continue;
-            $name  = trim(substr($pair, 0, $eqPos));
-            $value = trim(substr($pair, $eqPos + 1));
-            if ($name === '') continue;
-            // dominio  httpOnly  path  secure  expiry  name  value
-            $lines[] = ".recevet.es\tTRUE\t/\tFALSE\t0\t{$name}\t{$value}\n";
+        if ($uid > 0) {
+            // Archivo persistente entre los dos pasos del flujo 2FA
+            $this->cookieFile    = sys_get_temp_dir() . '/recevet_uid_' . $uid . '.txt';
+            $this->persistCookie = true;
+        } else {
+            $this->cookieFile    = sys_get_temp_dir() . '/recevet_' . session_id() . '.txt';
+            $this->persistCookie = false;
         }
 
-        file_put_contents($this->cookieFile, implode('', $lines));
+        if ($sessionCookie !== '') {
+            $this->writeCookieToJar($sessionCookie);
+            $this->persistCookie = false; // recreada desde BD, no necesita persistir
+        }
     }
 
     public function __destruct()
     {
-        if (file_exists($this->cookieFile)) {
+        if (!$this->persistCookie && file_exists($this->cookieFile)) {
             @unlink($this->cookieFile);
         }
     }
@@ -96,61 +86,142 @@ class RecevtService
         return substr(hash('sha256', ($cfg['db']['host'] ?? '') . ($cfg['db']['user'] ?? '') . ($cfg['db']['pass'] ?? '')), 0, 16);
     }
 
-    // ── Login ─────────────────────────────────────────────────────
+    // ── Paso 1: Iniciar login (envía email con código 2FA) ─────────
 
     /**
-     * Login usando cookie de sesión (método principal).
+     * Inicia el proceso de login en recevet.es.
      *
-     * recevet.es protege su login con reCAPTCHA v3 + device fingerprint,
-     * lo que impide el login automático con cURL. La solución es que el usuario
-     * se loguee una vez en su navegador y pegue aquí la cookie de sesión.
-     *
-     * Si no hay cookie configurada, muestra instrucciones claras.
+     * Retorna:
+     *   ['status' => 'ok']              → sesión directa (fingerprint de confianza)
+     *   ['status' => 'needs_2fa',
+     *    'controlForm' => '...']        → se ha enviado el email con el código
+     *   ['status' => 'error',
+     *    'msg' => '...']                → fallo
      */
-    public function login(string $usuario, string $password): bool
+    public function iniciarLogin(string $usuario, string $password): array
+    {
+        $this->addLog('info', 'Conectando con recevet.es...');
+
+        // 1. GET para obtener el token controlForm
+        $html = $this->request('GET', self::LOGIN_URL);
+        if ($html === null) {
+            return ['status' => 'error', 'msg' => 'No se pudo conectar con recevet.es'];
+        }
+
+        // ¿Ya hay sesión activa? (cookie persistente del paso anterior)
+        if ($this->esRespuestaLogueado($html)) {
+            $this->addLog('success', 'Sesión ya activa.');
+            return ['status' => 'ok'];
+        }
+
+        $controlForm = $this->extraerControlForm($html);
+        $this->addLog('info', 'Comprobando dispositivo...');
+
+        // 2. Comprobar si el fingerprint es de confianza
+        $r = $this->request('POST', self::LOGIN_URL . '?operacion=validadorNavegador2fa', [
+            'user'  => $usuario,
+            'datos' => self::PC,
+        ]);
+        $trusted = ($r !== null && trim($r) === '{}');
+
+        if ($trusted) {
+            // Sin 2FA: login directo
+            $this->addLog('info', 'Dispositivo de confianza. Iniciando sesión...');
+            $result = $this->postLogin($controlForm, $usuario, $password, '');
+            if ($result) return ['status' => 'ok'];
+            return ['status' => 'error', 'msg' => 'Login fallido. Revisa usuario y contraseña.'];
+        }
+
+        // 3. Pedir envío del email con código 2FA
+        $this->addLog('info', 'Enviando código de verificación por email...');
+        $r2 = $this->request('POST', self::LOGIN_URL . '?operacion=buscaEmails2fa', [
+            'user'                 => $usuario,
+            'pass'                 => $password,
+            'g-recaptcha-response' => '',
+        ]);
+
+        if ($r2 === null) {
+            return ['status' => 'error', 'msg' => 'No se pudo solicitar el código de verificación.'];
+        }
+
+        $this->addLog('success', 'Email con código enviado. Introduce el código que has recibido.');
+        return ['status' => 'needs_2fa', 'controlForm' => $controlForm];
+    }
+
+    // ── Paso 2: Verificar código 2FA y completar login ─────────────
+
+    /**
+     * Valida el código de 6 dígitos recibido por email y completa el login.
+     *
+     * Retorna:
+     *   ['status' => 'ok',    'cookie' => '...'] → login correcto, cookie para guardar en BD
+     *   ['status' => 'error', 'msg'    => '...'] → código incorrecto o expirado
+     */
+    public function verificarCodigo2fa(
+        string $usuario,
+        string $password,
+        string $codigo,
+        string $controlForm,
+        bool   $seguro = true
+    ): array {
+        $this->addLog('info', 'Verificando código 2FA...');
+
+        // 1. Validar código con recevet.es
+        $r = $this->request('POST', self::LOGIN_URL . '?operacion=validadorCodigo2fa', [
+            'user'  => $usuario,
+            '2fa'   => $codigo,
+            'seguro' => $seguro ? '1' : '0',
+        ]);
+
+        if ($r === null) {
+            return ['status' => 'error', 'msg' => 'Error de conexión al validar el código.'];
+        }
+
+        // Respuesta vacía ({}) = código correcto
+        $decoded = json_decode(trim($r), true);
+        if (!empty($decoded)) {
+            $msg = is_array($decoded) ? (string)reset($decoded) : 'Código incorrecto o expirado.';
+            $this->addLog('error', 'Código inválido: ' . $msg);
+            return ['status' => 'error', 'msg' => $msg];
+        }
+
+        $this->addLog('info', 'Código correcto. Completando login...');
+
+        // 2. POST de login final
+        if (!$this->postLogin($controlForm, $usuario, $password, $codigo)) {
+            return ['status' => 'error', 'msg' => 'El código fue correcto pero el login final falló.'];
+        }
+
+        // 3. Extraer cookie de sesión del jar para guardar en BD
+        $cookie = $this->extractSessionCookieString();
+        $this->addLog('success', 'Login completado. Sesión guardada ✓');
+
+        // Ya no necesitamos el archivo temporal
+        $this->persistCookie = false;
+
+        return ['status' => 'ok', 'cookie' => $cookie];
+    }
+
+    // ── Verificar sesión para sincronización ──────────────────────
+
+    /**
+     * Verifica que la cookie guardada en BD sigue siendo válida.
+     * Usada antes de cada sincronización.
+     */
+    public function login(string $usuario = '', string $password = ''): bool
     {
         $this->addLog('info', 'Verificando sesión en Recevet...');
 
-        if ($this->sessionCookie === '') {
-            $this->addLog('error',
-                'No hay cookie de sesión configurada. ' .
-                'Ve a Perfil → Credenciales Recevet y sigue las instrucciones para obtenerla.'
-            );
-            return false;
-        }
-
-        // Verificar que la sesión sigue activa con un GET a la página principal
         $html = $this->request('GET', self::LOGIN_URL . '?operacion=principal');
 
         if ($html !== null && $this->esRespuestaLogueado($html)) {
-            $this->addLog('success', 'Sesión activa en Recevet ✓');
+            $this->addLog('success', 'Sesión activa ✓');
             $this->loggedIn = true;
             return true;
         }
 
-        $this->addLog('error',
-            'La cookie de sesión ha caducado o no es válida. ' .
-            'Ve a recevet.es, inicia sesión y actualiza la cookie en tu perfil.'
-        );
-        if ($html !== null) {
-            $this->addLog('info', 'Respuesta: ' . $this->fragmento($html));
-        }
+        $this->addLog('error', 'La sesión ha caducado. Ve a Recevet → Conectar para renovarla.');
         return false;
-    }
-
-    private function esRespuestaLogueado(string $html): bool
-    {
-        return str_contains($html, 'Cerrar sesi') ||
-               str_contains($html, 'cerrarSesion') ||
-               str_contains($html, 'Libro de tratamientos') ||
-               str_contains($html, 'listadoLineasTratamientos') ||
-               (str_contains($html, 'Su p') && str_contains($html, 'gina principal'));
-    }
-
-    private function fragmento(string $html): string
-    {
-        $texto = substr(strip_tags($html), 0, 400);
-        return trim((string)preg_replace('/\s+/', ' ', $texto));
     }
 
     // ── Sincronización ────────────────────────────────────────────
@@ -158,7 +229,7 @@ class RecevtService
     public function sincronizar(string $explotacion, bool $dryRun = false): bool
     {
         if (!$this->loggedIn) {
-            $this->addLog('error', 'No se ha iniciado sesión.');
+            $this->addLog('error', 'No hay sesión activa.');
             return false;
         }
 
@@ -181,8 +252,7 @@ class RecevtService
 
         $this->addLog('info', count($lineas) . ' línea(s) pendientes.');
 
-        $ok  = 0;
-        $err = 0;
+        $ok = $err = 0;
         foreach ($lineas as $i => $linea) {
             $num         = $i + 1;
             $fechaInicio = $this->calcularFechaInicio($linea['fecha_dispensacion']);
@@ -211,7 +281,76 @@ class RecevtService
         return $err === 0;
     }
 
-    // ── Privados ──────────────────────────────────────────────────
+    // ── Helpers login ─────────────────────────────────────────────
+
+    private function postLogin(string $controlForm, string $usuario, string $password, string $codigo): bool
+    {
+        $postData = [
+            'controlForm'          => $controlForm,
+            '2fa'                  => $codigo,
+            'pc'                   => self::PC,
+            'usuario'              => $usuario,
+            'passUsuario'          => $password,
+            'g-recaptcha-response' => '',
+        ];
+
+        $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=principal', $postData);
+
+        if ($respuesta !== null && $this->esRespuestaLogueado($respuesta)) {
+            $this->loggedIn = true;
+            return true;
+        }
+
+        if ($respuesta !== null) {
+            $this->addLog('info', 'Respuesta login: ' . $this->fragmento($respuesta));
+        }
+        return false;
+    }
+
+    private function extraerControlForm(string $html): string
+    {
+        $dom = $this->parseDom($html);
+        if (!$dom) return '';
+        $xpath = new \DOMXPath($dom);
+        $nodes = $xpath->query('//input[@name="controlForm"]');
+        return $nodes->length > 0 ? (string)$nodes->item(0)->getAttribute('value') : '';
+    }
+
+    /**
+     * Lee el archivo de cookies Netscape y devuelve el string
+     * tipo "PHPSESSID=abc; otraCookie=val" para guardar en la BD.
+     */
+    public function extractSessionCookieString(): string
+    {
+        if (!file_exists($this->cookieFile)) return '';
+        $lines  = file($this->cookieFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $pairs  = [];
+        foreach ($lines as $line) {
+            if (str_starts_with($line, '#')) continue;
+            $parts = explode("\t", $line);
+            if (count($parts) < 7) continue;
+            $name  = trim($parts[5]);
+            $value = trim($parts[6]);
+            if ($name) $pairs[] = $name . '=' . $value;
+        }
+        return implode('; ', $pairs);
+    }
+
+    private function esRespuestaLogueado(string $html): bool
+    {
+        return str_contains($html, 'Cerrar sesi') ||
+               str_contains($html, 'cerrarSesion') ||
+               str_contains($html, 'Libro de tratamientos') ||
+               str_contains($html, 'listadoLineasTratamientos') ||
+               (str_contains($html, 'Su p') && str_contains($html, 'gina principal'));
+    }
+
+    private function fragmento(string $html): string
+    {
+        return trim((string)preg_replace('/\s+/', ' ', substr(strip_tags($html), 0, 400)));
+    }
+
+    // ── Sincronización internals ──────────────────────────────────
 
     private function seleccionarExplotacion(string $html, string $explotacion): ?string
     {
@@ -288,9 +427,7 @@ class RecevtService
 
         foreach ($filas as $fila) {
             $linea = $this->extraerDatosLinea($fila, $dom);
-            if ($linea !== null) {
-                $lineas[] = $linea;
-            }
+            if ($linea !== null) $lineas[] = $linea;
         }
 
         return $lineas;
@@ -306,9 +443,7 @@ class RecevtService
 
         if (!$formElement) {
             $parent = $fila;
-            while ($parent && $parent->nodeName !== 'form') {
-                $parent = $parent->parentNode;
-            }
+            while ($parent && $parent->nodeName !== 'form') $parent = $parent->parentNode;
             $formElement = ($parent && $parent->nodeName === 'form') ? $parent : null;
         }
 
@@ -346,18 +481,13 @@ class RecevtService
         if ($celdas->length > 0) {
             if (preg_match('/(\d{2}\/\d{2}\/\d{4})/', $celdas->item(0)->textContent, $m)) return $m[1];
         }
-
-        if (preg_match_all('/(\d{2}\/\d{2}\/\d{4})/', $texto, $matches)) {
-            return $matches[1][0];
-        }
-
+        if (preg_match_all('/(\d{2}\/\d{2}\/\d{4})/', $texto, $matches)) return $matches[1][0];
         $hiddens = $xpath->query(".//input[@type='hidden' and (contains(@name,'fecha') or contains(@name,'dispensa'))]", $fila);
         foreach ($hiddens as $h) {
             $val = (string)$h->getAttribute('value');
             if (preg_match('/(\d{2}\/\d{2}\/\d{4})/', $val, $m)) return $m[1];
             if (preg_match('/(\d{4}-\d{2}-\d{2})/',   $val, $m)) return $this->isoToEs($m[1]);
         }
-
         return null;
     }
 
@@ -373,32 +503,27 @@ class RecevtService
     {
         $xpath  = new \DOMXPath($dom);
         $celdas = $xpath->query('.//td', $fila);
-        if ($celdas->length > 0) return trim((string)$celdas->item(0)->textContent);
-        return '—';
+        return $celdas->length > 0 ? trim((string)$celdas->item(0)->textContent) : '—';
     }
 
     private function extraerMedicamento(\DOMElement $fila, \DOMDocument $dom): string
     {
         $xpath  = new \DOMXPath($dom);
         $celdas = $xpath->query('.//td', $fila);
-        if ($celdas->length > 1) return trim((string)$celdas->item(1)->textContent);
-        return '—';
+        return $celdas->length > 1 ? trim((string)$celdas->item(1)->textContent) : '—';
     }
 
     private function completarLinea(array $linea, string $fechaInicio, ?string $fechaFin): bool
     {
         $fields                             = $linea['form_fields'];
         $fields[$linea['fecha_input_name']] = $fechaInicio;
-
         foreach (array_keys($fields) as $key) {
             $keyLow = strtolower($key);
             if ((str_contains($keyLow, 'fecha_fin') || str_contains($keyLow, 'fechafin')) && $fechaFin) {
                 $fields[$key] = $fechaFin;
             }
         }
-
-        $respuesta = $this->request($linea['form_method'], $linea['form_action'], $fields);
-        return $respuesta !== null;
+        return $this->request($linea['form_method'], $linea['form_action'], $fields) !== null;
     }
 
     // ── Fechas ────────────────────────────────────────────────────
@@ -406,16 +531,14 @@ class RecevtService
     private function calcularFechaInicio(string $fechaDispensacion): string
     {
         $ts = $this->esDateToTimestamp($fechaDispensacion);
-        if ($ts === null) return date('d/m/Y', strtotime('+1 day'));
-        return date('d/m/Y', $ts + 86400);
+        return $ts !== null ? date('d/m/Y', $ts + 86400) : date('d/m/Y', strtotime('+1 day'));
     }
 
     private function calcularFechaFin(string $fechaInicio, int $diasTratamiento): ?string
     {
         if ($diasTratamiento <= 1) return null;
         $ts = $this->esDateToTimestamp($fechaInicio);
-        if ($ts === null) return null;
-        return date('d/m/Y', $ts + ($diasTratamiento - 1) * 86400);
+        return $ts !== null ? date('d/m/Y', $ts + ($diasTratamiento - 1) * 86400) : null;
     }
 
     // ── HTTP ──────────────────────────────────────────────────────
@@ -448,9 +571,7 @@ class RecevtService
 
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
-            // recevet.es espera ISO-8859-1 en los POSTs
-            $postData = http_build_query($data);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
         }
 
         $response = curl_exec($ch);
@@ -467,22 +588,32 @@ class RecevtService
             return null;
         }
 
-        // recevet.es sirve ISO-8859-1 — convertir a UTF-8 para parseo consistente
         return $this->toUtf8($response);
     }
 
-    /**
-     * Convierte la respuesta de recevet.es (ISO-8859-1) a UTF-8.
-     * Si ya es UTF-8 o no tiene meta charset ISO, la devuelve tal cual.
-     */
     private function toUtf8(string $html): string
     {
-        if (stripos($html, 'charset=ISO-8859-1') !== false ||
-            stripos($html, 'charset=iso-8859-1') !== false) {
+        if (stripos($html, 'charset=ISO-8859-1') !== false) {
             $html = mb_convert_encoding($html, 'UTF-8', 'ISO-8859-1');
             $html = str_ireplace('charset=ISO-8859-1', 'charset=UTF-8', $html);
         }
         return $html;
+    }
+
+    private function writeCookieToJar(string $cookie): void
+    {
+        $lines    = ["# Netscape HTTP Cookie File\n"];
+        $rawPairs = str_contains($cookie, '=') ? $cookie : 'PHPSESSID=' . $cookie;
+        foreach (explode(';', $rawPairs) as $pair) {
+            $pair  = trim($pair);
+            $eqPos = strpos($pair, '=');
+            if ($eqPos === false) continue;
+            $name  = trim(substr($pair, 0, $eqPos));
+            $value = trim(substr($pair, $eqPos + 1));
+            if ($name === '') continue;
+            $lines[] = ".recevet.es\tTRUE\t/\tFALSE\t0\t{$name}\t{$value}\n";
+        }
+        file_put_contents($this->cookieFile, implode('', $lines));
     }
 
     // ── DOM ───────────────────────────────────────────────────────
@@ -497,8 +628,7 @@ class RecevtService
             $type  = strtolower((string)($input->getAttribute('type') ?: 'text'));
             $name  = (string)$input->getAttribute('name');
             $value = (string)$input->getAttribute('value');
-            if (!$name) continue;
-            if (in_array($type, ['submit', 'button', 'image'])) continue;
+            if (!$name || in_array($type, ['submit', 'button', 'image'])) continue;
             if ($type === 'radio' || $type === 'checkbox') {
                 if ($input->getAttribute('checked')) $fields[$name] = $value;
                 continue;
@@ -514,9 +644,7 @@ class RecevtService
                 $fields[$name] = (string)$selected->item(0)->getAttribute('value');
             } else {
                 $opts = $xpath->query('.//option', $select);
-                if ($opts->length > 0) {
-                    $fields[$name] = (string)$opts->item(0)->getAttribute('value');
-                }
+                if ($opts->length > 0) $fields[$name] = (string)$opts->item(0)->getAttribute('value');
             }
         }
 
@@ -531,7 +659,6 @@ class RecevtService
     private function parseDom(string $html): ?\DOMDocument
     {
         if (!$html) return null;
-        // toUtf8() ya habrá convertido la respuesta; nos aseguramos igualmente
         $html = $this->toUtf8($html);
         $dom  = new \DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
@@ -574,6 +701,8 @@ class RecevtService
 
     public function getLogs(): array
     {
-        return $this->logs;
+        $l          = $this->logs;
+        $this->logs = [];
+        return $l;
     }
 }
