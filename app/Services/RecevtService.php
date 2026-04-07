@@ -521,35 +521,51 @@ class RecevtService
 
         // Parámetros que envía DataTables + el formulario
         // filtros y upSeleccionada ya vienen en $formFields extraídos del JS/HTML
-        $postData = array_merge($formFields, [
-            'draw'                     => '1',
-            'start'                    => '0',
-            'length'                   => '1000',  // todas las líneas
-            'mostrarLineasCompletadas' => '0',      // solo pendientes (sin fechaInicio)
-            'iDisplayStart'            => '0',
-            'iDisplayLength'           => '1000',
-            'sEcho'                    => '1',
+        $baseParams = array_merge($formFields, [
+            'draw'          => '1',
+            'start'         => '0',
+            'length'        => '1000',
+            'iDisplayStart' => '0',
+            'iDisplayLength'=> '1000',
+            'sEcho'         => '1',
         ]);
 
-        $this->addLog('info', 'Params AJAX: filtros=' . (isset($postData['filtros']) ? 'sí' : 'no')
+        // ── Primer intento: solo pendientes (idRecetaLineaTratamiento vacío) ──
+        $postData = array_merge($baseParams, ['mostrarLineasCompletadas' => '0']);
+        $this->addLog('info', 'Params AJAX (mostrarLineasCompletadas=0): filtros=' . (isset($postData['filtros']) ? 'sí' : 'no')
             . ' upSeleccionada=' . ($postData['upSeleccionada'] ?? '(vacío)'));
 
         $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
-
         if ($respuesta === null) {
             $this->addLog('error', 'No se pudo obtener las líneas de tratamiento.');
             return [];
         }
+        $this->addLog('info', 'Respuesta AJAX/0 (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
 
-        $this->addLog('info', 'Respuesta AJAX (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
+        $json = json_decode($respuesta, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            $total = (int)($json['recordsTotal'] ?? $json['iTotalRecords'] ?? count($json['aaData'] ?? $json['data'] ?? []));
+            if ($total > 0) {
+                return $this->parsearLineasDesdeJson($json);
+            }
+            // 0 registros con =0 → puede haber registros parciales (tienen ID pero sin fechas)
+            // Fallback: pedir todos y filtrar client-side los que tengan fechas vacías
+            $this->addLog('info', 'Sin pendientes con mostrarLineasCompletadas=0 → reintentando con =1 (filtro client-side)');
+        }
 
-        // Intentar parsear como JSON (DataTables)
+        // ── Segundo intento: todos los registros, filtrar fechas vacías en completarLineaConIDs ──
+        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1']);
+        $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
+        if ($respuesta === null) {
+            $this->addLog('error', 'No se pudo obtener las líneas de tratamiento (intento 2).');
+            return [];
+        }
+        $this->addLog('info', 'Respuesta AJAX/1 (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
+
         $json = json_decode($respuesta, true);
         if (json_last_error() === JSON_ERROR_NONE) {
             return $this->parsearLineasDesdeJson($json);
         }
-
-        // Si no es JSON, puede ser HTML directo
         return $this->parsearLineasPendientes($respuesta);
     }
 
@@ -839,13 +855,15 @@ class RecevtService
         $diasField        = null;
         $diasValue        = 0;
 
+        $existingFechaInicio = '';
         if ($dom3) {
             $xpath3 = new \DOMXPath($dom3);
             foreach ($xpath3->query('//input') as $inp) {
                 $name = $inp->getAttribute('name');
                 $nl   = strtolower($name);
                 if (str_contains($nl, 'fechainiciotratamiento')) {
-                    $fechaInicioField = $name;
+                    $fechaInicioField    = $name;
+                    $existingFechaInicio = $inp->getAttribute('value');
                 } elseif (str_contains($nl, 'fechafintratamiento')) {
                     $fechaFinField = $name;
                 } elseif (str_contains($nl, 'diastratamiento') || str_contains($nl, 'dias_tratamiento')) {
@@ -853,6 +871,12 @@ class RecevtService
                     $diasValue  = (int)$inp->getAttribute('value');
                 }
             }
+        }
+
+        // Si ya tiene fecha de inicio rellenada → ya completado, nada que hacer
+        if ($existingFechaInicio !== '') {
+            $this->addLog('info', "  Ya completado (fechaInicio={$existingFechaInicio}) — omitiendo");
+            return true;
         }
 
         if (!$fechaInicioField) {
