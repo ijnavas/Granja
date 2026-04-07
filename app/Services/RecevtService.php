@@ -478,7 +478,7 @@ class RecevtService
 
         // Si hay campo de fecha fin, rellenarlo también
         foreach (array_keys($fields) as $key) {
-            if (strpos(strtolower($key), 'fecha_fin') || str_contains(strtolower($key), 'fechafin')) !== false {
+            if (str_contains(strtolower($key), 'fecha_fin') || str_contains(strtolower($key), 'fechafin')) {
                 if ($fechaFin) $fields[$key] = $fechaFin;
             }
         }
@@ -490,7 +490,7 @@ class RecevtService
         if ($respuesta === null) return false;
 
         // Verificar éxito: la fila debería desaparecer o mostrar la fecha
-        return !strpos($respuesta, 'Error') && !str_contains($respuesta, 'error') !== false;
+        return !str_contains($respuesta, 'Error fatal') && !str_contains($respuesta, 'error crítico');
     }
 
     // ── Cálculo de fechas ─────────────────────────────────────────
@@ -573,8 +573,8 @@ class RecevtService
             $hasPass = false;
             foreach (array_keys($fields) as $name) {
                 $nameLow = strtolower($name);
-                if (strpos($nameLow, 'user') || str_contains($nameLow, 'login') || $nameLow === 'usuario') !== false $hasUser = true;
-                if (strpos($nameLow, 'pass') || str_contains($nameLow, 'clave') || str_contains($nameLow, 'pwd')) !== false   $hasPass = true;
+                if (str_contains($nameLow, 'user') || str_contains($nameLow, 'login') || $nameLow === 'usuario') $hasUser = true;
+                if (str_contains($nameLow, 'pass') || str_contains($nameLow, 'clave') || str_contains($nameLow, 'pwd')) $hasPass = true;
             }
             // Si no encontramos por nombre, buscar por tipo
             $passInputs = $xpath->query('.//input[@type="password"]', $form);
