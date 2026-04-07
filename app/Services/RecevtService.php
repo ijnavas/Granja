@@ -257,6 +257,14 @@ class RecevtService
         $html = $this->seleccionarExplotacion($html, $explotacion);
         if ($html === null) return false;
 
+        // Verificar qué explotación está seleccionada en la página resultante
+        if (preg_match('/<option[^>]+selected[^>]*>([^<]+)<\/option>/i', $html, $mSel)) {
+            $this->addLog('info', 'Opción seleccionada en página: ' . trim($mSel[1]));
+        }
+        if (preg_match('/id=["\']upSeleccionada["\'][^>]+value=["\']([^"\']+)["\']|value=["\']([^"\']+)["\'][^>]+id=["\']upSeleccionada["\']/', $html, $mUp)) {
+            $this->addLog('info', 'upSeleccionada en HTML: ' . ($mUp[1] ?: $mUp[2]));
+        }
+
         // Extraer operaciones del JS para diagnóstico
         $this->logOperacionesJs($html);
 
