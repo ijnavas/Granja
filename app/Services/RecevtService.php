@@ -257,38 +257,52 @@ class RecevtService
         $html = $this->seleccionarExplotacion($html, $explotacion);
         if ($html === null) return false;
 
-        // ── DIAGNÓSTICO: guardar HTML en archivo temporal para inspección ──
-        $debugFile = sys_get_temp_dir() . '/recevet_debug_' . session_id() . '.html';
-        file_put_contents($debugFile, $html);
-        $this->addLog('info', 'HTML guardado en: ' . $debugFile . ' (' . strlen($html) . ' bytes)');
-
-        // Extraer fragmento útil: primera tabla que contenga "Aceptar" o "fecha"
+        // ── DIAGNÓSTICO ──────────────────────────────────────────────────
         $dom   = $this->parseDom($html);
         $xpath = new \DOMXPath($dom);
 
-        // ¿Hay botones Aceptar?
-        $aceptar = $xpath->query("//button[contains(.,'Aceptar')] | //input[@value='Aceptar']");
-        $this->addLog('info', 'Botones "Aceptar" encontrados: ' . $aceptar->length);
-
-        // ¿Hay inputs con "fecha"?
-        $fechas = $xpath->query("//input[contains(translate(@name,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'fecha')]");
-        $this->addLog('info', 'Inputs con "fecha" encontrados: ' . $fechas->length);
-        for ($i = 0; $i < min($fechas->length, 5); $i++) {
-            $inp = $fechas->item($i);
-            $this->addLog('info', '  input fecha: name="' . $inp->getAttribute('name') . '" type="' . $inp->getAttribute('type') . '" value="' . $inp->getAttribute('value') . '"');
-        }
-
-        // ¿Hay tablas?
+        // Todas las tablas y sus filas
         $tablas = $xpath->query('//table');
         $this->addLog('info', 'Tablas encontradas: ' . $tablas->length);
-        if ($tablas->length > 0) {
-            // Mostrar texto de las primeras filas de la primera tabla
-            $filas = $xpath->query('.//tr', $tablas->item(0));
-            $this->addLog('info', 'Filas en tabla[0]: ' . $filas->length);
-            for ($i = 0; $i < min($filas->length, 3); $i++) {
+        for ($t = 0; $t < $tablas->length; $t++) {
+            $tabla = $tablas->item($t);
+            $id    = $tabla->getAttribute('id');
+            $cls   = $tabla->getAttribute('class');
+            $filas = $xpath->query('.//tr', $tabla);
+            $this->addLog('info', "  tabla[{$t}] id='{$id}' class='{$cls}' → {$filas->length} filas");
+            for ($i = 0; $i < min($filas->length, 4); $i++) {
                 $txt = trim(preg_replace('/\s+/', ' ', $filas->item($i)->textContent));
-                $this->addLog('info', '  fila[' . $i . ']: ' . substr($txt, 0, 120));
+                $this->addLog('info', '    fila[' . $i . ']: ' . substr($txt, 0, 150));
             }
+        }
+
+        // Todos los forms
+        $forms = $xpath->query('//form');
+        $this->addLog('info', 'Formularios encontrados: ' . $forms->length);
+        for ($i = 0; $i < $forms->length; $i++) {
+            $f = $forms->item($i);
+            $this->addLog('info', '  form[' . $i . '] id="' . $f->getAttribute('id') . '" action="' . $f->getAttribute('action') . '"');
+        }
+
+        // Buscar el sAjaxSource o ajax de DataTables en los scripts
+        preg_match_all('/(sAjaxSource|ajax)["\s]*[:=]["\s]*["\']([^"\']+)["\']/', $html, $ajaxMatches);
+        if (!empty($ajaxMatches[2])) {
+            foreach ($ajaxMatches[2] as $url) {
+                $this->addLog('info', 'DataTables AJAX source: ' . $url);
+            }
+        }
+
+        // Buscar operacion= en scripts para encontrar el endpoint de carga
+        preg_match_all('/operacion=([a-zA-Z0-9_]+)/', $html, $opMatches);
+        $operaciones = array_unique($opMatches[1] ?? []);
+        $this->addLog('info', 'Operaciones en la página: ' . implode(', ', array_slice($operaciones, 0, 15)));
+
+        // Todos los inputs (resumen)
+        $inputs = $xpath->query('//input[@name]');
+        $this->addLog('info', 'Todos los inputs con name:');
+        for ($i = 0; $i < min($inputs->length, 20); $i++) {
+            $inp = $inputs->item($i);
+            $this->addLog('info', '  [' . $inp->getAttribute('type') . '] name="' . $inp->getAttribute('name') . '" value="' . substr($inp->getAttribute('value'), 0, 40) . '"');
         }
         // ─────────────────────────────────────────────────────────────────
 
