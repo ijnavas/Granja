@@ -418,6 +418,8 @@ class RecevtService
 
         $fields              = $this->extraerCamposForm($form);
         $fields[$selectName] = $explotacion;
+        // El JS llama cambiarExplotacion() que hace $("#accion").val("cambiarExplotacion") antes de submit
+        $fields['accion'] = 'cambiarExplotacion';
 
         $botones = $xpath->query(".//button[@type='submit'] | .//input[@type='submit']", $form);
         if ($botones->length > 0) {
@@ -490,7 +492,7 @@ class RecevtService
             'draw'                     => '1',
             'start'                    => '0',
             'length'                   => '1000',  // todas las líneas
-            'mostrarLineasCompletadas' => '1',      // pedir TODAS; filtramos client-side
+            'mostrarLineasCompletadas' => '0',      // solo pendientes (sin fechaInicio)
             'iDisplayStart'            => '0',
             'iDisplayLength'           => '1000',
             'sEcho'                    => '1',
