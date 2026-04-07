@@ -866,14 +866,13 @@ class RecevtService
             $this->addLog('info', 'Operaciones en JS/HTML: ' . implode(', ', $ops));
         }
 
-        // Buscar definición de actualizarLineaTratamiento en todos los scripts
+        // Buscar en scripts inline
         preg_match_all('/<script[^>]*>(.*?)<\/script>/si', $html, $scripts);
         foreach (($scripts[1] ?? []) as $script) {
             if (strpos($script, 'actualizarLineaTratamiento') !== false) {
-                // Extraer ±500 chars alrededor de la función
-                $pos = strpos($script, 'actualizarLineaTratamiento');
+                $pos   = strpos($script, 'actualizarLineaTratamiento');
                 $start = max(0, $pos - 100);
-                $this->addLog('info', 'JS actualizarLineaTratamiento: ' . substr($script, $start, 1000));
+                $this->addLog('info', 'JS inline actualizarLineaTratamiento: ' . substr($script, $start, 1200));
             }
             if (strpos($script, 'DataTable') !== false || strpos($script, 'dame_lineas') !== false) {
                 $scriptTrim = trim($script);
@@ -882,6 +881,18 @@ class RecevtService
                     $this->addLog('info', "Script DataTables (parte {$part}): " . substr($scriptTrim, $offset, 2000));
                     $offset += 2000; $part++;
                 }
+            }
+        }
+
+        // Buscar en scripts externos
+        preg_match_all('/<script[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $extScripts);
+        foreach (($extScripts[1] ?? []) as $src) {
+            $url = (strpos($src, 'http') === 0) ? $src : self::BASE_URL . '/' . ltrim($src, '/');
+            $jsContent = $this->request('GET', $url, []);
+            if ($jsContent && strpos($jsContent, 'actualizarLineaTratamiento') !== false) {
+                $pos   = strpos($jsContent, 'actualizarLineaTratamiento');
+                $start = max(0, $pos - 50);
+                $this->addLog('info', "JS externo [{$src}] actualizarLineaTratamiento: " . substr($jsContent, $start, 1500));
             }
         }
     }
