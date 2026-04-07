@@ -257,58 +257,13 @@ class RecevtService
         $html = $this->seleccionarExplotacion($html, $explotacion);
         if ($html === null) return false;
 
-        // ── DIAGNÓSTICO ──────────────────────────────────────────────────
-        $dom   = $this->parseDom($html);
-        $xpath = new \DOMXPath($dom);
+        // Los datos se cargan vía AJAX con operacion=dame_lineasTratamientos
+        // Extraemos los campos necesarios del form para construir la petición
+        $formFields = $this->extraerCamposFormDesdeHtml($html);
 
-        // Todas las tablas y sus filas
-        $tablas = $xpath->query('//table');
-        $this->addLog('info', 'Tablas encontradas: ' . $tablas->length);
-        for ($t = 0; $t < $tablas->length; $t++) {
-            $tabla = $tablas->item($t);
-            $id    = $tabla->getAttribute('id');
-            $cls   = $tabla->getAttribute('class');
-            $filas = $xpath->query('.//tr', $tabla);
-            $this->addLog('info', "  tabla[{$t}] id='{$id}' class='{$cls}' → {$filas->length} filas");
-            for ($i = 0; $i < min($filas->length, 4); $i++) {
-                $txt = trim(preg_replace('/\s+/', ' ', $filas->item($i)->textContent));
-                $this->addLog('info', '    fila[' . $i . ']: ' . substr($txt, 0, 150));
-            }
-        }
-
-        // Todos los forms
-        $forms = $xpath->query('//form');
-        $this->addLog('info', 'Formularios encontrados: ' . $forms->length);
-        for ($i = 0; $i < $forms->length; $i++) {
-            $f = $forms->item($i);
-            $this->addLog('info', '  form[' . $i . '] id="' . $f->getAttribute('id') . '" action="' . $f->getAttribute('action') . '"');
-        }
-
-        // Buscar el sAjaxSource o ajax de DataTables en los scripts
-        preg_match_all('/(sAjaxSource|ajax)["\s]*[:=]["\s]*["\']([^"\']+)["\']/', $html, $ajaxMatches);
-        if (!empty($ajaxMatches[2])) {
-            foreach ($ajaxMatches[2] as $url) {
-                $this->addLog('info', 'DataTables AJAX source: ' . $url);
-            }
-        }
-
-        // Buscar operacion= en scripts para encontrar el endpoint de carga
-        preg_match_all('/operacion=([a-zA-Z0-9_]+)/', $html, $opMatches);
-        $operaciones = array_unique($opMatches[1] ?? []);
-        $this->addLog('info', 'Operaciones en la página: ' . implode(', ', array_slice($operaciones, 0, 15)));
-
-        // Todos los inputs (resumen)
-        $inputs = $xpath->query('//input[@name]');
-        $this->addLog('info', 'Todos los inputs con name:');
-        for ($i = 0; $i < min($inputs->length, 20); $i++) {
-            $inp = $inputs->item($i);
-            $this->addLog('info', '  [' . $inp->getAttribute('type') . '] name="' . $inp->getAttribute('name') . '" value="' . substr($inp->getAttribute('value'), 0, 40) . '"');
-        }
-        // ─────────────────────────────────────────────────────────────────
-
-        $lineas = $this->parsearLineasPendientes($html);
+        $lineas = $this->obtenerLineasPendientesAjax($formFields);
         if (empty($lineas)) {
-            $this->addLog('info', 'No se encontraron líneas pendientes con el parser actual.');
+            $this->addLog('success', 'No hay líneas pendientes. Todo al día.');
             return true;
         }
 
@@ -472,6 +427,171 @@ class RecevtService
 
         $this->addLog('info', 'Explotación seleccionada.');
         return $respuesta;
+    }
+
+    /**
+     * Extrae todos los campos del form principal del HTML (myForm).
+     */
+    private function extraerCamposFormDesdeHtml(string $html): array
+    {
+        $dom = $this->parseDom($html);
+        if (!$dom) return [];
+        $xpath = new \DOMXPath($dom);
+        $forms = $xpath->query('//form[@id="myForm"] | //form[1]');
+        if ($forms->length === 0) return [];
+        return $this->extraerCamposForm($forms->item(0));
+    }
+
+    /**
+     * Llama al endpoint AJAX dame_lineasTratamientos para obtener los
+     * tratamientos pendientes (los que tienen fechaInicio vacía).
+     *
+     * recevet.es devuelve JSON con estructura DataTables:
+     *   { "aaData": [ [...], [...] ], "iTotalRecords": N, ... }
+     * Cada fila es un array de celdas HTML.
+     */
+    private function obtenerLineasPendientesAjax(array $formFields): array
+    {
+        $this->addLog('info', 'Llamando a dame_lineasTratamientos vía AJAX...');
+
+        // Parámetros que envía DataTables + el formulario
+        $postData = array_merge($formFields, [
+            'accion'                 => '',
+            'accionActiva'           => '',
+            'start'                  => '0',
+            'numElementosMostrar'    => '100',  // pedir muchas para cogerlas todas
+            'mostrarLineasCompletadas' => '0',   // solo pendientes
+            // DataTables params estándar
+            'iDisplayStart'          => '0',
+            'iDisplayLength'         => '100',
+            'sEcho'                  => '1',
+        ]);
+
+        $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
+
+        if ($respuesta === null) {
+            $this->addLog('error', 'No se pudo obtener las líneas de tratamiento.');
+            return [];
+        }
+
+        $this->addLog('info', 'Respuesta AJAX (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
+
+        // Intentar parsear como JSON (DataTables)
+        $json = json_decode($respuesta, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            return $this->parsearLineasDesdeJson($json);
+        }
+
+        // Si no es JSON, puede ser HTML directo
+        return $this->parsearLineasPendientes($respuesta);
+    }
+
+    /**
+     * Parsea la respuesta JSON de DataTables.
+     * Cada elemento de aaData es un array de celdas HTML.
+     * Buscamos las filas donde la celda de fecha_inicio esté vacía.
+     */
+    private function parsearLineasDesdeJson(array $json): array
+    {
+        $rows = $json['aaData'] ?? $json['data'] ?? [];
+        $this->addLog('info', 'Filas recibidas del AJAX: ' . count($rows));
+
+        if (empty($rows)) return [];
+
+        // Log de la primera fila para ver la estructura
+        if (!empty($rows[0])) {
+            $this->addLog('info', 'Estructura fila[0]: ' . json_encode(array_map(fn($c) => substr(strip_tags((string)$c), 0, 40), $rows[0])));
+        }
+
+        $lineas = [];
+        foreach ($rows as $row) {
+            $linea = $this->extraerLineaDeFilaJson($row);
+            if ($linea !== null) {
+                $lineas[] = $linea;
+            }
+        }
+
+        $this->addLog('info', 'Líneas pendientes encontradas: ' . count($lineas));
+        return $lineas;
+    }
+
+    /**
+     * Extrae los datos de una fila JSON de DataTables.
+     * Las celdas son HTML — las parseamos para encontrar inputs y fechas.
+     */
+    private function extraerLineaDeFilaJson(array $celdas): ?array
+    {
+        // Buscar en todas las celdas un input de fecha_inicio vacío
+        $fechaInputName = null;
+        $fechaActual    = null;
+        $formAction     = self::LIBRO_URL;
+        $formFields     = [];
+        $formMethod     = 'POST';
+
+        foreach ($celdas as $celda) {
+            $celdaHtml = (string)$celda;
+            if (!str_contains($celdaHtml, '<')) continue;
+
+            $dom = $this->parseDom('<div>' . $celdaHtml . '</div>');
+            if (!$dom) continue;
+            $xpath = new \DOMXPath($dom);
+
+            // Buscar form
+            $forms = $xpath->query('//form');
+            if ($forms->length > 0) {
+                $form = $forms->item(0);
+                $formFields = array_merge($formFields, $this->extraerCamposForm($form));
+                $act = $form->getAttribute('action');
+                if ($act) $formAction = $this->absoluteUrl($act);
+                $met = $form->getAttribute('method');
+                if ($met) $formMethod = strtoupper($met);
+            }
+
+            // Buscar input de fecha inicio vacío
+            $inputs = $xpath->query("//input[contains(translate(@name,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'fechainicio') or contains(translate(@name,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'fecha_inicio')]");
+            foreach ($inputs as $inp) {
+                $val = trim((string)$inp->getAttribute('value'));
+                if ($val === '') {
+                    $fechaInputName = $inp->getAttribute('name');
+                    $fechaActual    = '';
+                }
+            }
+        }
+
+        // Si no encontramos un input de fecha vacío, no es una línea pendiente
+        if ($fechaInputName === null) return null;
+
+        // Extraer texto plano de todas las celdas para buscar fechas y medicamento
+        $textoCompleto = implode(' ', array_map(fn($c) => strip_tags((string)$c), $celdas));
+        $textoCompleto = preg_replace('/\s+/', ' ', $textoCompleto);
+
+        $fechaDispensacion = $this->extraerFechaDeTexto($textoCompleto);
+        if (!$fechaDispensacion) return null;
+
+        return [
+            'receta'             => $this->extraerTextoColumna($celdas, 0),
+            'medicamento'        => $this->extraerTextoColumna($celdas, 1),
+            'fecha_dispensacion' => $fechaDispensacion,
+            'dias_tratamiento'   => $this->extraerDiasTratamiento($textoCompleto),
+            'fecha_input_name'   => $fechaInputName,
+            'form_action'        => $formAction,
+            'form_method'        => $formMethod,
+            'form_fields'        => $formFields,
+        ];
+    }
+
+    private function extraerFechaDeTexto(string $texto): ?string
+    {
+        if (preg_match_all('/(\d{2}\/\d{2}\/\d{4})/', $texto, $m)) {
+            return $m[1][0];
+        }
+        return null;
+    }
+
+    private function extraerTextoColumna(array $celdas, int $idx): string
+    {
+        if (!isset($celdas[$idx])) return '—';
+        return trim(preg_replace('/\s+/', ' ', strip_tags((string)$celdas[$idx]))) ?: '—';
     }
 
     private function parsearLineasPendientes(string $html): array
