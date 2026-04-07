@@ -66,85 +66,100 @@ class RecevtService
 
     // ── Login ─────────────────────────────────────────────────────
 
+    /**
+     * Flujo real de recevet.es:
+     *  1. GET index.php  → extrae controlForm token
+     *  2. POST validadorNavegador2fa → registra el "navegador" (PC fingerprint)
+     *  3. POST ?operacion=principal  → campos: controlForm, 2fa, pc, usuario, passUsuario, g-recaptcha-response
+     *
+     * NOTA: recevet.es usa reCAPTCHA v3. Si el servidor lo valida estrictamente
+     * el login sin navegador real no es posible. Intentamos con token vacío primero.
+     */
     public function login(string $usuario, string $password): bool
     {
         $this->addLog('info', 'Iniciando sesión en Recevet...');
 
+        // 1. GET login page
         $html = $this->request('GET', self::LOGIN_URL);
         if ($html === null) {
             $this->addLog('error', 'No se pudo conectar con recevet.es');
             return false;
         }
 
-        // ¿Ya estamos logueados? (sesión activa en cookie)
+        // ¿Ya hay sesión activa?
         if ($this->esRespuestaLogueado($html)) {
-            $this->addLog('success', 'Ya había sesión activa en Recevet.');
+            $this->addLog('success', 'Sesión activa encontrada en Recevet.');
             $this->loggedIn = true;
             return true;
         }
 
-        $this->aceptarCookies($html);
+        // Extraer controlForm de la página de login
+        $controlForm = $this->extraerControlForm($html);
+        $this->addLog('info', 'controlForm: ' . ($controlForm ?: '(vacío)'));
 
-        $form = $this->parseLoginForm($html);
-        if ($form === null) {
-            $this->addLog('error', 'No se encontró formulario de login. Fragmento HTML: '
-                . $this->fragmento($html));
-            return false;
+        // 2. Paso previo: registrar PC fingerprint (AJAX que hace el JS antes de hacer login)
+        $pc = $this->buildPcFingerprint();
+        $r2fa = $this->request('POST', self::LOGIN_URL . '?operacion=validadorNavegador2fa', [
+            'user'  => $usuario,
+            'datos' => $pc,
+        ]);
+        $this->addLog('info', 'validadorNavegador2fa respuesta: ' . ($r2fa !== null ? substr($r2fa, 0, 80) : 'null'));
+
+        // 3. POST de login con los campos que envía el JS
+        //    El JS renombra 'pass' → 'passUsuario' y deshabilita el input original
+        $postData = [
+            'controlForm'          => $controlForm,
+            '2fa'                  => '',
+            'pc'                   => $pc,
+            'usuario'              => $usuario,
+            'passUsuario'          => $password,   // ← nombre real que espera el servidor
+            'g-recaptcha-response' => '',           // reCAPTCHA v3 token (vacío = intento sin captcha)
+        ];
+
+        $this->addLog('info', 'POST login → ' . self::LOGIN_URL . '?operacion=principal');
+        $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=principal', $postData);
+
+        if ($respuesta !== null && $this->esRespuestaLogueado($respuesta)) {
+            $this->addLog('success', 'Login correcto en Recevet.');
+            $this->loggedIn = true;
+            return true;
         }
 
-        // Log de diagnóstico: action y campos encontrados
-        $this->addLog('info', 'Formulario login → action: ' . $form['action']);
-        $camposLog = array_keys($form['fields']);
-        $this->addLog('info', 'Campos del form: ' . implode(', ', $camposLog));
-
-        // Rellenar credenciales en todos los campos de usuario/contraseña posibles
-        foreach ($form['fields'] as $nombre => $valor) {
-            $low = strtolower($nombre);
-            if (str_contains($low, 'user') || str_contains($low, 'login') ||
-                $low === 'usuario' || $low === 'user') {
-                $form['fields'][$nombre] = $usuario;
-            }
-            if (str_contains($low, 'pass') || str_contains($low, 'clave') ||
-                $low === 'password' || $low === 'contrasena') {
-                $form['fields'][$nombre] = $password;
-            }
+        if ($respuesta !== null) {
+            $this->addLog('info', 'Respuesta: ' . $this->fragmento($respuesta));
         }
 
-        // Intentar primero con la action del formulario,
-        // y si da 404 probar directamente con index.php
-        $urlsAIntentar = array_unique(array_filter([
-            $form['action'],
-            self::LOGIN_URL,
-        ]));
-
-        foreach ($urlsAIntentar as $url) {
-            $this->addLog('info', "Intentando POST login → {$url}");
-            $respuesta = $this->request('POST', $url, $form['fields']);
-
-            if ($respuesta === null) {
-                // request() ya habrá logueado el error HTTP
-                continue;
-            }
-
-            if ($this->esRespuestaLogueado($respuesta)) {
-                $this->addLog('success', 'Login correcto en Recevet.');
-                $this->loggedIn = true;
-                return true;
-            }
-
-            // Fragmento para debug
-            $this->addLog('info', 'Respuesta login: ' . $this->fragmento($respuesta));
-
-            if (str_contains($respuesta, 'incorrecto') ||
-                str_contains($respuesta, 'no v') ||
-                str_contains($respuesta, 'credencial')) {
-                $this->addLog('error', 'Credenciales incorrectas en Recevet.');
-                return false;
-            }
-        }
-
-        $this->addLog('error', 'Login fallido — no se pudo autenticar en recevet.es.');
+        // Si sigue sin funcionar: reCAPTCHA v3 requerido — no se puede automatizar sin navegador real
+        $this->addLog('error',
+            'Login fallido. recevet.es requiere reCAPTCHA v3 para autenticar. ' .
+            'Es posible que el login automático no sea viable sin un navegador real. ' .
+            'Ver documentación de alternativas (Puppeteer/2captcha).'
+        );
         return false;
+    }
+
+    /**
+     * Extrae el token controlForm del HTML de recevet.es.
+     * Este token CSRF cambia en cada página y debe incluirse en todos los POST.
+     */
+    private function extraerControlForm(string $html): string
+    {
+        $dom = $this->parseDom($html);
+        if (!$dom) return '';
+        $xpath = new \DOMXPath($dom);
+        $nodes = $xpath->query('//input[@name="controlForm"]');
+        return $nodes->length > 0 ? (string)$nodes->item(0)->getAttribute('value') : '';
+    }
+
+    /**
+     * Genera el fingerprint de "PC" que envía el JS de recevet.es:
+     *   userAgent + screenResolution + language + timezone
+     * Usamos un valor fijo pero realista para que el servidor siempre
+     * vea el mismo "navegador" desde nuestros requests.
+     */
+    private function buildPcFingerprint(): string
+    {
+        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.361920x1080es-ESEurope/Madrid';
     }
 
     private function esRespuestaLogueado(string $html): bool
@@ -153,7 +168,7 @@ class RecevtService
                str_contains($html, 'cerrarSesion') ||
                str_contains($html, 'Libro de tratamientos') ||
                str_contains($html, 'listadoLineasTratamientos') ||
-               str_contains($html, 'Su p') && str_contains($html, 'gina principal');
+               (str_contains($html, 'Su p') && str_contains($html, 'gina principal'));
     }
 
     private function fragmento(string $html): string
