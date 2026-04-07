@@ -50,7 +50,11 @@ class RecevtController extends BaseController
             'requisitos'     => $requisitos,
             'success'        => Session::getFlash('success'),
             'error'          => Session::getFlash('error'),
-            'logs'           => Session::getFlash('recevet_logs') ?: [],
+            'logs'           => (function() {
+                $logs = $_SESSION['_recevet_logs'] ?? [];
+                unset($_SESSION['_recevet_logs']);
+                return $logs;
+            })(),
         ]);
     }
 
@@ -105,7 +109,7 @@ class RecevtController extends BaseController
             $allLogs  = array_merge($allLogs, $service->getLogs());
 
             if (!$loggedIn) {
-                Session::flash('recevet_logs', $allLogs);
+                $_SESSION['_recevet_logs'] = $allLogs;
                 Session::flash('error', 'No se pudo iniciar sesión en Recevet. Revisa las credenciales en tu perfil.');
                 $this->redirect('recevet');
             }
@@ -129,7 +133,7 @@ class RecevtController extends BaseController
             error_log('RecevtController::sincronizar error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
         }
 
-        Session::flash('recevet_logs', $allLogs);
+        $_SESSION['_recevet_logs'] = $allLogs;
 
         $errores = count(array_filter($allLogs, fn($l) => $l['type'] === 'error'));
         if ($errores > 0) {
