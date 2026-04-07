@@ -76,52 +76,90 @@ class RecevtService
             return false;
         }
 
-        $this->aceptarCookies($html);
-
-        $form = $this->parseLoginForm($html);
-        if ($form === null) {
-            if (str_contains($html, 'operacion=principal') || str_contains($html, 'Cerrar sesi')) {
-                $this->addLog('success', 'Ya estaba logueado en Recevet.');
-                $this->loggedIn = true;
-                return true;
-            }
-            $this->addLog('error', 'No se encontró el formulario de login en recevet.es');
-            return false;
-        }
-
-        $form['fields']['usuario']  = $usuario;
-        $form['fields']['password'] = $password;
-        foreach (['pass', 'passwd', 'clave', 'contrasena'] as $f) {
-            if (isset($form['fields'][$f])) {
-                $form['fields'][$f] = $password;
-            }
-        }
-
-        $respuesta = $this->request('POST', $form['action'] ?: self::LOGIN_URL, $form['fields']);
-        if ($respuesta === null) {
-            $this->addLog('error', 'Error al enviar credenciales');
-            return false;
-        }
-
-        if (str_contains($respuesta, 'Cerrar sesi') ||
-            str_contains($respuesta, 'cerrarSesion') ||
-            str_contains($respuesta, 'operacion=principal') ||
-            str_contains($respuesta, 'Libro de tratamientos') ||
-            str_contains($respuesta, 'listadoLineasTratamientos')) {
-            $this->addLog('success', 'Login correcto en Recevet.');
+        // ¿Ya estamos logueados? (sesión activa en cookie)
+        if ($this->esRespuestaLogueado($html)) {
+            $this->addLog('success', 'Ya había sesión activa en Recevet.');
             $this->loggedIn = true;
             return true;
         }
 
-        // Log de diagnóstico: mostrar un fragmento de la respuesta para saber qué devuelve
-        $fragmento = substr(strip_tags($respuesta), 0, 300);
-        $fragmento = preg_replace('/\s+/', ' ', $fragmento);
-        $this->addLog('error', 'Login fallido. Respuesta recibida: ' . $fragmento);
+        $this->aceptarCookies($html);
 
-        if (str_contains($respuesta, 'incorrecto') || str_contains($respuesta, 'no v')) {
-            $this->addLog('error', 'Las credenciales parecen incorrectas.');
+        $form = $this->parseLoginForm($html);
+        if ($form === null) {
+            $this->addLog('error', 'No se encontró formulario de login. Fragmento HTML: '
+                . $this->fragmento($html));
+            return false;
         }
+
+        // Log de diagnóstico: action y campos encontrados
+        $this->addLog('info', 'Formulario login → action: ' . $form['action']);
+        $camposLog = array_keys($form['fields']);
+        $this->addLog('info', 'Campos del form: ' . implode(', ', $camposLog));
+
+        // Rellenar credenciales en todos los campos de usuario/contraseña posibles
+        foreach ($form['fields'] as $nombre => $valor) {
+            $low = strtolower($nombre);
+            if (str_contains($low, 'user') || str_contains($low, 'login') ||
+                $low === 'usuario' || $low === 'user') {
+                $form['fields'][$nombre] = $usuario;
+            }
+            if (str_contains($low, 'pass') || str_contains($low, 'clave') ||
+                $low === 'password' || $low === 'contrasena') {
+                $form['fields'][$nombre] = $password;
+            }
+        }
+
+        // Intentar primero con la action del formulario,
+        // y si da 404 probar directamente con index.php
+        $urlsAIntentar = array_unique(array_filter([
+            $form['action'],
+            self::LOGIN_URL,
+        ]));
+
+        foreach ($urlsAIntentar as $url) {
+            $this->addLog('info', "Intentando POST login → {$url}");
+            $respuesta = $this->request('POST', $url, $form['fields']);
+
+            if ($respuesta === null) {
+                // request() ya habrá logueado el error HTTP
+                continue;
+            }
+
+            if ($this->esRespuestaLogueado($respuesta)) {
+                $this->addLog('success', 'Login correcto en Recevet.');
+                $this->loggedIn = true;
+                return true;
+            }
+
+            // Fragmento para debug
+            $this->addLog('info', 'Respuesta login: ' . $this->fragmento($respuesta));
+
+            if (str_contains($respuesta, 'incorrecto') ||
+                str_contains($respuesta, 'no v') ||
+                str_contains($respuesta, 'credencial')) {
+                $this->addLog('error', 'Credenciales incorrectas en Recevet.');
+                return false;
+            }
+        }
+
+        $this->addLog('error', 'Login fallido — no se pudo autenticar en recevet.es.');
         return false;
+    }
+
+    private function esRespuestaLogueado(string $html): bool
+    {
+        return str_contains($html, 'Cerrar sesi') ||
+               str_contains($html, 'cerrarSesion') ||
+               str_contains($html, 'Libro de tratamientos') ||
+               str_contains($html, 'listadoLineasTratamientos') ||
+               str_contains($html, 'Su p') && str_contains($html, 'gina principal');
+    }
+
+    private function fragmento(string $html): string
+    {
+        $texto = substr(strip_tags($html), 0, 400);
+        return trim((string)preg_replace('/\s+/', ' ', $texto));
     }
 
     // ── Sincronización ────────────────────────────────────────────
