@@ -257,9 +257,44 @@ class RecevtService
         $html = $this->seleccionarExplotacion($html, $explotacion);
         if ($html === null) return false;
 
+        // ── DIAGNÓSTICO: guardar HTML en archivo temporal para inspección ──
+        $debugFile = sys_get_temp_dir() . '/recevet_debug_' . session_id() . '.html';
+        file_put_contents($debugFile, $html);
+        $this->addLog('info', 'HTML guardado en: ' . $debugFile . ' (' . strlen($html) . ' bytes)');
+
+        // Extraer fragmento útil: primera tabla que contenga "Aceptar" o "fecha"
+        $dom   = $this->parseDom($html);
+        $xpath = new \DOMXPath($dom);
+
+        // ¿Hay botones Aceptar?
+        $aceptar = $xpath->query("//button[contains(.,'Aceptar')] | //input[@value='Aceptar']");
+        $this->addLog('info', 'Botones "Aceptar" encontrados: ' . $aceptar->length);
+
+        // ¿Hay inputs con "fecha"?
+        $fechas = $xpath->query("//input[contains(translate(@name,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'fecha')]");
+        $this->addLog('info', 'Inputs con "fecha" encontrados: ' . $fechas->length);
+        for ($i = 0; $i < min($fechas->length, 5); $i++) {
+            $inp = $fechas->item($i);
+            $this->addLog('info', '  input fecha: name="' . $inp->getAttribute('name') . '" type="' . $inp->getAttribute('type') . '" value="' . $inp->getAttribute('value') . '"');
+        }
+
+        // ¿Hay tablas?
+        $tablas = $xpath->query('//table');
+        $this->addLog('info', 'Tablas encontradas: ' . $tablas->length);
+        if ($tablas->length > 0) {
+            // Mostrar texto de las primeras filas de la primera tabla
+            $filas = $xpath->query('.//tr', $tablas->item(0));
+            $this->addLog('info', 'Filas en tabla[0]: ' . $filas->length);
+            for ($i = 0; $i < min($filas->length, 3); $i++) {
+                $txt = trim(preg_replace('/\s+/', ' ', $filas->item($i)->textContent));
+                $this->addLog('info', '  fila[' . $i . ']: ' . substr($txt, 0, 120));
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────
+
         $lineas = $this->parsearLineasPendientes($html);
         if (empty($lineas)) {
-            $this->addLog('success', 'No hay líneas pendientes. Todo al día.');
+            $this->addLog('info', 'No se encontraron líneas pendientes con el parser actual.');
             return true;
         }
 
