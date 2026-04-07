@@ -769,6 +769,15 @@ class RecevtService
             return false;
         }
 
+        // DEBUG: log raw HTML de todas las celdas para la primera línea
+        static $debugFirstLine = true;
+        if ($debugFirstLine) {
+            $debugFirstLine = false;
+            foreach ($celdas as $i => $celda) {
+                $this->addLog('info', "  RAW celda[{$i}]: " . substr((string)$celda, 0, 600));
+            }
+        }
+
         // Celda 2: dispensacion — recalcular siempre con la fecha real del servidor
         $textoDispensacion = strip_tags((string)($celdas[2] ?? ''));
         $fechaDispensacion = $this->extraerFechaDeTexto($textoDispensacion);
