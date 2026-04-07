@@ -689,6 +689,12 @@ class RecevtService
 
     private function completarLinea(array $linea, string $fechaInicio, ?string $fechaFin): bool
     {
+        // Formato AJAX (idReceta/idRecetaLinea) → navegar a página de edición
+        if (!isset($linea['form_method'])) {
+            return $this->completarLineaConIDs($linea, $fechaInicio, $fechaFin);
+        }
+
+        // Formato HTML (form_fields/form_method ya extraídos)
         $fields                             = $linea['form_fields'];
         $fields[$linea['fecha_input_name']] = $fechaInicio;
         foreach (array_keys($fields) as $key) {
@@ -698,6 +704,85 @@ class RecevtService
             }
         }
         return $this->request($linea['form_method'], $linea['form_action'], $fields) !== null;
+    }
+
+    private function completarLineaConIDs(array $linea, string $fechaInicio, ?string $fechaFin): bool
+    {
+        $idReceta      = $linea['idReceta']      ?? '';
+        $idRecetaLinea = $linea['idRecetaLinea'] ?? '';
+
+        // Navegar al formulario de edición de la línea de tratamiento
+        $editUrl = self::BASE_URL . '/index.php?operacion=altaLineaTratamiento'
+                 . '&idReceta=' . urlencode($idReceta)
+                 . '&idRecetaLinea=' . urlencode($idRecetaLinea);
+
+        $htmlEdit = $this->request('GET', $editUrl);
+        if ($htmlEdit === null) {
+            $this->addLog('error', "  No se pudo cargar el formulario de edición (idRecetaLinea={$idRecetaLinea})");
+            return false;
+        }
+
+        $dom = $this->parseDom($htmlEdit);
+        if (!$dom) {
+            $this->addLog('error', '  No se pudo parsear el formulario de edición');
+            return false;
+        }
+
+        $xpath = new \DOMXPath($dom);
+        $forms = $xpath->query('//form');
+        if ($forms->length === 0) {
+            $this->addLog('error', '  Sin formulario en la página de edición — URL: ' . $editUrl);
+            $this->addLog('info',  '  Extracto: ' . substr(strip_tags($htmlEdit), 0, 400));
+            return false;
+        }
+
+        $form   = $forms->item(0);
+        $action = $form->getAttribute('action') ?: '?operacion=altaLineaTratamiento';
+        $method = strtoupper($form->getAttribute('method') ?: 'POST');
+        $fields = $this->extraerCamposForm($form);
+
+        // Rellenar campo de fecha inicio
+        $fechaFieldName = null;
+        foreach (array_keys($fields) as $key) {
+            $kl = strtolower($key);
+            if (str_contains($kl, 'fechainicio') || str_contains($kl, 'fecha_inicio')) {
+                $fechaFieldName = $key;
+                break;
+            }
+        }
+        if (!$fechaFieldName) {
+            foreach (array_keys($fields) as $key) {
+                if (str_contains(strtolower($key), 'fecha')) {
+                    $fechaFieldName = $key;
+                    break;
+                }
+            }
+        }
+
+        if (!$fechaFieldName) {
+            $this->addLog('error', '  Sin campo de fecha. Campos disponibles: ' . implode(', ', array_keys($fields)));
+            return false;
+        }
+
+        $fields[$fechaFieldName] = $fechaInicio;
+
+        if ($fechaFin) {
+            foreach (array_keys($fields) as $key) {
+                $kl = strtolower($key);
+                if (str_contains($kl, 'fechafin') || str_contains($kl, 'fecha_fin')) {
+                    $fields[$key] = $fechaFin;
+                    break;
+                }
+            }
+        }
+
+        $respuesta = $this->request($method, $this->absoluteUrl($action), $fields);
+        if ($respuesta === null) {
+            $this->addLog('error', '  Error al enviar el formulario');
+            return false;
+        }
+
+        return true;
     }
 
     // ── Fechas ────────────────────────────────────────────────────
