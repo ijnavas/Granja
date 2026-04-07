@@ -257,6 +257,9 @@ class RecevtService
         $html = $this->seleccionarExplotacion($html, $explotacion);
         if ($html === null) return false;
 
+        // Extraer operaciones del JS para diagnóstico
+        $this->logOperacionesJs($html);
+
         // Los datos se cargan vía AJAX con operacion=dame_lineasTratamientos
         // Extraemos los campos necesarios del form para construir la petición
         $formFields = $this->extraerCamposFormDesdeHtml($html);
@@ -783,6 +786,26 @@ class RecevtService
         }
 
         return true;
+    }
+
+    private function logOperacionesJs(string $html): void
+    {
+        // Extraer todas las operaciones referenciadas en el JS de la página
+        preg_match_all('/operacion=([a-zA-Z0-9_]+)/', $html, $m);
+        $ops = array_unique($m[1] ?? []);
+        if ($ops) {
+            $this->addLog('info', 'Operaciones en JS/HTML: ' . implode(', ', $ops));
+        }
+
+        // También extraer y loguear los bloques <script> relevantes (DataTables init)
+        preg_match_all('/<script[^>]*>(.*?)<\/script>/si', $html, $scripts);
+        foreach (($scripts[1] ?? []) as $script) {
+            if (strpos($script, 'DataTable') !== false || strpos($script, 'datatable') !== false
+                || strpos($script, 'listaAnimalesTratados') !== false
+                || strpos($script, 'dame_lineas') !== false) {
+                $this->addLog('info', 'Script DataTables: ' . substr(trim($script), 0, 1500));
+            }
+        }
     }
 
     // ── Fechas ────────────────────────────────────────────────────
