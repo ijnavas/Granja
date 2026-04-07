@@ -4,23 +4,22 @@ declare(strict_types=1);
 namespace App\Services;
 
 /**
- * RecevtService — automatiza la cumplimentación del Libro de Tratamientos en recevet.es
+ * RecevtService — automatiza el Libro de Tratamientos en recevet.es
  *
  * Flujo:
- *  1. login()           → POST credenciales, mantiene sesión con cookie jar
- *  2. sincronizar()     → navega al Libro de Tratamientos, selecciona explotación,
- *                         rellena fecha inicio (dispensación + 1 día) y acepta
+ *  1. login()       → GET login → parsea form → POST credenciales
+ *  2. sincronizar() → GET libro → selecciona explotación → rellena fechas → acepta
  */
 class RecevtService
 {
-    private const BASE_URL   = 'https://www.recevet.es';
-    private const LOGIN_URL  = 'https://www.recevet.es/index.php';
-    private const LIBRO_URL  = 'https://www.recevet.es/index.php?operacion=listadoLineasTratamientos';
-    private const TIMEOUT    = 30;
+    private const BASE_URL  = 'https://www.recevet.es';
+    private const LOGIN_URL = 'https://www.recevet.es/index.php';
+    private const LIBRO_URL = 'https://www.recevet.es/index.php?operacion=listadoLineasTratamientos';
+    private const TIMEOUT   = 30;
 
-    private string  $cookieFile;
-    private array   $logs = [];
-    private bool    $loggedIn = false;
+    private string $cookieFile;
+    private array  $logs     = [];
+    private bool   $loggedIn = false;
 
     public function __construct()
     {
@@ -29,13 +28,12 @@ class RecevtService
 
     public function __destruct()
     {
-        // Limpiar cookie jar al terminar
         if (file_exists($this->cookieFile)) {
             @unlink($this->cookieFile);
         }
     }
 
-    // ── Cifrado / descifrado de contraseña ────────────────────────
+    // ── Cifrado ───────────────────────────────────────────────────
 
     public static function encryptPassword(string $plain): string
     {
@@ -63,7 +61,6 @@ class RecevtService
     private static function deriveKey(): string
     {
         $cfg = require ROOT_PATH . '/config.php';
-        // Deriva 16 bytes de clave a partir de las credenciales de BD (ya secretas)
         return substr(hash('sha256', ($cfg['db']['host'] ?? '') . ($cfg['db']['user'] ?? '') . ($cfg['db']['pass'] ?? '')), 0, 16);
     }
 
@@ -71,36 +68,30 @@ class RecevtService
 
     public function login(string $usuario, string $password): bool
     {
-        $this->log('info', 'Iniciando sesión en Recevet...');
+        $this->addLog('info', 'Iniciando sesión en Recevet...');
 
-        // 1. GET página de login para obtener campos ocultos / cookies iniciales
         $html = $this->request('GET', self::LOGIN_URL);
         if ($html === null) {
-            $this->log('error', 'No se pudo conectar con recevet.es');
+            $this->addLog('error', 'No se pudo conectar con recevet.es');
             return false;
         }
 
-        // 2. Aceptar cookies si hay un banner
         $this->aceptarCookies($html);
 
-        // 3. Parsear formulario de login
         $form = $this->parseLoginForm($html);
         if ($form === null) {
-            // Puede que ya estemos logueados o que la estructura haya cambiado
-            if (strpos($html, 'operacion=principal') || str_contains($html, 'Cerrar sesión') || str_contains($html, 'Cerrar sesi')) !== false {
-                $this->log('success', 'Ya estaba logueado en Recevet.');
+            if (str_contains($html, 'operacion=principal') || str_contains($html, 'Cerrar sesi')) {
+                $this->addLog('success', 'Ya estaba logueado en Recevet.');
                 $this->loggedIn = true;
                 return true;
             }
-            $this->log('error', 'No se encontró el formulario de login en recevet.es');
+            $this->addLog('error', 'No se encontró el formulario de login en recevet.es');
             return false;
         }
 
-        // 4. POST con credenciales
-        $form['fields']['usuario']    = $usuario;
-        $form['fields']['password']   = $password;
-        // Algunos sitios usan 'pass', 'passwd', 'clave'...
-        foreach (['pass', 'passwd', 'clave', 'contrasena', 'contraseña'] as $f) {
+        $form['fields']['usuario']  = $usuario;
+        $form['fields']['password'] = $password;
+        foreach (['pass', 'passwd', 'clave', 'contrasena'] as $f) {
             if (isset($form['fields'][$f])) {
                 $form['fields'][$f] = $password;
             }
@@ -108,121 +99,99 @@ class RecevtService
 
         $respuesta = $this->request('POST', $form['action'] ?: self::LOGIN_URL, $form['fields']);
         if ($respuesta === null) {
-            $this->log('error', 'Error al enviar credenciales');
+            $this->addLog('error', 'Error al enviar credenciales');
             return false;
         }
 
-        // 5. Verificar login exitoso
-        if (strpos($respuesta, 'Cerrar sesión') || str_contains($respuesta, 'Cerrar sesi') !== false ||
-            strpos($respuesta, 'operacion=principal') || str_contains($respuesta, 'Libro de tratamientos') !== false ||
-            strpos($respuesta, 'Su página principal') || str_contains($respuesta, 'página principal')) !== false {
-            $this->log('success', 'Login correcto en Recevet.');
+        if (str_contains($respuesta, 'Cerrar sesi') ||
+            str_contains($respuesta, 'operacion=principal') ||
+            str_contains($respuesta, 'Libro de tratamientos') ||
+            str_contains($respuesta, 'principal')) {
+            $this->addLog('success', 'Login correcto en Recevet.');
             $this->loggedIn = true;
             return true;
         }
 
-        if (strpos($respuesta, 'incorrecto') || str_contains($respuesta, 'inválido') !== false ||
-            strpos($respuesta, 'no válido') || str_contains($respuesta, 'error')) !== false {
-            $this->log('error', 'Credenciales incorrectas en Recevet.');
+        if (str_contains($respuesta, 'incorrecto') || str_contains($respuesta, 'no válido')) {
+            $this->addLog('error', 'Credenciales incorrectas en Recevet.');
         } else {
-            $this->log('error', 'Login fallido — respuesta inesperada de recevet.es');
+            $this->addLog('error', 'Login fallido — respuesta inesperada de recevet.es');
         }
         return false;
     }
 
-    // ── Sincronización ─────────────────────────────────────────────
+    // ── Sincronización ────────────────────────────────────────────
 
-    /**
-     * @param string $explotacion  Código de explotación (ej: ES410040000003)
-     * @param bool   $dryRun       Si true, muestra qué haría pero no envía
-     */
     public function sincronizar(string $explotacion, bool $dryRun = false): bool
     {
         if (!$this->loggedIn) {
-            $this->log('error', 'No se ha iniciado sesión. Llama primero a login().');
+            $this->addLog('error', 'No se ha iniciado sesión.');
             return false;
         }
 
-        $this->log('info', "Abriendo Libro de Tratamientos para explotación: {$explotacion}");
+        $this->addLog('info', "Abriendo Libro de Tratamientos: {$explotacion}");
 
-        // 1. GET libro de tratamientos
         $html = $this->request('GET', self::LIBRO_URL);
         if ($html === null) {
-            $this->log('error', 'No se pudo acceder al Libro de Tratamientos');
+            $this->addLog('error', 'No se pudo acceder al Libro de Tratamientos');
             return false;
         }
 
-        // 2. Seleccionar explotación en el desplegable (POST o GET con parámetro)
         $html = $this->seleccionarExplotacion($html, $explotacion);
-        if ($html === null) {
-            return false;
-        }
+        if ($html === null) return false;
 
-        // 3. Parsear líneas pendientes de completar
         $lineas = $this->parsearLineasPendientes($html);
         if (empty($lineas)) {
-            $this->log('success', 'No hay líneas pendientes de completar. Todo al día.');
+            $this->addLog('success', 'No hay líneas pendientes. Todo al día.');
             return true;
         }
 
-        $this->log('info', count($lineas) . ' línea(s) pendientes de completar.');
+        $this->addLog('info', count($lineas) . ' línea(s) pendientes.');
 
-        // 4. Completar cada línea
-        $ok = 0;
+        $ok  = 0;
         $err = 0;
         foreach ($lineas as $i => $linea) {
-            $num = $i + 1;
+            $num         = $i + 1;
             $fechaInicio = $this->calcularFechaInicio($linea['fecha_dispensacion']);
             $fechaFin    = $this->calcularFechaFin($fechaInicio, $linea['dias_tratamiento']);
 
-            $desc = "Receta {$linea['receta']} · {$linea['medicamento']} · Dispensado: {$linea['fecha_dispensacion']}";
-            $this->log('info', "Línea {$num}: {$desc}");
-            $this->log('info', "  → Inicio: {$fechaInicio}" . ($fechaFin ? " · Fin: {$fechaFin}" : ''));
+            $this->addLog('info', "Línea {$num}: {$linea['receta']} · {$linea['medicamento']} · Dispensado: {$linea['fecha_dispensacion']}");
+            $this->addLog('info', "  → Inicio: {$fechaInicio}" . ($fechaFin ? " · Fin: {$fechaFin}" : ''));
 
             if ($dryRun) {
-                $this->log('info', "  [SIMULACIÓN] No se envía.");
+                $this->addLog('info', '  [SIMULACIÓN] No se envía.');
                 continue;
             }
 
-            $result = $this->completarLinea($linea, $fechaInicio, $fechaFin);
-            if ($result) {
-                $this->log('success', "  ✓ Línea {$num} completada correctamente.");
+            if ($this->completarLinea($linea, $fechaInicio, $fechaFin)) {
+                $this->addLog('success', "  ✓ Línea {$num} completada.");
                 $ok++;
             } else {
-                $this->log('error', "  ✗ Error al completar línea {$num}.");
+                $this->addLog('error', "  ✗ Error al completar línea {$num}.");
                 $err++;
             }
 
-            // Pequeña pausa para no sobrecargar el servidor
-            usleep(500000); // 0.5 segundos
+            usleep(500000);
         }
 
-        $this->log('info', "Sincronización finalizada: {$ok} completadas, {$err} errores.");
+        $this->addLog('info', "Finalizado: {$ok} completadas, {$err} errores.");
         return $err === 0;
     }
 
-    // ── Helpers privados ───────────────────────────────────────────
+    // ── Privados ──────────────────────────────────────────────────
 
     private function aceptarCookies(string $html): void
     {
-        // Intentar detectar y aceptar banner de cookies
-        if (!strpos($html, 'cookie') && !str_contains($html, 'Cookie')) !== false {
-            return;
-        }
+        if (!str_contains($html, 'cookie') && !str_contains($html, 'Cookie')) return;
 
-        // Opción 1: formulario con botón "Aceptar" cookies
         $dom = $this->parseDom($html);
         if (!$dom) return;
 
-        $xpath = new \DOMXPath($dom);
-
-        // Buscar botones/links de aceptar cookies
-        $botones = $xpath->query("//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'aceptar') and (contains(@class,'cookie') or contains(@id,'cookie') or ancestor::*[contains(@class,'cookie') or contains(@id,'cookie')])]");
+        $xpath   = new \DOMXPath($dom);
+        $botones = $xpath->query("//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'aceptar') and (contains(@class,'cookie') or contains(@id,'cookie'))]");
 
         if ($botones->length > 0) {
-            // Buscar el form que contiene el botón
-            $boton = $botones->item(0);
-            $form  = $boton;
+            $form = $botones->item(0);
             while ($form && $form->nodeName !== 'form') {
                 $form = $form->parentNode;
             }
@@ -230,81 +199,68 @@ class RecevtService
                 $fields = $this->extraerCamposForm($form);
                 $action = $form->getAttribute('action') ?: self::LOGIN_URL;
                 $this->request('POST', $this->absoluteUrl($action), $fields);
-                $this->log('info', 'Banner de cookies aceptado.');
-                return;
+                $this->addLog('info', 'Banner de cookies aceptado.');
             }
         }
-
-        // Opción 2: simplemente establecer la cookie de consentimiento
-        // (muchos sitios solo comprueban si existe la cookie)
-        // Esto se maneja automáticamente con el cookie jar de cURL
     }
 
     private function seleccionarExplotacion(string $html, string $explotacion): ?string
     {
-        // Buscar el formulario de selección de explotación
         $dom = $this->parseDom($html);
         if (!$dom) {
-            $this->log('error', 'Error al parsear HTML del libro de tratamientos');
+            $this->addLog('error', 'Error al parsear HTML del libro de tratamientos');
             return null;
         }
 
-        $xpath = new \DOMXPath($dom);
-
-        // Buscar select con la lista de explotaciones
+        $xpath   = new \DOMXPath($dom);
         $selects = $xpath->query("//select[contains(@name,'explotacion') or contains(@id,'explotacion') or contains(@name,'Explotacion')]");
 
         if ($selects->length === 0) {
-            // Intentar con otro patrón — a veces está en el name del option
             $selects = $xpath->query("//select[.//option[contains(., '" . substr($explotacion, 0, 8) . "')]]");
         }
 
         if ($selects->length === 0) {
-            // Si ya está seleccionada la explotación, continuar
-            if (strpos($html, $explotacion)) !== false {
-                $this->log('info', 'Explotación ya seleccionada.');
+            if (str_contains($html, $explotacion)) {
+                $this->addLog('info', 'Explotación ya seleccionada.');
                 return $html;
             }
-            $this->log('error', "No se encontró el desplegable de explotaciones. ¿Está configurado el código '{$explotacion}'?");
+            $this->addLog('error', "No se encontró el desplegable de explotaciones para '{$explotacion}'.");
             return null;
         }
 
-        $select = $selects->item(0);
+        $select     = $selects->item(0);
         $selectName = $select->getAttribute('name');
 
-        // Obtener el form que contiene el select
         $form = $select;
         while ($form && $form->nodeName !== 'form') {
             $form = $form->parentNode;
         }
-
         if (!$form || $form->nodeName !== 'form') {
-            $this->log('error', 'No se encontró el formulario de selección de explotación');
+            $this->addLog('error', 'No se encontró el formulario de selección de explotación');
             return null;
         }
 
-        $fields = $this->extraerCamposForm($form);
+        $fields              = $this->extraerCamposForm($form);
         $fields[$selectName] = $explotacion;
 
-        // Buscar el botón de generar/filtrar
         $botones = $xpath->query(".//button[@type='submit'] | .//input[@type='submit']", $form);
         if ($botones->length > 0) {
-            $b = $botones->item(0);
+            $b     = $botones->item(0);
             $bName = $b->getAttribute('name');
             $bVal  = $b->getAttribute('value');
             if ($bName) $fields[$bName] = $bVal;
         }
 
-        $action = $form->getAttribute('action') ?: self::LIBRO_URL;
-        $method = strtoupper($form->getAttribute('method') ?: 'POST');
-
+        $action    = $form->getAttribute('action') ?: self::LIBRO_URL;
+        $method    = strtoupper($form->getAttribute('method') ?: 'POST');
         $respuesta = $this->request($method, $this->absoluteUrl($action), $fields);
+
         if ($respuesta === null) {
-            $this->log('error', 'Error al seleccionar la explotación');
+            $this->addLog('error', 'Error al seleccionar la explotación');
             return null;
         }
 
-        $this->log('info', 'Explotación seleccionada correctamente.');
+        $this->addLog('info', 'Explotación seleccionada.');
         return $respuesta;
     }
 
@@ -315,21 +271,13 @@ class RecevtService
         if (!$dom) return $lineas;
 
         $xpath = new \DOMXPath($dom);
-
-        // Buscar filas de la tabla del libro de tratamientos
-        // Buscamos filas que tengan un input de fecha vacío (la que hay que rellenar)
         $filas = $xpath->query("//table//tr[.//input[@type='text' and (contains(@name,'fecha') or contains(@id,'fecha'))] | .//input[@type='date' and (contains(@name,'fecha') or contains(@id,'fecha'))]]");
 
         if ($filas->length === 0) {
-            // Intentar con un patrón más amplio: filas con botón "Aceptar"
             $filas = $xpath->query("//tr[.//button[contains(., 'Aceptar')] or .//input[@value='Aceptar']]");
         }
 
         foreach ($filas as $fila) {
-            $xpathFila = new \DOMXPath($dom);
-            $celdas = $xpathFila->query('.//td', $fila);
-
-            // Extraer datos de la fila
             $linea = $this->extraerDatosLinea($fila, $dom);
             if ($linea !== null) {
                 $lineas[] = $linea;
@@ -341,16 +289,12 @@ class RecevtService
 
     private function extraerDatosLinea(\DOMElement $fila, \DOMDocument $dom): ?array
     {
-        $xpath = new \DOMXPath($dom);
-
-        // Texto completo de la fila para buscar datos
+        $xpath     = new \DOMXPath($dom);
         $textoFila = $fila->textContent;
 
-        // Buscar el form dentro de la fila (o el form más cercano)
-        $forms = $xpath->query('.//form', $fila);
+        $forms       = $xpath->query('.//form', $fila);
         $formElement = $forms->length > 0 ? $forms->item(0) : null;
 
-        // Si no hay form en la fila, buscar el form padre
         if (!$formElement) {
             $parent = $fila;
             while ($parent && $parent->nodeName !== 'form') {
@@ -359,45 +303,26 @@ class RecevtService
             $formElement = ($parent && $parent->nodeName === 'form') ? $parent : null;
         }
 
-        // Extraer campos del form
         $fields = $formElement ? $this->extraerCamposForm($formElement) : [];
         $action = $formElement ? ($formElement->getAttribute('action') ?: self::LIBRO_URL) : self::LIBRO_URL;
         $method = $formElement ? strtoupper($formElement->getAttribute('method') ?: 'POST') : 'POST';
 
-        // Buscar campo de fecha inicio (que esté vacío o sea el que hay que rellenar)
         $inputsFecha = $xpath->query(".//input[contains(@name,'fecha_inicio') or contains(@id,'fecha_inicio') or contains(@name,'fechaInicio') or contains(@name,'fecha')]", $fila);
         if ($inputsFecha->length === 0) return null;
 
-        $inputFecha = $inputsFecha->item(0);
+        $inputFecha     = $inputsFecha->item(0);
         $fechaInputName = $inputFecha->getAttribute('name') ?: 'fecha_inicio';
-
-        // Si ya tiene fecha, no está pendiente
-        $fechaActual = trim($inputFecha->getAttribute('value') ?? '');
+        $fechaActual    = trim((string)$inputFecha->getAttribute('value'));
         if ($fechaActual !== '') return null;
 
-        // Buscar fecha de dispensación en el texto de la fila
-        // Patrones: "Fecha Dispensacion: DD/MM/YYYY" o en el HTML de la fila
         $fechaDispensacion = $this->extraerFechaDispensacion($textoFila, $fila, $dom);
-
-        // Buscar días de tratamiento
-        $diasTratamiento = $this->extraerDiasTratamiento($textoFila);
-
-        // Extraer número de receta
-        $receta = $this->extraerReceta($textoFila, $fila, $dom);
-
-        // Extraer medicamento
-        $medicamento = $this->extraerMedicamento($textoFila, $fila, $dom);
-
-        if (!$fechaDispensacion) {
-            // Si no podemos determinar la fecha de dispensación, saltar esta línea
-            return null;
-        }
+        if (!$fechaDispensacion) return null;
 
         return [
-            'receta'             => $receta,
-            'medicamento'        => $medicamento,
+            'receta'             => $this->extraerReceta($fila, $dom),
+            'medicamento'        => $this->extraerMedicamento($fila, $dom),
             'fecha_dispensacion' => $fechaDispensacion,
-            'dias_tratamiento'   => $diasTratamiento,
+            'dias_tratamiento'   => $this->extraerDiasTratamiento($textoFila),
             'fecha_input_name'   => $fechaInputName,
             'form_action'        => $this->absoluteUrl($action),
             'form_method'        => $method,
@@ -407,31 +332,21 @@ class RecevtService
 
     private function extraerFechaDispensacion(string $texto, \DOMElement $fila, \DOMDocument $dom): ?string
     {
-        // Buscar en el texto de la fila patrones de fecha DD/MM/YYYY
-        // La fecha de dispensación suele estar en la celda "Datos Dispensación"
-        $xpath = new \DOMXPath($dom);
-
-        // Buscar celdas que contengan "Dispensaci"
+        $xpath  = new \DOMXPath($dom);
         $celdas = $xpath->query(".//td[contains(., 'Dispensaci')]", $fila);
         if ($celdas->length > 0) {
-            $txt = $celdas->item(0)->textContent;
-            if (preg_match('/(\d{2}\/\d{2}\/\d{4})/', $txt, $m)) {
-                return $m[1];
-            }
+            if (preg_match('/(\d{2}\/\d{2}\/\d{4})/', $celdas->item(0)->textContent, $m)) return $m[1];
         }
 
-        // Buscar cualquier fecha en la fila
         if (preg_match_all('/(\d{2}\/\d{2}\/\d{4})/', $texto, $matches)) {
-            // Tomar la primera fecha encontrada
             return $matches[1][0];
         }
 
-        // Buscar en inputs ocultos que contengan fecha
         $hiddens = $xpath->query(".//input[@type='hidden' and (contains(@name,'fecha') or contains(@name,'dispensa'))]", $fila);
         foreach ($hiddens as $h) {
-            $val = $h->getAttribute('value');
+            $val = (string)$h->getAttribute('value');
             if (preg_match('/(\d{2}\/\d{2}\/\d{4})/', $val, $m)) return $m[1];
-            if (preg_match('/(\d{4}-\d{2}-\d{2})/', $val, $m)) return $this->isoToEs($m[1]);
+            if (preg_match('/(\d{4}-\d{2}-\d{2})/',   $val, $m)) return $this->isoToEs($m[1]);
         }
 
         return null;
@@ -439,82 +354,70 @@ class RecevtService
 
     private function extraerDiasTratamiento(string $texto): int
     {
-        // Buscar patrones: "7 días", "7 Días", "Duración: 7"
         if (preg_match('/(\d+)\s*d[ií]as?\s+tratamiento/i', $texto, $m)) return (int)$m[1];
-        if (preg_match('/tratamiento[:\s]+(\d+)/i', $texto, $m)) return (int)$m[1];
-        if (preg_match('/duraci[oó]n[:\s]+(\d+)/i', $texto, $m)) return (int)$m[1];
-        // Valor por defecto: 1 día
+        if (preg_match('/tratamiento[:\s]+(\d+)/i',          $texto, $m)) return (int)$m[1];
+        if (preg_match('/duraci[oó]n[:\s]+(\d+)/i',          $texto, $m)) return (int)$m[1];
         return 1;
     }
 
-    private function extraerReceta(string $texto, \DOMElement $fila, \DOMDocument $dom): string
+    private function extraerReceta(\DOMElement $fila, \DOMDocument $dom): string
     {
-        $xpath = new \DOMXPath($dom);
-        // Primera celda suele ser la receta
+        $xpath  = new \DOMXPath($dom);
         $celdas = $xpath->query('.//td', $fila);
-        if ($celdas->length > 0) {
-            return trim($celdas->item(0)->textContent);
-        }
-        if (preg_match('/([A-Z]{2,3}\d{5,})/i', $texto, $m)) return $m[1];
+        if ($celdas->length > 0) return trim((string)$celdas->item(0)->textContent);
         return '—';
     }
 
-    private function extraerMedicamento(string $texto, \DOMElement $fila, \DOMDocument $dom): string
+    private function extraerMedicamento(\DOMElement $fila, \DOMDocument $dom): string
     {
-        $xpath = new \DOMXPath($dom);
+        $xpath  = new \DOMXPath($dom);
         $celdas = $xpath->query('.//td', $fila);
-        if ($celdas->length > 1) {
-            return trim($celdas->item(1)->textContent);
-        }
+        if ($celdas->length > 1) return trim((string)$celdas->item(1)->textContent);
         return '—';
     }
 
     private function completarLinea(array $linea, string $fechaInicio, ?string $fechaFin): bool
     {
-        $fields = $linea['form_fields'];
-
-        // Poner fecha inicio en el campo correcto
+        $fields                             = $linea['form_fields'];
         $fields[$linea['fecha_input_name']] = $fechaInicio;
 
-        // Si hay campo de fecha fin, rellenarlo también
         foreach (array_keys($fields) as $key) {
-            if (str_contains(strtolower($key), 'fecha_fin') || str_contains(strtolower($key), 'fechafin')) {
-                if ($fechaFin) $fields[$key] = $fechaFin;
+            $keyLow = strtolower($key);
+            if ((str_contains($keyLow, 'fecha_fin') || str_contains($keyLow, 'fechafin')) && $fechaFin) {
+                $fields[$key] = $fechaFin;
             }
         }
 
-        // Simular click en botón "Aceptar"
-        // Buscar el botón submit del form
         $respuesta = $this->request($linea['form_method'], $linea['form_action'], $fields);
-
-        if ($respuesta === null) return false;
-
-        // Verificar éxito: la fila debería desaparecer o mostrar la fecha
-        return !str_contains($respuesta, 'Error fatal') && !str_contains($respuesta, 'error crítico');
+        return $respuesta !== null;
     }
 
-    // ── Cálculo de fechas ─────────────────────────────────────────
+    // ── Fechas ────────────────────────────────────────────────────
 
     private function calcularFechaInicio(string $fechaDispensacion): string
     {
-        // fecha_dispensacion en formato DD/MM/YYYY
         $ts = $this->esDateToTimestamp($fechaDispensacion);
         if ($ts === null) return date('d/m/Y', strtotime('+1 day'));
-        return date('d/m/Y', $ts + 86400); // +1 día
+        return date('d/m/Y', $ts + 86400);
     }
 
     private function calcularFechaFin(string $fechaInicio, int $diasTratamiento): ?string
     {
-        if ($diasTratamiento <= 1) return null; // sin fecha fin si 1 día
+        if ($diasTratamiento <= 1) return null;
         $ts = $this->esDateToTimestamp($fechaInicio);
         if ($ts === null) return null;
         return date('d/m/Y', $ts + ($diasTratamiento - 1) * 86400);
     }
 
-    // ── HTTP helpers ──────────────────────────────────────────────
+    // ── HTTP ──────────────────────────────────────────────────────
 
     private function request(string $method, string $url, array $data = []): ?string
     {
+        if (!function_exists('curl_init')) {
+            $this->addLog('error', 'cURL no disponible.');
+            return null;
+        }
+
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL            => $url,
@@ -525,7 +428,7 @@ class RecevtService
             CURLOPT_COOKIEFILE     => $this->cookieFile,
             CURLOPT_COOKIEJAR      => $this->cookieFile,
             CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             CURLOPT_HTTPHEADER     => [
                 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language: es-ES,es;q=0.9',
@@ -544,19 +447,18 @@ class RecevtService
         curl_close($ch);
 
         if ($response === false || $error) {
-            $this->log('error', "cURL error: {$error}");
+            $this->addLog('error', "cURL error: {$error}");
             return null;
         }
-
         if ($httpCode >= 400) {
-            $this->log('error', "HTTP {$httpCode} al acceder a {$url}");
+            $this->addLog('error', "HTTP {$httpCode} en {$url}");
             return null;
         }
 
         return $response;
     }
 
-    // ── DOM / form helpers ────────────────────────────────────────
+    // ── DOM ───────────────────────────────────────────────────────
 
     private function parseLoginForm(string $html): ?array
     {
@@ -564,43 +466,21 @@ class RecevtService
         if (!$dom) return null;
 
         $xpath = new \DOMXPath($dom);
+        $forms = $xpath->query('//form');
 
-        // Buscar form de login: que contenga campos usuario y contraseña
-        $forms = $xpath->query("//form");
         foreach ($forms as $form) {
-            $fields = $this->extraerCamposForm($form);
-            $hasUser = false;
-            $hasPass = false;
-            foreach (array_keys($fields) as $name) {
-                $nameLow = strtolower($name);
-                if (str_contains($nameLow, 'user') || str_contains($nameLow, 'login') || $nameLow === 'usuario') $hasUser = true;
-                if (str_contains($nameLow, 'pass') || str_contains($nameLow, 'clave') || str_contains($nameLow, 'pwd')) $hasPass = true;
-            }
-            // Si no encontramos por nombre, buscar por tipo
             $passInputs = $xpath->query('.//input[@type="password"]', $form);
-            if ($passInputs->length > 0) $hasPass = true;
-            $textInputs = $xpath->query('.//input[@type="text" or @type="email" or not(@type)]', $form);
-            if ($textInputs->length > 0) $hasUser = true;
+            $textInputs = $xpath->query('.//input[@type="text" or @type="email"]', $form);
+            if ($passInputs->length === 0 || $textInputs->length === 0) continue;
 
-            if ($hasUser && $hasPass) {
-                // Ajustar nombres de campo para usuario y contraseña
-                foreach ($xpath->query('.//input[@type="password"]', $form) as $input) {
-                    $name = $input->getAttribute('name');
-                    if ($name) $fields[$name] = ''; // placeholder, se reemplazará
-                }
-                // Buscar el campo de usuario (primer texto/email)
-                foreach ($xpath->query('.//input[@type="text" or @type="email" or not(@type)]', $form) as $input) {
-                    $name = $input->getAttribute('name');
-                    if ($name && !isset($fields['usuario'])) $fields['usuario_real_field'] = $name;
-                }
+            $fields = $this->extraerCamposForm($form);
+            $action = $form->getAttribute('action') ?: self::LOGIN_URL;
 
-                $action = $form->getAttribute('action') ?: self::LOGIN_URL;
-                return [
-                    'action' => $this->absoluteUrl($action),
-                    'method' => strtoupper($form->getAttribute('method') ?: 'POST'),
-                    'fields' => $fields,
-                ];
-            }
+            return [
+                'action' => $this->absoluteUrl($action),
+                'method' => strtoupper($form->getAttribute('method') ?: 'POST'),
+                'fields' => $fields,
+            ];
         }
 
         return null;
@@ -612,13 +492,12 @@ class RecevtService
         $doc    = $form->ownerDocument;
         $xpath  = new \DOMXPath($doc);
 
-        // Inputs (hidden, text, radio checked, checkbox checked)
         foreach ($xpath->query('.//input', $form) as $input) {
-            $type  = strtolower($input->getAttribute('type') ?: 'text');
-            $name  = $input->getAttribute('name');
-            $value = $input->getAttribute('value');
+            $type  = strtolower((string)($input->getAttribute('type') ?: 'text'));
+            $name  = (string)$input->getAttribute('name');
+            $value = (string)$input->getAttribute('value');
             if (!$name) continue;
-            if ($type === 'submit' || $type === 'button' || $type === 'image') continue;
+            if (in_array($type, ['submit', 'button', 'image'])) continue;
             if ($type === 'radio' || $type === 'checkbox') {
                 if ($input->getAttribute('checked')) $fields[$name] = $value;
                 continue;
@@ -626,25 +505,23 @@ class RecevtService
             $fields[$name] = $value;
         }
 
-        // Selects (valor seleccionado)
         foreach ($xpath->query('.//select', $form) as $select) {
-            $name     = $select->getAttribute('name');
+            $name = (string)$select->getAttribute('name');
             if (!$name) continue;
             $selected = $xpath->query('.//option[@selected]', $select);
             if ($selected->length > 0) {
-                $fields[$name] = $selected->item(0)->getAttribute('value');
+                $fields[$name] = (string)$selected->item(0)->getAttribute('value');
             } else {
                 $opts = $xpath->query('.//option', $select);
                 if ($opts->length > 0) {
-                    $fields[$name] = $opts->item(0)->getAttribute('value');
+                    $fields[$name] = (string)$opts->item(0)->getAttribute('value');
                 }
             }
         }
 
-        // Textareas
         foreach ($xpath->query('.//textarea', $form) as $ta) {
-            $name = $ta->getAttribute('name');
-            if ($name) $fields[$name] = $ta->textContent;
+            $name = (string)$ta->getAttribute('name');
+            if ($name) $fields[$name] = (string)$ta->textContent;
         }
 
         return $fields;
@@ -652,7 +529,7 @@ class RecevtService
 
     private function parseDom(string $html): ?\DOMDocument
     {
-        if (empty($html)) return null;
+        if (!$html) return null;
         $dom = new \DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
         $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
@@ -662,20 +539,17 @@ class RecevtService
 
     private function absoluteUrl(string $url): string
     {
-        if (strpos($url, 'http') === 0) return $url;
-        if (strpos($url, '/') === 0)    return self::BASE_URL . $url;
-        // "?operacion=xxx" → index.php?operacion=xxx
-        if (strpos($url, '?') === 0)    return self::BASE_URL . '/index.php' . $url;
+        if (str_starts_with($url, 'http')) return $url;
+        if (str_starts_with($url, '/'))   return self::BASE_URL . $url;
+        if (str_starts_with($url, '?'))   return self::BASE_URL . '/index.php' . $url;
         return self::BASE_URL . '/' . $url;
     }
 
     private function esDateToTimestamp(string $fecha): ?int
     {
-        // DD/MM/YYYY
         if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $fecha, $m)) {
             return mktime(12, 0, 0, (int)$m[2], (int)$m[1], (int)$m[3]);
         }
-        // YYYY-MM-DD
         if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $fecha, $m)) {
             return mktime(12, 0, 0, (int)$m[2], (int)$m[3], (int)$m[1]);
         }
@@ -684,13 +558,13 @@ class RecevtService
 
     private function isoToEs(string $iso): string
     {
-        [$y, $m, $d] = explode('-', $iso);
-        return "{$d}/{$m}/{$y}";
+        $p = explode('-', $iso);
+        return $p[2] . '/' . $p[1] . '/' . $p[0];
     }
 
     // ── Log ───────────────────────────────────────────────────────
 
-    private function log(string $type, string $msg): void
+    private function addLog(string $type, string $msg): void
     {
         $this->logs[] = ['type' => $type, 'msg' => $msg, 'ts' => date('H:i:s')];
     }
