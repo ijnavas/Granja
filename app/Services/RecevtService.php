@@ -281,24 +281,6 @@ class RecevtService
             $this->addLog('info', "Línea {$num}: {$linea['receta']} · {$linea['medicamento']} · Dispensado: {$linea['fecha_dispensacion']}");
             $this->addLog('info', "  → Inicio: {$fechaInicio}" . ($fechaFin ? " · Fin: {$fechaFin}" : ''));
 
-            // DEBUG primera línea: ver estructura real de dame_fila_lineasTratamientos
-            static $debugFilaDone = false;
-            if (!$debugFilaDone) {
-                $debugFilaDone = true;
-                $celdas = $this->obtenerFilaCompleta(
-                    $linea['idReceta'] ?? '',
-                    $linea['idRecetaLinea'] ?? '',
-                    $linea['idRecetaLineaTratamiento'] ?? ''
-                );
-                if ($celdas !== null) {
-                    foreach ($celdas as $ci => $cv) {
-                        $this->addLog('info', "  DEBUG celda[{$ci}]: " . substr((string)$cv, 0, 600));
-                    }
-                } else {
-                    $this->addLog('error', '  DEBUG: obtenerFilaCompleta devolvió null');
-                }
-            }
-
             if ($dryRun) {
                 $this->addLog('info', '  [SIMULACIÓN] No se envía.');
                 continue;
@@ -776,104 +758,99 @@ class RecevtService
 
     private function completarLineaConIDs(array $linea, string $fechaInicio, ?string $fechaFin): bool
     {
-        $idReceta               = $linea['idReceta']               ?? '';
-        $idRecetaLinea          = $linea['idRecetaLinea']          ?? '';
+        $idReceta                 = $linea['idReceta']                 ?? '';
+        $idRecetaLinea            = $linea['idRecetaLinea']            ?? '';
         $idRecetaLineaTratamiento = $linea['idRecetaLineaTratamiento'] ?? '';
 
-        // Obtener fila completa con HTML de acciones
         $celdas = $this->obtenerFilaCompleta($idReceta, $idRecetaLinea, $idRecetaLineaTratamiento);
         if ($celdas === null) {
             $this->addLog('error', "  dame_fila_lineasTratamientos falló (idRecetaLinea={$idRecetaLinea})");
             return false;
         }
 
-        // DEBUG: log raw HTML de todas las celdas para la primera línea
-        static $debugFirstLine = true;
-        if ($debugFirstLine) {
-            $debugFirstLine = false;
-            foreach ($celdas as $i => $celda) {
-                $this->addLog('info', "  RAW celda[{$i}]: " . substr((string)$celda, 0, 600));
-            }
+        // ── Fecha dispensación desde celda[0] ──────────────────────────────
+        // Formato: "(Fecha Dispensacion:</br>DD/MM/YYYY)"
+        if (preg_match('/Fecha Dispensacion:(?:<[^>]+>|\s)+(\d{2}\/\d{2}\/\d{4})/i', (string)($celdas[0] ?? ''), $m)) {
+            $fechaDispensacion = $m[1];
+            $fechaInicio       = $this->calcularFechaInicio($fechaDispensacion);
+            $this->addLog('info', "  Dispensación: {$fechaDispensacion} → Inicio: {$fechaInicio}");
         }
 
-        // Celda 2: dispensacion — recalcular siempre con la fecha real del servidor
-        $textoDispensacion = strip_tags((string)($celdas[2] ?? ''));
-        $fechaDispensacion = $this->extraerFechaDeTexto($textoDispensacion);
-        if ($fechaDispensacion) {
-            $fechaInicio = $this->calcularFechaInicio($fechaDispensacion);
-            $textoFechas = strip_tags((string)($celdas[3] ?? ''));
-            $dias        = $this->extraerDiasTratamiento($textoFechas);
-            $fechaFin    = $this->calcularFechaFin($fechaInicio, $dias);
-            $this->addLog('info', "  Dispensación: {$fechaDispensacion} → Inicio: {$fechaInicio}" . ($fechaFin ? " · Fin: {$fechaFin}" : ''));
-        } else {
-            $this->addLog('info', "  Sin fecha dispensación en celda[2]: " . substr($textoDispensacion, 0, 100));
-        }
-
-        // Celda 6 (o última): acciones — contiene el form con el botón "Aceptar"
-        $accionesHtml = (string)($celdas[6] ?? $celdas[count($celdas) - 1] ?? '');
-        if (empty($accionesHtml)) {
-            $this->addLog('error', '  Celda acciones vacía. Celdas: ' . implode(' | ', array_map(fn($c) => substr(strip_tags((string)$c), 0, 30), $celdas)));
+        // ── Token e idReceta (encoded) desde celda[6] ──────────────────────
+        $cel6 = (string)($celdas[6] ?? '');
+        if (!preg_match("/data-ra-idLineaTratamiento='([^']+)'/", $cel6, $mTok)) {
+            $this->addLog('error', '  No se encontró data-ra-idLineaTratamiento en celda[6]. HTML: ' . substr($cel6, 0, 300));
             return false;
         }
+        $token = $mTok[1];
+        preg_match("/data-ra-receta='([^']+)'/", $cel6, $mRec);
+        $recetaEncoded = $mRec[1] ?? '';
 
-        // Parsear el form de acciones
-        $dom = $this->parseDom('<div>' . $accionesHtml . '</div>');
-        if (!$dom) {
-            $this->addLog('error', '  No se pudo parsear HTML de acciones');
-            return false;
-        }
+        // ── Campos de fecha desde celda[3] ────────────────────────────────
+        $cel3 = (string)($celdas[3] ?? '');
+        $dom3 = $this->parseDom('<div>' . $cel3 . '</div>');
+        $fechaInicioField = null;
+        $fechaFinField    = null;
+        $diasField        = null;
+        $diasValue        = 0;
 
-        $xpath = new \DOMXPath($dom);
-        $forms = $xpath->query('//form');
-        if ($forms->length === 0) {
-            $this->addLog('error', '  Sin form en acciones. HTML: ' . substr(strip_tags($accionesHtml), 0, 300));
-            return false;
-        }
-
-        $form   = $forms->item(0);
-        $action = $form->getAttribute('action') ?: '?operacion=altaTratamiento';
-        $method = strtoupper($form->getAttribute('method') ?: 'POST');
-        $fields = $this->extraerCamposForm($form);
-
-        // Rellenar campo de fecha inicio
-        $fechaFieldName = null;
-        foreach (array_keys($fields) as $key) {
-            $kl = strtolower($key);
-            if (str_contains($kl, 'fechainicio') || str_contains($kl, 'fecha_inicio')) {
-                $fechaFieldName = $key;
-                break;
-            }
-        }
-        if (!$fechaFieldName) {
-            foreach (array_keys($fields) as $key) {
-                if (str_contains(strtolower($key), 'fecha')) {
-                    $fechaFieldName = $key;
-                    break;
+        if ($dom3) {
+            $xpath3 = new \DOMXPath($dom3);
+            foreach ($xpath3->query('//input') as $inp) {
+                $name = $inp->getAttribute('name');
+                $nl   = strtolower($name);
+                if (str_contains($nl, 'fechainiciotratamiento')) {
+                    $fechaInicioField = $name;
+                } elseif (str_contains($nl, 'fechafintratamiento')) {
+                    $fechaFinField = $name;
+                } elseif (str_contains($nl, 'diastratamiento') || str_contains($nl, 'dias_tratamiento')) {
+                    $diasField  = $name;
+                    $diasValue  = (int)$inp->getAttribute('value');
                 }
             }
         }
 
-        if (!$fechaFieldName) {
-            $this->addLog('error', '  Sin campo fecha en form acciones. Campos: ' . implode(', ', array_keys($fields)));
-            $this->addLog('info',  '  HTML acciones: ' . substr($accionesHtml, 0, 500));
-            return false;
+        if (!$fechaInicioField) {
+            // Fallback: nombre dinámico basado en el token
+            $fechaInicioField = 'fechaInicioTratamiento' . $token;
+            $this->addLog('info', '  Usando nombre fallback para fechaInicio: ' . $fechaInicioField);
+        }
+        if (!$fechaFinField) {
+            $fechaFinField = 'fechaFinTratamiento' . $token;
         }
 
-        $fields[$fechaFieldName] = $fechaInicio;
-
+        // Recalcular fechaFin si tenemos días del formulario
+        if ($diasValue > 1) {
+            $fechaFin = $this->calcularFechaFin($fechaInicio, $diasValue);
+        }
         if ($fechaFin) {
-            foreach (array_keys($fields) as $key) {
-                $kl = strtolower($key);
-                if (str_contains($kl, 'fechafin') || str_contains($kl, 'fecha_fin')) {
-                    $fields[$key] = $fechaFin;
-                    break;
-                }
-            }
+            $this->addLog('info', "  Fin: {$fechaFin}" . ($diasValue > 1 ? " ({$diasValue} días)" : ''));
         }
 
-        $respuesta = $this->request($method, $this->absoluteUrl($action), $fields);
+        // ── POST a actualizarLineaTratamiento ─────────────────────────────
+        $fields = [
+            'idLineaTratamiento' => $token,
+            $fechaInicioField    => $fechaInicio,
+        ];
+        if ($recetaEncoded) {
+            $fields['idReceta'] = $recetaEncoded;
+        }
+        if ($fechaFin) {
+            $fields[$fechaFinField] = $fechaFin;
+        }
+        if ($diasField && $diasValue > 0) {
+            $fields[$diasField] = (string)$diasValue;
+        }
+
+        $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizarLineaTratamiento', $fields);
         if ($respuesta === null) {
-            $this->addLog('error', '  Error al enviar el formulario');
+            $this->addLog('error', '  Error HTTP al enviar actualizarLineaTratamiento');
+            return false;
+        }
+
+        $respTrim = trim($respuesta);
+        if (stripos($respTrim, '"error"') !== false || strtolower($respTrim) === 'false' || $respTrim === '0') {
+            $this->addLog('error', '  Respuesta indica error: ' . substr($respTrim, 0, 200));
             return false;
         }
 
