@@ -281,6 +281,24 @@ class RecevtService
             $this->addLog('info', "Línea {$num}: {$linea['receta']} · {$linea['medicamento']} · Dispensado: {$linea['fecha_dispensacion']}");
             $this->addLog('info', "  → Inicio: {$fechaInicio}" . ($fechaFin ? " · Fin: {$fechaFin}" : ''));
 
+            // DEBUG primera línea: ver estructura real de dame_fila_lineasTratamientos
+            static $debugFilaDone = false;
+            if (!$debugFilaDone) {
+                $debugFilaDone = true;
+                $celdas = $this->obtenerFilaCompleta(
+                    $linea['idReceta'] ?? '',
+                    $linea['idRecetaLinea'] ?? '',
+                    $linea['idRecetaLineaTratamiento'] ?? ''
+                );
+                if ($celdas !== null) {
+                    foreach ($celdas as $ci => $cv) {
+                        $this->addLog('info', "  DEBUG celda[{$ci}]: " . substr((string)$cv, 0, 600));
+                    }
+                } else {
+                    $this->addLog('error', '  DEBUG: obtenerFilaCompleta devolvió null');
+                }
+            }
+
             if ($dryRun) {
                 $this->addLog('info', '  [SIMULACIÓN] No se envía.');
                 continue;
