@@ -479,14 +479,13 @@ class RecevtService
         // Parámetros que envía DataTables + el formulario
         // filtros y upSeleccionada ya vienen en $formFields extraídos del JS/HTML
         $postData = array_merge($formFields, [
-            'draw'                   => '1',
-            'start'                  => '0',
-            'length'                 => '500',   // todas las líneas
-            'mostrarLineasCompletadas' => '0',   // solo pendientes
-            // Compatibilidad con versiones antiguas de DataTables
-            'iDisplayStart'          => '0',
-            'iDisplayLength'         => '500',
-            'sEcho'                  => '1',
+            'draw'                     => '1',
+            'start'                    => '0',
+            'length'                   => '1000',  // todas las líneas
+            'mostrarLineasCompletadas' => '1',      // pedir TODAS; filtramos client-side
+            'iDisplayStart'            => '0',
+            'iDisplayLength'           => '1000',
+            'sEcho'                    => '1',
         ]);
 
         $this->addLog('info', 'Params AJAX: filtros=' . (isset($postData['filtros']) ? 'sí' : 'no')
