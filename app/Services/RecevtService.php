@@ -19,7 +19,7 @@ class RecevtService
     private const TIMEOUT    = 30;
 
     private string  $cookieFile;
-    private array   $log = [];
+    private array   $logs = [];
     private bool    $loggedIn = false;
 
     public function __construct()
@@ -692,11 +692,11 @@ class RecevtService
 
     private function log(string $type, string $msg): void
     {
-        $this->log[] = ['type' => $type, 'msg' => $msg, 'ts' => date('H:i:s')];
+        $this->logs[] = ['type' => $type, 'msg' => $msg, 'ts' => date('H:i:s')];
     }
 
     public function getLogs(): array
     {
-        return $this->log;
+        return $this->logs;
     }
 }
