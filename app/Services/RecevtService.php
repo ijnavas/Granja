@@ -731,38 +731,81 @@ class RecevtService
         return $this->request($linea['form_method'], $linea['form_action'], $fields) !== null;
     }
 
+    /**
+     * Llama a dame_fila_lineasTratamientos para obtener el HTML completo de la fila
+     * (medicamento, dispensacion, fechas, acciones con el form del botón "Aceptar").
+     * Devuelve array de 7 celdas HTML, o null si falla.
+     */
+    private function obtenerFilaCompleta(string $idReceta, string $idRecetaLinea, string $idRecetaLineaTratamiento = ''): ?array
+    {
+        $resp = $this->request('POST', self::BASE_URL . '/index.php?operacion=dame_fila_lineasTratamientos', [
+            'idLineaTratamiento' => $idRecetaLineaTratamiento,
+            'idReceta'           => $idReceta,
+            'idRecetaLinea'      => $idRecetaLinea,
+        ], true);
+
+        if ($resp === null) return null;
+
+        $json = json_decode($resp, true);
+        if (!is_array($json)) return null;
+
+        // La respuesta puede ser un array de celdas directamente o envuelto en 'data'
+        $celdas = isset($json['data']) ? $json['data'] : $json;
+        if (!is_array($celdas) || count($celdas) < 6) return null;
+
+        return $celdas;
+    }
+
     private function completarLineaConIDs(array $linea, string $fechaInicio, ?string $fechaFin): bool
     {
-        $idReceta      = $linea['idReceta']      ?? '';
-        $idRecetaLinea = $linea['idRecetaLinea'] ?? '';
+        $idReceta               = $linea['idReceta']               ?? '';
+        $idRecetaLinea          = $linea['idRecetaLinea']          ?? '';
+        $idRecetaLineaTratamiento = $linea['idRecetaLineaTratamiento'] ?? '';
 
-        // Navegar al formulario de edición de la línea de tratamiento
-        $editUrl = self::BASE_URL . '/index.php?operacion=altaLineaTratamiento'
-                 . '&idReceta=' . urlencode($idReceta)
-                 . '&idRecetaLinea=' . urlencode($idRecetaLinea);
-
-        $htmlEdit = $this->request('GET', $editUrl);
-        if ($htmlEdit === null) {
-            $this->addLog('error', "  No se pudo cargar el formulario de edición (idRecetaLinea={$idRecetaLinea})");
+        // Obtener fila completa con HTML de acciones
+        $celdas = $this->obtenerFilaCompleta($idReceta, $idRecetaLinea, $idRecetaLineaTratamiento);
+        if ($celdas === null) {
+            $this->addLog('error', "  dame_fila_lineasTratamientos falló (idRecetaLinea={$idRecetaLinea})");
             return false;
         }
 
-        $dom = $this->parseDom($htmlEdit);
+        // Celda 2: dispensacion — extraer fecha si no la tenemos
+        if (!$fechaInicio || $fechaInicio === date('d/m/Y', strtotime('+1 day'))) {
+            $textoDispensacion = strip_tags((string)($celdas[2] ?? ''));
+            $fechaDispensacion = $this->extraerFechaDeTexto($textoDispensacion);
+            if ($fechaDispensacion) {
+                $fechaInicio = $this->calcularFechaInicio($fechaDispensacion);
+                // Recalcular fechaFin con días de tratamiento de la celda 3 (fechas)
+                $textoFechas = strip_tags((string)($celdas[3] ?? ''));
+                $dias = $this->extraerDiasTratamiento($textoFechas);
+                $fechaFin = $this->calcularFechaFin($fechaInicio, $dias);
+                $this->addLog('info', "  Dispensación: {$fechaDispensacion} → Inicio: {$fechaInicio}" . ($fechaFin ? " · Fin: {$fechaFin}" : ''));
+            }
+        }
+
+        // Celda 6 (o última): acciones — contiene el form con el botón "Aceptar"
+        $accionesHtml = (string)($celdas[6] ?? $celdas[count($celdas) - 1] ?? '');
+        if (empty($accionesHtml)) {
+            $this->addLog('error', '  Celda acciones vacía. Celdas: ' . implode(' | ', array_map(fn($c) => substr(strip_tags((string)$c), 0, 30), $celdas)));
+            return false;
+        }
+
+        // Parsear el form de acciones
+        $dom = $this->parseDom('<div>' . $accionesHtml . '</div>');
         if (!$dom) {
-            $this->addLog('error', '  No se pudo parsear el formulario de edición');
+            $this->addLog('error', '  No se pudo parsear HTML de acciones');
             return false;
         }
 
         $xpath = new \DOMXPath($dom);
         $forms = $xpath->query('//form');
         if ($forms->length === 0) {
-            $this->addLog('error', '  Sin formulario en la página de edición — URL: ' . $editUrl);
-            $this->addLog('info',  '  Extracto: ' . substr(strip_tags($htmlEdit), 0, 400));
+            $this->addLog('error', '  Sin form en acciones. HTML: ' . substr(strip_tags($accionesHtml), 0, 300));
             return false;
         }
 
         $form   = $forms->item(0);
-        $action = $form->getAttribute('action') ?: '?operacion=altaLineaTratamiento';
+        $action = $form->getAttribute('action') ?: '?operacion=altaTratamiento';
         $method = strtoupper($form->getAttribute('method') ?: 'POST');
         $fields = $this->extraerCamposForm($form);
 
@@ -785,7 +828,8 @@ class RecevtService
         }
 
         if (!$fechaFieldName) {
-            $this->addLog('error', '  Sin campo de fecha. Campos disponibles: ' . implode(', ', array_keys($fields)));
+            $this->addLog('error', '  Sin campo fecha en form acciones. Campos: ' . implode(', ', array_keys($fields)));
+            $this->addLog('info',  '  HTML acciones: ' . substr($accionesHtml, 0, 500));
             return false;
         }
 
