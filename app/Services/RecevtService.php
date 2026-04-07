@@ -498,10 +498,17 @@ class RecevtService
 
         if (empty($rows)) return [];
 
-        // Log de la primera fila para ver la estructura
+        // Log de la primera fila COMPLETA para ver todos los campos disponibles
         if (!empty($rows[0])) {
-            $this->addLog('info', 'Estructura fila[0]: ' . json_encode(array_map(fn($c) => substr(strip_tags((string)$c), 0, 40), $rows[0])));
+            $this->addLog('info', 'Campos de fila[0] (completo):');
+            foreach ($rows[0] as $k => $v) {
+                $this->addLog('info', '  ' . $k . ' = "' . substr(strip_tags((string)$v), 0, 80) . '"');
+            }
         }
+
+        // Contar cuántas filas tienen idRecetaLineaTratamiento vacío
+        $pendientes = array_filter($rows, fn($r) => isset($r['idRecetaLineaTratamiento']) && $r['idRecetaLineaTratamiento'] === '');
+        $this->addLog('info', 'Filas con idRecetaLineaTratamiento vacío (pendientes): ' . count($pendientes));
 
         $lineas = [];
         foreach ($rows as $row) {
@@ -516,67 +523,52 @@ class RecevtService
     }
 
     /**
-     * Extrae los datos de una fila JSON de DataTables.
-     * Las celdas son HTML — las parseamos para encontrar inputs y fechas.
+     * Extrae los datos de una fila JSON (objeto con claves nombradas).
+     * Solo procesa filas con idRecetaLineaTratamiento vacío (pendientes).
      */
-    private function extraerLineaDeFilaJson(array $celdas): ?array
+    private function extraerLineaDeFilaJson(array $fila): ?array
     {
-        // Buscar en todas las celdas un input de fecha_inicio vacío
-        $fechaInputName = null;
-        $fechaActual    = null;
-        $formAction     = self::LIBRO_URL;
-        $formFields     = [];
-        $formMethod     = 'POST';
+        // Solo líneas pendientes (sin tratamiento registrado todavía)
+        if (!array_key_exists('idRecetaLineaTratamiento', $fila)) return null;
+        if ($fila['idRecetaLineaTratamiento'] !== '') return null;
 
-        foreach ($celdas as $celda) {
-            $celdaHtml = (string)$celda;
-            if (!str_contains($celdaHtml, '<')) continue;
+        // IDs necesarios para el POST
+        $idReceta      = (string)($fila['idReceta']      ?? '');
+        $idRecetaLinea = (string)($fila['idRecetaLinea'] ?? '');
+        if (!$idReceta || !$idRecetaLinea) return null;
 
-            $dom = $this->parseDom('<div>' . $celdaHtml . '</div>');
-            if (!$dom) continue;
-            $xpath = new \DOMXPath($dom);
-
-            // Buscar form
-            $forms = $xpath->query('//form');
-            if ($forms->length > 0) {
-                $form = $forms->item(0);
-                $formFields = array_merge($formFields, $this->extraerCamposForm($form));
-                $act = $form->getAttribute('action');
-                if ($act) $formAction = $this->absoluteUrl($act);
-                $met = $form->getAttribute('method');
-                if ($met) $formMethod = strtoupper($met);
-            }
-
-            // Buscar input de fecha inicio vacío
-            $inputs = $xpath->query("//input[contains(translate(@name,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'fechainicio') or contains(translate(@name,'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'fecha_inicio')]");
-            foreach ($inputs as $inp) {
-                $val = trim((string)$inp->getAttribute('value'));
-                if ($val === '') {
-                    $fechaInputName = $inp->getAttribute('name');
-                    $fechaActual    = '';
-                }
+        // Fecha de dispensación — buscar en todos los campos
+        $fechaDispensacion = null;
+        foreach ($fila as $k => $v) {
+            $kl = strtolower($k);
+            if ((str_contains($kl, 'dispens') || str_contains($kl, 'fecha')) && $v !== '') {
+                $fecha = $this->extraerFechaDeTexto(strip_tags((string)$v));
+                if ($fecha) { $fechaDispensacion = $fecha; break; }
             }
         }
 
-        // Si no encontramos un input de fecha vacío, no es una línea pendiente
-        if ($fechaInputName === null) return null;
+        // Días de tratamiento
+        $diasTratamiento = 1;
+        foreach ($fila as $k => $v) {
+            $kl = strtolower($k);
+            if (str_contains($kl, 'dias') || str_contains($kl, 'duraci') || str_contains($kl, 'tratamiento')) {
+                $n = (int)preg_replace('/\D/', '', (string)$v);
+                if ($n > 0) { $diasTratamiento = $n; break; }
+            }
+        }
 
-        // Extraer texto plano de todas las celdas para buscar fechas y medicamento
-        $textoCompleto = implode(' ', array_map(fn($c) => strip_tags((string)$c), $celdas));
-        $textoCompleto = preg_replace('/\s+/', ' ', $textoCompleto);
-
-        $fechaDispensacion = $this->extraerFechaDeTexto($textoCompleto);
-        if (!$fechaDispensacion) return null;
+        // Receta y medicamento
+        $receta      = strip_tags((string)($fila['numReceta'] ?? $fila['receta'] ?? $idReceta));
+        $medicamento  = strip_tags((string)($fila['medicamento'] ?? $fila['nombreMedicamento'] ?? '—'));
 
         return [
-            'receta'             => $this->extraerTextoColumna($celdas, 0),
-            'medicamento'        => $this->extraerTextoColumna($celdas, 1),
-            'fecha_dispensacion' => $fechaDispensacion,
-            'dias_tratamiento'   => $this->extraerDiasTratamiento($textoCompleto),
-            'fecha_input_name'   => $fechaInputName,
-            'form_action'        => $formAction,
-            'form_method'        => $formMethod,
-            'form_fields'        => $formFields,
+            'idReceta'           => $idReceta,
+            'idRecetaLinea'      => $idRecetaLinea,
+            'receta'             => trim($receta) ?: $idReceta,
+            'medicamento'        => trim($medicamento) ?: '—',
+            'fecha_dispensacion' => $fechaDispensacion ?? '',
+            'dias_tratamiento'   => $diasTratamiento,
+            'raw'                => $fila,  // guardamos fila completa para el POST
         ];
     }
 
