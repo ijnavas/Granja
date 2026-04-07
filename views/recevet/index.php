@@ -71,11 +71,13 @@ if (!($req['dom']     ?? true)) $faltantes[] = 'DOM';
                         Confiar en este dispositivo 10 días (no pedir código de nuevo)
                     </label>
                 </div>
-                <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+                <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
                     <button type="submit" class="btn btn-primary btn-sm">Verificar código</button>
-                    <a href="<?= base_url('recevet') ?>" class="btn btn-secondary btn-sm"
-                       onclick="fetch('<?= base_url('recevet/cancelar-login') ?>',{method:'POST'})">Cancelar</a>
                 </div>
+            </form>
+            <form method="POST" action="<?= base_url('recevet/cancelar-login') ?>" style="display:inline;margin-top:.5rem">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn btn-secondary btn-sm">Cancelar — volver atrás</button>
             </form>
 
         <?php else: ?>

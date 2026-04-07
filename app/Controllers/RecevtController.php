@@ -154,6 +154,15 @@ class RecevtController extends BaseController
         $this->redirect('recevet');
     }
 
+    // ── Cancelar proceso de login 2FA ────────────────────────────
+
+    public function cancelarLogin(): void
+    {
+        auth_required();
+        unset($_SESSION['_recevet_2fa_pending']);
+        $this->redirect('recevet');
+    }
+
     // ── Cerrar sesión Recevet ─────────────────────────────────────
 
     public function cerrarSesion(): void

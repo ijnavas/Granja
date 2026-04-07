@@ -169,6 +169,7 @@ $router->post('/perfil/recevet',                            [PerfilController::c
 $router->get('/recevet',                                    [RecevtController::class, 'index']);
 $router->post('/recevet/iniciar-sesion',                    [RecevtController::class, 'iniciarSesion']);
 $router->post('/recevet/verificar-codigo',                  [RecevtController::class, 'verificarCodigo']);
+$router->post('/recevet/cancelar-login',                    [RecevtController::class, 'cancelarLogin']);
 $router->post('/recevet/cerrar-sesion',                     [RecevtController::class, 'cerrarSesion']);
 $router->post('/recevet/sincronizar',                       [RecevtController::class, 'sincronizar']);
 

@@ -133,7 +133,7 @@ class RecevtService
         }
 
         // 3. Pedir envío del email con código 2FA
-        $this->addLog('info', 'Enviando código de verificación por email...');
+        $this->addLog('info', 'Solicitando envío de código 2FA...');
         $r2 = $this->request('POST', self::LOGIN_URL . '?operacion=buscaEmails2fa', [
             'user'                 => $usuario,
             'pass'                 => $password,
@@ -141,10 +141,23 @@ class RecevtService
         ]);
 
         if ($r2 === null) {
-            return ['status' => 'error', 'msg' => 'No se pudo solicitar el código de verificación.'];
+            return ['status' => 'error', 'msg' => 'No se pudo contactar con recevet.es al pedir el código.'];
         }
 
-        $this->addLog('success', 'Email con código enviado. Introduce el código que has recibido.');
+        // Log de diagnóstico: mostrar la respuesta del servidor
+        $r2trim = trim($r2);
+        $this->addLog('info', 'Respuesta buscaEmails2fa: ' . substr($r2trim, 0, 200));
+
+        // Si la respuesta parece HTML completo, el servidor rechazó la petición (reCAPTCHA)
+        if (strlen($r2trim) > 500 || str_starts_with($r2trim, '<!')) {
+            return [
+                'status' => 'error',
+                'msg'    => 'recevet.es bloqueó la petición (reCAPTCHA requerido). ' .
+                            'Inicia sesión directamente en recevet.es desde tu navegador y vuelve a intentarlo.',
+            ];
+        }
+
+        $this->addLog('success', 'Código enviado al email. Introdúcelo para continuar.');
         return ['status' => 'needs_2fa', 'controlForm' => $controlForm];
     }
 
