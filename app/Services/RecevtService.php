@@ -438,11 +438,30 @@ class RecevtService
     private function extraerCamposFormDesdeHtml(string $html): array
     {
         $dom = $this->parseDom($html);
-        if (!$dom) return [];
-        $xpath = new \DOMXPath($dom);
-        $forms = $xpath->query('//form[@id="myForm"] | //form[1]');
-        if ($forms->length === 0) return [];
-        return $this->extraerCamposForm($forms->item(0));
+        $fields = [];
+
+        if ($dom) {
+            $xpath = new \DOMXPath($dom);
+            $forms = $xpath->query('//form[@id="myForm"] | //form[1]');
+            if ($forms->length > 0) {
+                $fields = $this->extraerCamposForm($forms->item(0));
+            }
+
+            // upSeleccionada puede tener solo id (no name) — buscarlo explícitamente
+            if (!isset($fields['upSeleccionada'])) {
+                $up = $xpath->query('//*[@id="upSeleccionada"]');
+                if ($up->length > 0) {
+                    $fields['upSeleccionada'] = $up->item(0)->getAttribute('value');
+                }
+            }
+        }
+
+        // filtros: extraer del JS (string hardcodeado en la inicialización de DataTables)
+        if (preg_match("/d\\.filtros\\s*=\\s*'([^']+)'/", $html, $m)) {
+            $fields['filtros'] = $m[1];
+        }
+
+        return $fields;
     }
 
     /**
@@ -458,17 +477,20 @@ class RecevtService
         $this->addLog('info', 'Llamando a dame_lineasTratamientos vía AJAX...');
 
         // Parámetros que envía DataTables + el formulario
+        // filtros y upSeleccionada ya vienen en $formFields extraídos del JS/HTML
         $postData = array_merge($formFields, [
-            'accion'                 => '',
-            'accionActiva'           => '',
+            'draw'                   => '1',
             'start'                  => '0',
-            'numElementosMostrar'    => '100',  // pedir muchas para cogerlas todas
+            'length'                 => '500',   // todas las líneas
             'mostrarLineasCompletadas' => '0',   // solo pendientes
-            // DataTables params estándar
+            // Compatibilidad con versiones antiguas de DataTables
             'iDisplayStart'          => '0',
-            'iDisplayLength'         => '100',
+            'iDisplayLength'         => '500',
             'sEcho'                  => '1',
         ]);
+
+        $this->addLog('info', 'Params AJAX: filtros=' . (isset($postData['filtros']) ? 'sí' : 'no')
+            . ' upSeleccionada=' . ($postData['upSeleccionada'] ?? '(vacío)'));
 
         $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
 
@@ -797,13 +819,21 @@ class RecevtService
             $this->addLog('info', 'Operaciones en JS/HTML: ' . implode(', ', $ops));
         }
 
-        // También extraer y loguear los bloques <script> relevantes (DataTables init)
+        // Extraer y loguear los bloques <script> relevantes (DataTables init) — completo
         preg_match_all('/<script[^>]*>(.*?)<\/script>/si', $html, $scripts);
         foreach (($scripts[1] ?? []) as $script) {
             if (strpos($script, 'DataTable') !== false || strpos($script, 'datatable') !== false
                 || strpos($script, 'listaAnimalesTratados') !== false
                 || strpos($script, 'dame_lineas') !== false) {
-                $this->addLog('info', 'Script DataTables: ' . substr(trim($script), 0, 1500));
+                $scriptTrim = trim($script);
+                // Loguear en trozos de 2000 chars para no perder nada
+                $offset = 0;
+                $part   = 1;
+                while ($offset < strlen($scriptTrim)) {
+                    $this->addLog('info', "Script DataTables (parte {$part}): " . substr($scriptTrim, $offset, 2000));
+                    $offset += 2000;
+                    $part++;
+                }
             }
         }
     }
