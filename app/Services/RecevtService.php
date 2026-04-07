@@ -87,7 +87,7 @@ class RecevtService
         $form = $this->parseLoginForm($html);
         if ($form === null) {
             // Puede que ya estemos logueados o que la estructura haya cambiado
-            if (str_contains($html, 'operacion=principal') || str_contains($html, 'Cerrar sesión') || str_contains($html, 'Cerrar sesi')) {
+            if (strpos($html, 'operacion=principal') || str_contains($html, 'Cerrar sesión') || str_contains($html, 'Cerrar sesi')) !== false {
                 $this->log('success', 'Ya estaba logueado en Recevet.');
                 $this->loggedIn = true;
                 return true;
@@ -113,16 +113,16 @@ class RecevtService
         }
 
         // 5. Verificar login exitoso
-        if (str_contains($respuesta, 'Cerrar sesión') || str_contains($respuesta, 'Cerrar sesi') ||
-            str_contains($respuesta, 'operacion=principal') || str_contains($respuesta, 'Libro de tratamientos') ||
-            str_contains($respuesta, 'Su página principal') || str_contains($respuesta, 'página principal')) {
+        if (strpos($respuesta, 'Cerrar sesión') || str_contains($respuesta, 'Cerrar sesi') !== false ||
+            strpos($respuesta, 'operacion=principal') || str_contains($respuesta, 'Libro de tratamientos') !== false ||
+            strpos($respuesta, 'Su página principal') || str_contains($respuesta, 'página principal')) !== false {
             $this->log('success', 'Login correcto en Recevet.');
             $this->loggedIn = true;
             return true;
         }
 
-        if (str_contains($respuesta, 'incorrecto') || str_contains($respuesta, 'inválido') ||
-            str_contains($respuesta, 'no válido') || str_contains($respuesta, 'error')) {
+        if (strpos($respuesta, 'incorrecto') || str_contains($respuesta, 'inválido') !== false ||
+            strpos($respuesta, 'no válido') || str_contains($respuesta, 'error')) !== false {
             $this->log('error', 'Credenciales incorrectas en Recevet.');
         } else {
             $this->log('error', 'Login fallido — respuesta inesperada de recevet.es');
@@ -206,7 +206,7 @@ class RecevtService
     private function aceptarCookies(string $html): void
     {
         // Intentar detectar y aceptar banner de cookies
-        if (!str_contains($html, 'cookie') && !str_contains($html, 'Cookie')) {
+        if (!strpos($html, 'cookie') && !str_contains($html, 'Cookie')) !== false {
             return;
         }
 
@@ -261,7 +261,7 @@ class RecevtService
 
         if ($selects->length === 0) {
             // Si ya está seleccionada la explotación, continuar
-            if (str_contains($html, $explotacion)) {
+            if (strpos($html, $explotacion)) !== false {
                 $this->log('info', 'Explotación ya seleccionada.');
                 return $html;
             }
@@ -478,7 +478,7 @@ class RecevtService
 
         // Si hay campo de fecha fin, rellenarlo también
         foreach (array_keys($fields) as $key) {
-            if (str_contains(strtolower($key), 'fecha_fin') || str_contains(strtolower($key), 'fechafin')) {
+            if (strpos(strtolower($key), 'fecha_fin') || str_contains(strtolower($key), 'fechafin')) !== false {
                 if ($fechaFin) $fields[$key] = $fechaFin;
             }
         }
@@ -490,7 +490,7 @@ class RecevtService
         if ($respuesta === null) return false;
 
         // Verificar éxito: la fila debería desaparecer o mostrar la fecha
-        return !str_contains($respuesta, 'Error') && !str_contains($respuesta, 'error');
+        return !strpos($respuesta, 'Error') && !str_contains($respuesta, 'error') !== false;
     }
 
     // ── Cálculo de fechas ─────────────────────────────────────────
@@ -573,8 +573,8 @@ class RecevtService
             $hasPass = false;
             foreach (array_keys($fields) as $name) {
                 $nameLow = strtolower($name);
-                if (str_contains($nameLow, 'user') || str_contains($nameLow, 'login') || $nameLow === 'usuario') $hasUser = true;
-                if (str_contains($nameLow, 'pass') || str_contains($nameLow, 'clave') || str_contains($nameLow, 'pwd'))   $hasPass = true;
+                if (strpos($nameLow, 'user') || str_contains($nameLow, 'login') || $nameLow === 'usuario') !== false $hasUser = true;
+                if (strpos($nameLow, 'pass') || str_contains($nameLow, 'clave') || str_contains($nameLow, 'pwd')) !== false   $hasPass = true;
             }
             // Si no encontramos por nombre, buscar por tipo
             $passInputs = $xpath->query('.//input[@type="password"]', $form);
@@ -663,7 +663,9 @@ class RecevtService
     private function absoluteUrl(string $url): string
     {
         if (strpos($url, 'http') === 0) return $url;
-        if (strpos($url, '/') === 0)   return self::BASE_URL . $url;
+        if (strpos($url, '/') === 0)    return self::BASE_URL . $url;
+        // "?operacion=xxx" → index.php?operacion=xxx
+        if (strpos($url, '?') === 0)    return self::BASE_URL . '/index.php' . $url;
         return self::BASE_URL . '/' . $url;
     }
 
