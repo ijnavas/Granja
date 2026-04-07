@@ -530,9 +530,8 @@ class RecevtService
             'sEcho'         => '1',
         ]);
 
-        // ── Primer intento: solo pendientes (idRecetaLineaTratamiento vacío) ──
         $postData = array_merge($baseParams, ['mostrarLineasCompletadas' => '0']);
-        $this->addLog('info', 'Params AJAX (mostrarLineasCompletadas=0): filtros=' . (isset($postData['filtros']) ? 'sí' : 'no')
+        $this->addLog('info', 'Params AJAX: filtros=' . (isset($postData['filtros']) ? 'sí' : 'no')
             . ' upSeleccionada=' . ($postData['upSeleccionada'] ?? '(vacío)'));
 
         $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
@@ -540,27 +539,7 @@ class RecevtService
             $this->addLog('error', 'No se pudo obtener las líneas de tratamiento.');
             return [];
         }
-        $this->addLog('info', 'Respuesta AJAX/0 (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
-
-        $json = json_decode($respuesta, true);
-        if (json_last_error() === JSON_ERROR_NONE) {
-            $total = (int)($json['recordsTotal'] ?? $json['iTotalRecords'] ?? count($json['aaData'] ?? $json['data'] ?? []));
-            if ($total > 0) {
-                return $this->parsearLineasDesdeJson($json);
-            }
-            // 0 registros con =0 → puede haber registros parciales (tienen ID pero sin fechas)
-            // Fallback: pedir todos y filtrar client-side los que tengan fechas vacías
-            $this->addLog('info', 'Sin pendientes con mostrarLineasCompletadas=0 → reintentando con =1 (filtro client-side)');
-        }
-
-        // ── Segundo intento: todos los registros, filtrar fechas vacías en completarLineaConIDs ──
-        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1']);
-        $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
-        if ($respuesta === null) {
-            $this->addLog('error', 'No se pudo obtener las líneas de tratamiento (intento 2).');
-            return [];
-        }
-        $this->addLog('info', 'Respuesta AJAX/1 (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
+        $this->addLog('info', 'Respuesta AJAX (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
 
         $json = json_decode($respuesta, true);
         if (json_last_error() === JSON_ERROR_NONE) {
