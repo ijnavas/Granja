@@ -632,11 +632,12 @@ class RecevtService
             }
         }
 
-        // Días de tratamiento
+        // Días de tratamiento — sólo campos específicos de duración (NO idRecetaLineaTratamiento, etc.)
         $diasTratamiento = 1;
         foreach ($fila as $k => $v) {
             $kl = strtolower($k);
-            if (str_contains($kl, 'dias') || str_contains($kl, 'duraci') || str_contains($kl, 'tratamiento')) {
+            // Evitar false-positives: 'tratamiento' solo coincide con campos de días, no con IDs
+            if (str_contains($kl, 'diastratamiento') || str_contains($kl, 'dias_tratamiento') || str_contains($kl, 'duraci')) {
                 $n = (int)preg_replace('/\D/', '', (string)$v);
                 if ($n > 0) { $diasTratamiento = $n; break; }
             }
@@ -819,6 +820,10 @@ class RecevtService
 
     private function completarLineaConIDs(array $linea, string $fechaInicio, ?string $fechaFin): bool
     {
+        // fechaFin del loop externo puede ser incorrecta si dias_tratamiento se calculó mal.
+        // La recalcularemos SIEMPRE desde el formulario real (dom3/diasValue).
+        $fechaFin = null;
+
         $idReceta                 = $linea['idReceta']                 ?? '';
         $idRecetaLinea            = $linea['idRecetaLinea']            ?? '';
         $idRecetaLineaTratamiento = $linea['idRecetaLineaTratamiento'] ?? '';
@@ -888,12 +893,15 @@ class RecevtService
             $fechaFinField = 'fechaFinTratamiento' . $token;
         }
 
-        // Recalcular fechaFin si tenemos días del formulario
-        if ($diasValue > 1) {
+        // Calcular fechaFin desde los días del formulario (fechaFin del loop externo ya fue descartada)
+        if ($diasValue >= 1) {
             $fechaFin = $this->calcularFechaFin($fechaInicio, $diasValue);
         }
+        // Si diasValue=0 (campo no encontrado en el form), fechaFin queda null → solo se graba fechaInicio
         if ($fechaFin) {
-            $this->addLog('info', "  Fin: {$fechaFin}" . ($diasValue > 1 ? " ({$diasValue} días)" : ''));
+            $this->addLog('info', "  Fin: {$fechaFin} ({$diasValue} días)");
+        } else {
+            $this->addLog('info', "  Sin fechaFin (tratamiento de 1 día o campo no encontrado)");
         }
 
         // ── POST a actualizar_lineasTratamientos ──────────────────────────
