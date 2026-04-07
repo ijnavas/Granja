@@ -769,18 +769,17 @@ class RecevtService
             return false;
         }
 
-        // Celda 2: dispensacion — extraer fecha si no la tenemos
-        if (!$fechaInicio || $fechaInicio === date('d/m/Y', strtotime('+1 day'))) {
-            $textoDispensacion = strip_tags((string)($celdas[2] ?? ''));
-            $fechaDispensacion = $this->extraerFechaDeTexto($textoDispensacion);
-            if ($fechaDispensacion) {
-                $fechaInicio = $this->calcularFechaInicio($fechaDispensacion);
-                // Recalcular fechaFin con días de tratamiento de la celda 3 (fechas)
-                $textoFechas = strip_tags((string)($celdas[3] ?? ''));
-                $dias = $this->extraerDiasTratamiento($textoFechas);
-                $fechaFin = $this->calcularFechaFin($fechaInicio, $dias);
-                $this->addLog('info', "  Dispensación: {$fechaDispensacion} → Inicio: {$fechaInicio}" . ($fechaFin ? " · Fin: {$fechaFin}" : ''));
-            }
+        // Celda 2: dispensacion — recalcular siempre con la fecha real del servidor
+        $textoDispensacion = strip_tags((string)($celdas[2] ?? ''));
+        $fechaDispensacion = $this->extraerFechaDeTexto($textoDispensacion);
+        if ($fechaDispensacion) {
+            $fechaInicio = $this->calcularFechaInicio($fechaDispensacion);
+            $textoFechas = strip_tags((string)($celdas[3] ?? ''));
+            $dias        = $this->extraerDiasTratamiento($textoFechas);
+            $fechaFin    = $this->calcularFechaFin($fechaInicio, $dias);
+            $this->addLog('info', "  Dispensación: {$fechaDispensacion} → Inicio: {$fechaInicio}" . ($fechaFin ? " · Fin: {$fechaFin}" : ''));
+        } else {
+            $this->addLog('info', "  Sin fecha dispensación en celda[2]: " . substr($textoDispensacion, 0, 100));
         }
 
         // Celda 6 (o última): acciones — contiene el form con el botón "Aceptar"
