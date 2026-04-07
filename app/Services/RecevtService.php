@@ -866,20 +866,21 @@ class RecevtService
             $this->addLog('info', 'Operaciones en JS/HTML: ' . implode(', ', $ops));
         }
 
-        // Extraer y loguear los bloques <script> relevantes (DataTables init) — completo
+        // Buscar definición de actualizarLineaTratamiento en todos los scripts
         preg_match_all('/<script[^>]*>(.*?)<\/script>/si', $html, $scripts);
         foreach (($scripts[1] ?? []) as $script) {
-            if (strpos($script, 'DataTable') !== false || strpos($script, 'datatable') !== false
-                || strpos($script, 'listaAnimalesTratados') !== false
-                || strpos($script, 'dame_lineas') !== false) {
+            if (strpos($script, 'actualizarLineaTratamiento') !== false) {
+                // Extraer ±500 chars alrededor de la función
+                $pos = strpos($script, 'actualizarLineaTratamiento');
+                $start = max(0, $pos - 100);
+                $this->addLog('info', 'JS actualizarLineaTratamiento: ' . substr($script, $start, 1000));
+            }
+            if (strpos($script, 'DataTable') !== false || strpos($script, 'dame_lineas') !== false) {
                 $scriptTrim = trim($script);
-                // Loguear en trozos de 2000 chars para no perder nada
-                $offset = 0;
-                $part   = 1;
+                $offset = 0; $part = 1;
                 while ($offset < strlen($scriptTrim)) {
                     $this->addLog('info', "Script DataTables (parte {$part}): " . substr($scriptTrim, $offset, 2000));
-                    $offset += 2000;
-                    $part++;
+                    $offset += 2000; $part++;
                 }
             }
         }
