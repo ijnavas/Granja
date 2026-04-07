@@ -418,8 +418,6 @@ class RecevtService
 
         $fields              = $this->extraerCamposForm($form);
         $fields[$selectName] = $explotacion;
-        // El JS llama cambiarExplotacion() que hace $("#accion").val("cambiarExplotacion") antes de submit
-        $fields['accion'] = 'cambiarExplotacion';
 
         $botones = $xpath->query(".//button[@type='submit'] | .//input[@type='submit']", $form);
         if ($botones->length > 0) {
@@ -429,22 +427,12 @@ class RecevtService
             if ($bName) $fields[$bName] = $bVal;
         }
 
-        $action = $form->getAttribute('action') ?: self::LIBRO_URL;
-        $method = strtoupper($form->getAttribute('method') ?: 'POST');
-        // POST para actualizar la sesión (puede redirigir fuera del libro)
-        $this->request($method, $this->absoluteUrl($action), $fields);
-
-        // GET al libro para cargar la página con la explotación ya seleccionada en sesión
-        $respuesta = $this->request('GET', self::LIBRO_URL);
+        $action    = $form->getAttribute('action') ?: self::LIBRO_URL;
+        $method    = strtoupper($form->getAttribute('method') ?: 'POST');
+        $respuesta = $this->request($method, $this->absoluteUrl($action), $fields);
 
         if ($respuesta === null) {
-            $this->addLog('error', 'Error al cargar el libro tras seleccionar la explotación');
-            return null;
-        }
-
-        // Verificar que la nueva página tiene el filtro/DataTables correcto
-        if (!str_contains($respuesta, 'dame_lineasTratamientos')) {
-            $this->addLog('error', 'La página tras selección no tiene el libro de tratamientos');
+            $this->addLog('error', 'Error al seleccionar la explotación');
             return null;
         }
 
@@ -550,9 +538,10 @@ class RecevtService
             }
         }
 
-        // Contar cuántas filas tienen idRecetaLineaTratamiento vacío
-        $pendientes = array_filter($rows, fn($r) => isset($r['idRecetaLineaTratamiento']) && $r['idRecetaLineaTratamiento'] === '');
-        $this->addLog('info', 'Filas con idRecetaLineaTratamiento vacío (pendientes): ' . count($pendientes));
+        // Contar distribución: nuevas (sin ID) vs parciales (con ID pero sin fechas)
+        $sinId     = array_filter($rows, fn($r) => isset($r['idRecetaLineaTratamiento']) && $r['idRecetaLineaTratamiento'] === '');
+        $conId     = array_filter($rows, fn($r) => isset($r['idRecetaLineaTratamiento']) && $r['idRecetaLineaTratamiento'] !== '');
+        $this->addLog('info', 'Filas sin idRecetaLineaTratamiento (nuevas): ' . count($sinId) . ' | con ID (parciales): ' . count($conId));
 
         $lineas = [];
         foreach ($rows as $row) {
@@ -568,13 +557,14 @@ class RecevtService
 
     /**
      * Extrae los datos de una fila JSON (objeto con claves nombradas).
-     * Solo procesa filas con idRecetaLineaTratamiento vacío (pendientes).
+     * Procesa todas las filas pendientes: tanto las completamente nuevas
+     * (idRecetaLineaTratamiento vacío) como las parciales (tienen ID pero sin fechas).
      */
     private function extraerLineaDeFilaJson(array $fila): ?array
     {
-        // Solo líneas pendientes (sin tratamiento registrado todavía)
+        // Necesitamos al menos idReceta para poder consultar la fila completa
         if (!array_key_exists('idRecetaLineaTratamiento', $fila)) return null;
-        if ($fila['idRecetaLineaTratamiento'] !== '') return null;
+        // Ya NO filtramos por idRecetaLineaTratamiento !== '': procesamos ambos casos
 
         // IDs necesarios para el POST
         $idReceta      = (string)($fila['idReceta']      ?? '');
@@ -606,13 +596,14 @@ class RecevtService
         $medicamento  = strip_tags((string)($fila['medicamento'] ?? $fila['nombreMedicamento'] ?? '—'));
 
         return [
-            'idReceta'           => $idReceta,
-            'idRecetaLinea'      => $idRecetaLinea,
-            'receta'             => trim($receta) ?: $idReceta,
-            'medicamento'        => trim($medicamento) ?: '—',
-            'fecha_dispensacion' => $fechaDispensacion ?? '',
-            'dias_tratamiento'   => $diasTratamiento,
-            'raw'                => $fila,  // guardamos fila completa para el POST
+            'idReceta'                 => $idReceta,
+            'idRecetaLinea'            => $idRecetaLinea,
+            'idRecetaLineaTratamiento' => (string)($fila['idRecetaLineaTratamiento'] ?? ''),
+            'receta'                   => trim($receta) ?: $idReceta,
+            'medicamento'              => trim($medicamento) ?: '—',
+            'fecha_dispensacion'       => $fechaDispensacion ?? '',
+            'dias_tratamiento'         => $diasTratamiento,
+            'raw'                      => $fila,  // guardamos fila completa para el POST
         ];
     }
 
