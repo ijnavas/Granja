@@ -18,12 +18,44 @@ class RecevtService
     private const TIMEOUT   = 30;
 
     private string $cookieFile;
-    private array  $logs     = [];
-    private bool   $loggedIn = false;
+    private array  $logs          = [];
+    private bool   $loggedIn      = false;
+    private string $sessionCookie = '';
 
-    public function __construct()
+    public function __construct(string $sessionCookie = '')
     {
-        $this->cookieFile = sys_get_temp_dir() . '/recevet_' . session_id() . '.txt';
+        $this->cookieFile    = sys_get_temp_dir() . '/recevet_' . session_id() . '.txt';
+        $this->sessionCookie = $sessionCookie;
+
+        // Pre-inyectar la cookie en el jar para que cURL la use desde el primer request
+        if ($sessionCookie !== '') {
+            $this->writeCookieToJar($sessionCookie);
+        }
+    }
+
+    /**
+     * Escribe la cookie de sesión en formato Netscape (que entiende cURL).
+     * El string puede ser el valor completo del header Cookie:
+     *   "PHPSESSID=abc123; otra=val"
+     * o solo el valor de PHPSESSID.
+     */
+    private function writeCookieToJar(string $cookie): void
+    {
+        $lines   = ["# Netscape HTTP Cookie File\n"];
+        $rawPairs = str_contains($cookie, '=') ? $cookie : 'PHPSESSID=' . $cookie;
+
+        foreach (explode(';', $rawPairs) as $pair) {
+            $pair  = trim($pair);
+            $eqPos = strpos($pair, '=');
+            if ($eqPos === false) continue;
+            $name  = trim(substr($pair, 0, $eqPos));
+            $value = trim(substr($pair, $eqPos + 1));
+            if ($name === '') continue;
+            // dominio  httpOnly  path  secure  expiry  name  value
+            $lines[] = ".recevet.es\tTRUE\t/\tFALSE\t0\t{$name}\t{$value}\n";
+        }
+
+        file_put_contents($this->cookieFile, implode('', $lines));
     }
 
     public function __destruct()
@@ -67,99 +99,43 @@ class RecevtService
     // ── Login ─────────────────────────────────────────────────────
 
     /**
-     * Flujo real de recevet.es:
-     *  1. GET index.php  → extrae controlForm token
-     *  2. POST validadorNavegador2fa → registra el "navegador" (PC fingerprint)
-     *  3. POST ?operacion=principal  → campos: controlForm, 2fa, pc, usuario, passUsuario, g-recaptcha-response
+     * Login usando cookie de sesión (método principal).
      *
-     * NOTA: recevet.es usa reCAPTCHA v3. Si el servidor lo valida estrictamente
-     * el login sin navegador real no es posible. Intentamos con token vacío primero.
+     * recevet.es protege su login con reCAPTCHA v3 + device fingerprint,
+     * lo que impide el login automático con cURL. La solución es que el usuario
+     * se loguee una vez en su navegador y pegue aquí la cookie de sesión.
+     *
+     * Si no hay cookie configurada, muestra instrucciones claras.
      */
     public function login(string $usuario, string $password): bool
     {
-        $this->addLog('info', 'Iniciando sesión en Recevet...');
+        $this->addLog('info', 'Verificando sesión en Recevet...');
 
-        // 1. GET login page
-        $html = $this->request('GET', self::LOGIN_URL);
-        if ($html === null) {
-            $this->addLog('error', 'No se pudo conectar con recevet.es');
+        if ($this->sessionCookie === '') {
+            $this->addLog('error',
+                'No hay cookie de sesión configurada. ' .
+                'Ve a Perfil → Credenciales Recevet y sigue las instrucciones para obtenerla.'
+            );
             return false;
         }
 
-        // ¿Ya hay sesión activa?
-        if ($this->esRespuestaLogueado($html)) {
-            $this->addLog('success', 'Sesión activa encontrada en Recevet.');
+        // Verificar que la sesión sigue activa con un GET a la página principal
+        $html = $this->request('GET', self::LOGIN_URL . '?operacion=principal');
+
+        if ($html !== null && $this->esRespuestaLogueado($html)) {
+            $this->addLog('success', 'Sesión activa en Recevet ✓');
             $this->loggedIn = true;
             return true;
         }
 
-        // Extraer controlForm de la página de login
-        $controlForm = $this->extraerControlForm($html);
-        $this->addLog('info', 'controlForm: ' . ($controlForm ?: '(vacío)'));
-
-        // 2. Paso previo: registrar PC fingerprint (AJAX que hace el JS antes de hacer login)
-        $pc = $this->buildPcFingerprint();
-        $r2fa = $this->request('POST', self::LOGIN_URL . '?operacion=validadorNavegador2fa', [
-            'user'  => $usuario,
-            'datos' => $pc,
-        ]);
-        $this->addLog('info', 'validadorNavegador2fa respuesta: ' . ($r2fa !== null ? substr($r2fa, 0, 80) : 'null'));
-
-        // 3. POST de login con los campos que envía el JS
-        //    El JS renombra 'pass' → 'passUsuario' y deshabilita el input original
-        $postData = [
-            'controlForm'          => $controlForm,
-            '2fa'                  => '',
-            'pc'                   => $pc,
-            'usuario'              => $usuario,
-            'passUsuario'          => $password,   // ← nombre real que espera el servidor
-            'g-recaptcha-response' => '',           // reCAPTCHA v3 token (vacío = intento sin captcha)
-        ];
-
-        $this->addLog('info', 'POST login → ' . self::LOGIN_URL . '?operacion=principal');
-        $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=principal', $postData);
-
-        if ($respuesta !== null && $this->esRespuestaLogueado($respuesta)) {
-            $this->addLog('success', 'Login correcto en Recevet.');
-            $this->loggedIn = true;
-            return true;
-        }
-
-        if ($respuesta !== null) {
-            $this->addLog('info', 'Respuesta: ' . $this->fragmento($respuesta));
-        }
-
-        // Si sigue sin funcionar: reCAPTCHA v3 requerido — no se puede automatizar sin navegador real
         $this->addLog('error',
-            'Login fallido. recevet.es requiere reCAPTCHA v3 para autenticar. ' .
-            'Es posible que el login automático no sea viable sin un navegador real. ' .
-            'Ver documentación de alternativas (Puppeteer/2captcha).'
+            'La cookie de sesión ha caducado o no es válida. ' .
+            'Ve a recevet.es, inicia sesión y actualiza la cookie en tu perfil.'
         );
+        if ($html !== null) {
+            $this->addLog('info', 'Respuesta: ' . $this->fragmento($html));
+        }
         return false;
-    }
-
-    /**
-     * Extrae el token controlForm del HTML de recevet.es.
-     * Este token CSRF cambia en cada página y debe incluirse en todos los POST.
-     */
-    private function extraerControlForm(string $html): string
-    {
-        $dom = $this->parseDom($html);
-        if (!$dom) return '';
-        $xpath = new \DOMXPath($dom);
-        $nodes = $xpath->query('//input[@name="controlForm"]');
-        return $nodes->length > 0 ? (string)$nodes->item(0)->getAttribute('value') : '';
-    }
-
-    /**
-     * Genera el fingerprint de "PC" que envía el JS de recevet.es:
-     *   userAgent + screenResolution + language + timezone
-     * Usamos un valor fijo pero realista para que el servidor siempre
-     * vea el mismo "navegador" desde nuestros requests.
-     */
-    private function buildPcFingerprint(): string
-    {
-        return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.361920x1080es-ESEurope/Madrid';
     }
 
     private function esRespuestaLogueado(string $html): bool
@@ -236,30 +212,6 @@ class RecevtService
     }
 
     // ── Privados ──────────────────────────────────────────────────
-
-    private function aceptarCookies(string $html): void
-    {
-        if (!str_contains($html, 'cookie') && !str_contains($html, 'Cookie')) return;
-
-        $dom = $this->parseDom($html);
-        if (!$dom) return;
-
-        $xpath   = new \DOMXPath($dom);
-        $botones = $xpath->query("//button[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'aceptar') and (contains(@class,'cookie') or contains(@id,'cookie'))]");
-
-        if ($botones->length > 0) {
-            $form = $botones->item(0);
-            while ($form && $form->nodeName !== 'form') {
-                $form = $form->parentNode;
-            }
-            if ($form && $form->nodeName === 'form') {
-                $fields = $this->extraerCamposForm($form);
-                $action = $form->getAttribute('action') ?: self::LOGIN_URL;
-                $this->request('POST', $this->absoluteUrl($action), $fields);
-                $this->addLog('info', 'Banner de cookies aceptado.');
-            }
-        }
-    }
 
     private function seleccionarExplotacion(string $html, string $explotacion): ?string
     {
@@ -534,32 +486,6 @@ class RecevtService
     }
 
     // ── DOM ───────────────────────────────────────────────────────
-
-    private function parseLoginForm(string $html): ?array
-    {
-        $dom = $this->parseDom($html);
-        if (!$dom) return null;
-
-        $xpath = new \DOMXPath($dom);
-        $forms = $xpath->query('//form');
-
-        foreach ($forms as $form) {
-            $passInputs = $xpath->query('.//input[@type="password"]', $form);
-            $textInputs = $xpath->query('.//input[@type="text" or @type="email"]', $form);
-            if ($passInputs->length === 0 || $textInputs->length === 0) continue;
-
-            $fields = $this->extraerCamposForm($form);
-            $action = $form->getAttribute('action') ?: self::LOGIN_URL;
-
-            return [
-                'action' => $this->absoluteUrl($action),
-                'method' => strtoupper($form->getAttribute('method') ?: 'POST'),
-                'fields' => $fields,
-            ];
-        }
-
-        return null;
-    }
 
     private function extraerCamposForm(\DOMElement $form): array
     {

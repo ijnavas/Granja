@@ -39,7 +39,8 @@ class RecevtController extends BaseController
         }
 
         $granjasRecevet = array_filter($granjas, fn($g) => !empty($g['recevet_explotacion']));
-        $credencialesOk = !empty($usuario['recevet_usuario']) && !empty($usuario['recevet_password_enc']);
+        $cookieOk       = !empty($usuario['recevet_session_cookie']);
+        $credencialesOk = !empty($usuario['recevet_usuario']) && $cookieOk;
 
         $this->view('recevet/index', [
             'pageTitle'      => 'Recevet',
@@ -47,6 +48,7 @@ class RecevtController extends BaseController
             'granjas'        => $granjas,
             'granjasRecevet' => array_values($granjasRecevet),
             'credencialesOk' => $credencialesOk,
+            'cookieOk'       => $cookieOk,
             'requisitos'     => $requisitos,
             'success'        => Session::getFlash('success'),
             'error'          => Session::getFlash('error'),
@@ -82,8 +84,8 @@ class RecevtController extends BaseController
             $this->redirect('recevet');
         }
 
-        if (empty($usuario['recevet_usuario']) || empty($usuario['recevet_password_enc'])) {
-            Session::flash('error', 'Configura primero tus credenciales de Recevet en el perfil.');
+        if (empty($usuario['recevet_session_cookie'])) {
+            Session::flash('error', 'Configura primero la cookie de sesión de Recevet en el perfil.');
             $this->redirect('recevet');
         }
 
@@ -93,19 +95,17 @@ class RecevtController extends BaseController
             $this->redirect('recevet');
         }
 
-        $dryRun  = ($this->postString('dry_run') === '1');
-        $password = RecevtService::decryptPassword($usuario['recevet_password_enc']);
-
-        if (!$password) {
-            Session::flash('error', 'No se pudo descifrar la contraseña de Recevet. Vuelve a guardarla en el perfil.');
-            $this->redirect('recevet');
-        }
+        $dryRun        = ($this->postString('dry_run') === '1');
+        $sessionCookie = $usuario['recevet_session_cookie'];
 
         $allLogs = [];
 
         try {
-            $service  = new RecevtService();
-            $loggedIn = $service->login($usuario['recevet_usuario'], $password);
+            $service  = new RecevtService($sessionCookie);
+            $loggedIn = $service->login(
+                $usuario['recevet_usuario'] ?? '',
+                ''  // password ya no se necesita con cookie
+            );
             $allLogs  = array_merge($allLogs, $service->getLogs());
 
             if (!$loggedIn) {

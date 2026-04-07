@@ -36,26 +36,28 @@ if (!($req['dom']     ?? true)) $faltantes[] = 'DOM (necesario para procesar el 
 <!-- Estado de configuración -->
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem">
 
-    <!-- Credenciales -->
+    <!-- Sesión / Cookie -->
     <div class="form-card">
         <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
-            <?php if ($credencialesOk): ?>
+            <?php if ($cookieOk ?? false): ?>
                 <span style="width:10px;height:10px;border-radius:50%;background:#16a34a;flex-shrink:0"></span>
-                <span style="font-weight:700;font-size:.88rem">Credenciales configuradas</span>
+                <span style="font-weight:700;font-size:.88rem">Sesión configurada</span>
             <?php else: ?>
                 <span style="width:10px;height:10px;border-radius:50%;background:#dc2626;flex-shrink:0"></span>
-                <span style="font-weight:700;font-size:.88rem;color:#dc2626">Credenciales no configuradas</span>
+                <span style="font-weight:700;font-size:.88rem;color:#dc2626">Cookie de sesión no configurada</span>
             <?php endif; ?>
         </div>
         <div style="font-size:.82rem;color:#6b7280;margin-bottom:.75rem">
-            <?php if ($credencialesOk): ?>
-                Usuario: <strong><?= e($usuario['recevet_usuario']) ?></strong>
+            <?php if ($cookieOk ?? false): ?>
+                Usuario: <strong><?= e($usuario['recevet_usuario'] ?? '') ?></strong><br>
+                <span>La cookie autentica las peticiones directamente.</span>
             <?php else: ?>
-                Configura tu usuario y contraseña de Recevet en tu perfil para poder sincronizar.
+                Inicia sesión en <a href="https://www.recevet.es" target="_blank">recevet.es</a>, copia la cookie
+                desde las herramientas de desarrollador y pégala en tu perfil.
             <?php endif; ?>
         </div>
         <a href="<?= base_url('perfil') ?>" class="btn btn-secondary btn-sm">
-            <?= $credencialesOk ? 'Cambiar credenciales' : 'Configurar credenciales' ?>
+            <?= ($cookieOk ?? false) ? 'Actualizar cookie' : 'Configurar cookie' ?>
         </a>
     </div>
 
@@ -132,9 +134,9 @@ if (!($req['dom']     ?? true)) $faltantes[] = 'DOM (necesario para procesar el 
         </div>
     </form>
 </div>
-<?php elseif (!$credencialesOk): ?>
+<?php elseif (!($cookieOk ?? false)): ?>
 <div class="empty-state">
-    Configura tus credenciales de Recevet en <a href="<?= base_url('perfil') ?>">tu perfil</a> para poder sincronizar.
+    Configura la cookie de sesión de Recevet en <a href="<?= base_url('perfil') ?>">tu perfil</a> para poder sincronizar.
 </div>
 <?php else: ?>
 <div class="empty-state">

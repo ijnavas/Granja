@@ -142,7 +142,10 @@ class PerfilController extends BaseController
             $passwordEnc = RecevtService::encryptPassword($recevtPassword);
         }
 
-        $this->model->updateRecevet($uid, $recevtUsuario, $passwordEnc);
+        // Cookie de sesión (opcional, puede estar vacía)
+        $sessionCookie = trim($this->postString('recevet_session_cookie'));
+
+        $this->model->updateRecevet($uid, $recevtUsuario, $passwordEnc, $sessionCookie ?: null);
 
         Session::flash('success', 'Credenciales de Recevet guardadas correctamente.');
         $this->redirect('perfil');

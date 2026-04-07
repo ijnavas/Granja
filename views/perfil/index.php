@@ -78,24 +78,47 @@
     </div>
     <form method="POST" action="<?= base_url('perfil/recevet') ?>">
         <?= csrf_field() ?>
-        <div class="form-grid form-grid-2">
-            <div class="form-group">
-                <label>Usuario Recevet</label>
-                <input type="text" name="recevet_usuario"
-                       value="<?= e($user['recevet_usuario'] ?? '') ?>"
-                       placeholder="Tu usuario de recevet.es"
-                       autocomplete="username">
-            </div>
-            <div class="form-group">
-                <label>Contraseña Recevet</label>
-                <input type="password" name="recevet_password"
-                       placeholder="<?= !empty($user['recevet_password_enc']) ? '••••••••  (guardada)' : 'Tu contraseña de recevet.es' ?>"
-                       autocomplete="current-password">
-                <span class="form-hint">Se guarda cifrada. Déjala en blanco para no cambiarla.</span>
-            </div>
+        <div class="form-group">
+            <label>Usuario Recevet</label>
+            <input type="text" name="recevet_usuario"
+                   value="<?= e($user['recevet_usuario'] ?? '') ?>"
+                   placeholder="Tu usuario de recevet.es"
+                   autocomplete="username" style="max-width:320px">
         </div>
+
+        <!-- Cookie de sesión -->
+        <div class="form-group" style="margin-top:.75rem">
+            <label>Cookie de sesión <span style="font-weight:400;color:#dc2626">*requerida para sincronizar</span></label>
+            <textarea name="recevet_session_cookie" rows="3"
+                      placeholder="PHPSESSID=abc123xyz; otra_cookie=valor ..."
+                      style="font-family:monospace;font-size:.8rem;width:100%;resize:vertical"><?= e($user['recevet_session_cookie'] ?? '') ?></textarea>
+            <?php if (!empty($user['recevet_session_cookie'])): ?>
+                <span class="form-hint" style="color:#16a34a">✓ Cookie guardada</span>
+            <?php endif; ?>
+        </div>
+
+        <!-- Instrucciones paso a paso -->
+        <details style="margin:.5rem 0 1rem;border:1px solid #e5e7eb;border-radius:.5rem;padding:.75rem 1rem">
+            <summary style="cursor:pointer;font-weight:600;font-size:.85rem;color:#374151">
+                ¿Cómo obtener la cookie? — instrucciones paso a paso
+            </summary>
+            <ol style="margin:.75rem 0 0 1.2rem;padding:0;font-size:.83rem;line-height:1.8;color:#374151">
+                <li>Abre <a href="https://www.recevet.es" target="_blank" style="color:#2563eb">www.recevet.es</a> e inicia sesión con tu usuario y contraseña.</li>
+                <li>Una vez dentro, pulsa <kbd style="background:#f3f4f6;border:1px solid #d1d5db;padding:1px 5px;border-radius:3px;font-size:.8rem">F12</kbd> para abrir las herramientas de desarrollador.</li>
+                <li>Ve a la pestaña <strong>Red / Network</strong>.</li>
+                <li>Recarga la página (<kbd style="background:#f3f4f6;border:1px solid #d1d5db;padding:1px 5px;border-radius:3px;font-size:.8rem">F5</kbd>).</li>
+                <li>Haz clic en cualquier petición a <code>recevet.es</code> de la lista.</li>
+                <li>En el panel derecho, busca <strong>Cabeceras de solicitud / Request Headers</strong>.</li>
+                <li>Copia el valor completo del campo <strong>Cookie:</strong> y pégalo aquí.</li>
+            </ol>
+            <p style="margin:.6rem 0 0;font-size:.8rem;color:#6b7280;background:#fffbeb;border:1px solid #fde68a;border-radius:.375rem;padding:.5rem .75rem">
+                La cookie caduca cuando cierras sesión o después de varios días de inactividad.
+                Cuando la sincronización falle por sesión caducada, repite este proceso.
+            </p>
+        </details>
+
         <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Guardar credenciales Recevet</button>
+            <button type="submit" class="btn btn-primary">Guardar configuración Recevet</button>
             <a href="<?= base_url('recevet') ?>" class="btn btn-secondary">Ir a Recevet</a>
         </div>
     </form>

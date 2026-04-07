@@ -41,11 +41,18 @@ class Usuario
         return $row ?: null;
     }
 
-    public function updateRecevet(int $id, string $usuario, ?string $passwordEnc): void
+    public function updateRecevet(int $id, string $usuario, ?string $passwordEnc, ?string $sessionCookie = null): void
     {
-        $this->db->prepare(
-            'UPDATE usuarios SET recevet_usuario = :usuario, recevet_password_enc = :password_enc WHERE id = :id'
-        )->execute(['usuario' => $usuario, 'password_enc' => $passwordEnc, 'id' => $id]);
+        $sql    = 'UPDATE usuarios SET recevet_usuario = :usuario, recevet_password_enc = :password_enc';
+        $params = ['usuario' => $usuario, 'password_enc' => $passwordEnc, 'id' => $id];
+
+        if ($sessionCookie !== null) {
+            $sql .= ', recevet_session_cookie = :session_cookie';
+            $params['session_cookie'] = $sessionCookie ?: null;
+        }
+
+        $sql .= ' WHERE id = :id';
+        $this->db->prepare($sql)->execute($params);
     }
 
     public function updateEmailPedidos(int $id, string $email): void
