@@ -414,14 +414,32 @@ class RecevtService
         }
         $this->addLog('info', 'Opciones del select (' . $selectName . '): ' . implode(' | ', $opcionesLog));
 
-        // Buscar el value numérico del option cuyo texto contenga el código de explotación
-        $valorSeleccion = $explotacion; // fallback: el código en bruto
+        // Buscar el value del option cuyo texto o valor contenga el código de explotación.
+        // El value puede ser compuesto (ej: "ES410240000053_2237709") y el código puede tener
+        // un pequeño error tipográfico → también comparamos los últimos 7 dígitos como fallback.
+        $valorSeleccion = $explotacion; // fallback si no se encuentra
+        $sufijo         = substr(preg_replace('/\D/', '', $explotacion), -7); // últimos 7 dígitos numéricos
         foreach ($xpath->query('.//option', $select) as $opt) {
-            if (str_contains($opt->textContent, $explotacion)) {
-                $valorSeleccion = $opt->getAttribute('value');
-                $this->addLog('info', "Opción encontrada para '{$explotacion}': value='{$valorSeleccion}' text='" . trim($opt->textContent) . "'");
+            $optValue     = $opt->getAttribute('value');
+            $optText      = trim($opt->textContent);
+            $optValueCode = preg_replace('/_\d+$/', '', $optValue); // quitar sufijo _XXXXXXX
+
+            if (str_contains($optText, $explotacion) || $optValueCode === $explotacion) {
+                // Coincidencia exacta
+                $valorSeleccion = $optValue;
+                $this->addLog('info', "Opción encontrada (exacta) para '{$explotacion}': value='{$valorSeleccion}' text='{$optText}'");
                 break;
             }
+            // Coincidencia por sufijo numérico (tolera errores tipográficos en el código)
+            $optSufijo = substr(preg_replace('/\D/', '', $optValueCode), -7);
+            if ($sufijo && $optSufijo === $sufijo) {
+                $valorSeleccion = $optValue;
+                $this->addLog('warn', "Opción encontrada por sufijo para '{$explotacion}' → real='{$optValueCode}' value='{$valorSeleccion}' text='{$optText}'. ¡Corregir el código en la BD!");
+                break;
+            }
+        }
+        if ($valorSeleccion === $explotacion) {
+            $this->addLog('warn', "No se encontró opción para '{$explotacion}' — enviando código en bruto (puede fallar)");
         }
 
         $form = $select;
