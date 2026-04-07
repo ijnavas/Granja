@@ -104,18 +104,22 @@ class RecevtService
         }
 
         if (str_contains($respuesta, 'Cerrar sesi') ||
+            str_contains($respuesta, 'cerrarSesion') ||
             str_contains($respuesta, 'operacion=principal') ||
             str_contains($respuesta, 'Libro de tratamientos') ||
-            str_contains($respuesta, 'principal')) {
+            str_contains($respuesta, 'listadoLineasTratamientos')) {
             $this->addLog('success', 'Login correcto en Recevet.');
             $this->loggedIn = true;
             return true;
         }
 
-        if (str_contains($respuesta, 'incorrecto') || str_contains($respuesta, 'no válido')) {
-            $this->addLog('error', 'Credenciales incorrectas en Recevet.');
-        } else {
-            $this->addLog('error', 'Login fallido — respuesta inesperada de recevet.es');
+        // Log de diagnóstico: mostrar un fragmento de la respuesta para saber qué devuelve
+        $fragmento = substr(strip_tags($respuesta), 0, 300);
+        $fragmento = preg_replace('/\s+/', ' ', $fragmento);
+        $this->addLog('error', 'Login fallido. Respuesta recibida: ' . $fragmento);
+
+        if (str_contains($respuesta, 'incorrecto') || str_contains($respuesta, 'no v')) {
+            $this->addLog('error', 'Las credenciales parecen incorrectas.');
         }
         return false;
     }
@@ -428,17 +432,20 @@ class RecevtService
             CURLOPT_COOKIEFILE     => $this->cookieFile,
             CURLOPT_COOKIEJAR      => $this->cookieFile,
             CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
             CURLOPT_HTTPHEADER     => [
                 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                 'Accept-Language: es-ES,es;q=0.9',
                 'Accept-Encoding: identity',
+                'Referer: https://www.recevet.es/index.php',
             ],
         ]);
 
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            // recevet.es espera ISO-8859-1 en los POSTs
+            $postData = http_build_query($data);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
         }
 
         $response = curl_exec($ch);
@@ -455,7 +462,22 @@ class RecevtService
             return null;
         }
 
-        return $response;
+        // recevet.es sirve ISO-8859-1 — convertir a UTF-8 para parseo consistente
+        return $this->toUtf8($response);
+    }
+
+    /**
+     * Convierte la respuesta de recevet.es (ISO-8859-1) a UTF-8.
+     * Si ya es UTF-8 o no tiene meta charset ISO, la devuelve tal cual.
+     */
+    private function toUtf8(string $html): string
+    {
+        if (stripos($html, 'charset=ISO-8859-1') !== false ||
+            stripos($html, 'charset=iso-8859-1') !== false) {
+            $html = mb_convert_encoding($html, 'UTF-8', 'ISO-8859-1');
+            $html = str_ireplace('charset=ISO-8859-1', 'charset=UTF-8', $html);
+        }
+        return $html;
     }
 
     // ── DOM ───────────────────────────────────────────────────────
@@ -530,9 +552,11 @@ class RecevtService
     private function parseDom(string $html): ?\DOMDocument
     {
         if (!$html) return null;
-        $dom = new \DOMDocument('1.0', 'UTF-8');
+        // toUtf8() ya habrá convertido la respuesta; nos aseguramos igualmente
+        $html = $this->toUtf8($html);
+        $dom  = new \DOMDocument('1.0', 'UTF-8');
         libxml_use_internal_errors(true);
-        $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+        $dom->loadHTML($html, LIBXML_NOWARNING | LIBXML_NOERROR);
         libxml_clear_errors();
         return $dom;
     }
