@@ -889,15 +889,19 @@ class RecevtService
         $srcList = $extScripts[1] ?? [];
         $this->addLog('info', 'Scripts externos (' . count($srcList) . '): ' . implode(' | ', $srcList));
         foreach ($srcList as $src) {
+            if (strpos($src, 'libroTratamiento') === false) continue; // solo el relevante
             $url = (strpos($src, 'http') === 0) ? $src : self::BASE_URL . '/' . ltrim($src, '/');
             $jsContent = $this->request('GET', $url, []);
             if ($jsContent === null) continue;
-            if (strpos($jsContent, 'actualizarLineaTratamiento') !== false) {
-                $pos   = strpos($jsContent, 'actualizarLineaTratamiento');
-                $start = max(0, $pos - 50);
-                $this->addLog('info', "ENCONTRADO en [{$src}]: " . substr($jsContent, $start, 1500));
-            } else {
-                $this->addLog('info', "Sin función en [{$src}] (" . strlen($jsContent) . " bytes)");
+            // Buscar función actualizarLineas
+            foreach (['actualizarLineas', 'obtenerLineaTratamiento'] as $fn) {
+                if (preg_match('/function\s+' . $fn . '[\s\(]/', $jsContent, $mm, PREG_OFFSET_CAPTURE)) {
+                    $pos = $mm[0][1];
+                    $this->addLog('info', "DEF {$fn} en [{$src}]: " . substr($jsContent, $pos, 1500));
+                } elseif (($pos = strpos($jsContent, $fn)) !== false) {
+                    $start = max(0, $pos - 20);
+                    $this->addLog('info', "USE {$fn} en [{$src}]: " . substr($jsContent, $start, 800));
+                }
             }
         }
     }
