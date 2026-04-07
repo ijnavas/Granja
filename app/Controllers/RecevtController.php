@@ -163,6 +163,75 @@ class RecevtController extends BaseController
         $this->redirect('recevet');
     }
 
+    // ── Recibir cookie desde el bookmarklet ───────────────────────
+
+    /**
+     * El bookmarklet ejecutado en recevet.es envía la cookie de sesión
+     * a este endpoint junto con un token firmado (HMAC) para verificar
+     * que la petición viene del usuario correcto.
+     *
+     * No requiere sesión PHP activa — el usuario viene desde recevet.es.
+     * GET /recevet/capturar-cookie?uid=X&token=Y&cookie=Z
+     */
+    public function capturarCookie(): void
+    {
+        $uid    = (int)($_GET['uid']    ?? 0);
+        $token  = (string)($_GET['token']  ?? '');
+        $cookie = (string)($_GET['cookie'] ?? '');
+
+        if (!$uid || !$token || !$cookie) {
+            $this->capturarCookieError('Parámetros incompletos.');
+            return;
+        }
+
+        // Verificar HMAC (evita que terceros inyecten cookies ajenas)
+        if (!hash_equals(self::bookmarkletToken($uid), $token)) {
+            $this->capturarCookieError('Token de seguridad inválido.');
+            return;
+        }
+
+        $usuario = (new Usuario())->findById($uid);
+        if (!$usuario) {
+            $this->capturarCookieError('Usuario no encontrado.');
+            return;
+        }
+
+        (new Usuario())->updateRecevet(
+            $uid,
+            $usuario['recevet_usuario'] ?? '',
+            null,
+            $cookie
+        );
+
+        // Restaurar sesión PHP del usuario para que vea el flash
+        Session::set('usuario_id', $uid);
+        Session::flash('success', 'Sesión de Recevet conectada correctamente ✓');
+        $this->redirect('recevet');
+    }
+
+    private function capturarCookieError(string $msg): void
+    {
+        http_response_code(400);
+        echo '<html><body style="font-family:sans-serif;padding:2rem">';
+        echo '<h2 style="color:#dc2626">Error al capturar sesión</h2>';
+        echo '<p>' . htmlspecialchars($msg) . '</p>';
+        echo '<p><a href="javascript:history.back()">Volver</a></p>';
+        echo '</body></html>';
+        exit;
+    }
+
+    /**
+     * Genera el token HMAC para el bookmarklet del usuario.
+     * Se firma con la clave derivada de la config para que sea
+     * único por instalación y no adivinable.
+     */
+    public static function bookmarkletToken(int $uid): string
+    {
+        $cfg = require ROOT_PATH . '/config.php';
+        $secret = ($cfg['db']['host'] ?? '') . ($cfg['db']['user'] ?? '') . ($cfg['db']['pass'] ?? '');
+        return hash_hmac('sha256', 'recevet_bookmarklet_' . $uid, $secret);
+    }
+
     // ── Cerrar sesión Recevet ─────────────────────────────────────
 
     public function cerrarSesion(): void

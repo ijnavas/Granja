@@ -16,15 +16,28 @@
 <?php
 $req = $requisitos ?? [];
 $faltantes = [];
-if (!($req['curl']    ?? true)) $faltantes[] = 'cURL';
-if (!($req['openssl'] ?? true)) $faltantes[] = 'OpenSSL';
-if (!($req['dom']     ?? true)) $faltantes[] = 'DOM';
+if (!($req['curl'] ?? true)) $faltantes[] = 'cURL';
+if (!($req['dom']  ?? true)) $faltantes[] = 'DOM';
 ?>
 <?php if (!empty($faltantes)): ?>
 <div class="alert-flash alert-error" style="margin-bottom:1rem">
     Extensiones PHP no disponibles: <strong><?= e(implode(', ', $faltantes)) ?></strong>. Contacta con tu hosting.
 </div>
 <?php endif; ?>
+
+<?php
+// Generar el bookmarklet
+$uid   = $usuario['id'] ?? 0;
+$token = \App\Controllers\RecevtController::bookmarkletToken($uid);
+$callbackUrl = base_url('recevet/capturar-cookie') . '?uid=' . $uid . '&token=' . $token . '&cookie=';
+
+// Código JS del bookmarklet (minificado inline)
+$bookmarkletJs = "javascript:(function(){"
+    . "var c=document.cookie;"
+    . "if(!c){alert('No se encontraron cookies. Asegúrate de estar en recevet.es con sesión iniciada.');return;}"
+    . "window.location.href='" . addslashes($callbackUrl) . "'+encodeURIComponent(c);"
+    . "})();";
+?>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.5rem">
 
@@ -34,7 +47,7 @@ if (!($req['dom']     ?? true)) $faltantes[] = 'DOM';
             Sesión en Recevet
         </div>
 
-        <?php if ($sesionActiva && !$esperandoCodigo): ?>
+        <?php if ($sesionActiva): ?>
             <!-- Sesión activa -->
             <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.5rem">
                 <span style="width:10px;height:10px;border-radius:50%;background:#16a34a;flex-shrink:0"></span>
@@ -49,61 +62,59 @@ if (!($req['dom']     ?? true)) $faltantes[] = 'DOM';
                         onclick="return confirm('¿Cerrar sesión en Recevet?')">Cerrar sesión</button>
             </form>
 
-        <?php elseif ($esperandoCodigo): ?>
-            <!-- Esperando código 2FA -->
-            <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
-                <span style="width:10px;height:10px;border-radius:50%;background:#f59e0b;flex-shrink:0"></span>
-                <span style="font-weight:700;font-size:.88rem;color:#92400e">Introduce el código de verificación</span>
-            </div>
-            <div style="font-size:.82rem;color:#6b7280;margin-bottom:.75rem">
-                Recevet ha enviado un código de 6 dígitos a tu email. Introdúcelo para completar el acceso.
-            </div>
-            <form method="POST" action="<?= base_url('recevet/verificar-codigo') ?>">
-                <?= csrf_field() ?>
-                <div class="form-group" style="margin-bottom:.6rem">
-                    <input type="text" name="codigo_2fa" inputmode="numeric" pattern="\d{6}" maxlength="6"
-                           placeholder="000000" required autofocus
-                           style="font-family:monospace;font-size:1.4rem;letter-spacing:.4em;width:130px;text-align:center">
-                </div>
-                <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;font-size:.82rem">
-                    <input type="checkbox" name="seguro" value="1" id="chkSeguro" checked>
-                    <label for="chkSeguro" style="font-weight:400;cursor:pointer">
-                        Confiar en este dispositivo 10 días (no pedir código de nuevo)
-                    </label>
-                </div>
-                <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
-                    <button type="submit" class="btn btn-primary btn-sm">Verificar código</button>
-                </div>
-            </form>
-            <form method="POST" action="<?= base_url('recevet/cancelar-login') ?>" style="display:inline;margin-top:.5rem">
-                <?= csrf_field() ?>
-                <button type="submit" class="btn btn-secondary btn-sm">Cancelar — volver atrás</button>
-            </form>
-
         <?php else: ?>
-            <!-- Sin sesión -->
+            <!-- Sin sesión — mostrar bookmarklet -->
             <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
                 <span style="width:10px;height:10px;border-radius:50%;background:#dc2626;flex-shrink:0"></span>
                 <span style="font-weight:700;font-size:.88rem;color:#dc2626">Sin sesión activa</span>
             </div>
-            <div style="font-size:.82rem;color:#6b7280;margin-bottom:.75rem">
-                Introduce tus credenciales de recevet.es. Recibirás un código por email para verificar el acceso.
+
+            <div style="font-size:.82rem;color:#374151;line-height:1.6;margin-bottom:1rem">
+                Para conectar, sigue estos pasos <strong>una sola vez</strong>:
             </div>
-            <form method="POST" action="<?= base_url('recevet/iniciar-sesion') ?>">
-                <?= csrf_field() ?>
-                <div class="form-group" style="margin-bottom:.5rem">
-                    <input type="text" name="recevet_usuario"
-                           value="<?= e($usuario['recevet_usuario'] ?? '') ?>"
-                           placeholder="Usuario de recevet.es" required
-                           autocomplete="username" style="max-width:260px">
+
+            <!-- Paso 1: arrastrar bookmarklet -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.75rem 1rem;margin-bottom:.75rem">
+                <div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:.5rem">
+                    Paso 1 — Arrastra este botón a tu barra de favoritos:
                 </div>
-                <div class="form-group" style="margin-bottom:.75rem">
-                    <input type="password" name="recevet_password"
-                           placeholder="Contraseña de recevet.es" required
-                           autocomplete="current-password" style="max-width:260px">
+                <a href="<?= e($bookmarkletJs) ?>"
+                   class="btn btn-secondary btn-sm"
+                   style="cursor:grab;background:#fef3c7;border-color:#f59e0b;color:#92400e;font-weight:700"
+                   onclick="alert('No hagas clic aquí. Arrastra este botón a tu barra de favoritos.');return false;">
+                    📎 Conectar Recevet
+                </a>
+                <div style="font-size:.75rem;color:#6b7280;margin-top:.4rem">
+                    ↑ Arrastra este botón amarillo a la barra de favoritos de tu navegador
                 </div>
-                <button type="submit" class="btn btn-primary btn-sm">Iniciar sesión en Recevet</button>
-            </form>
+            </div>
+
+            <!-- Paso 2: ir a recevet -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.75rem 1rem;margin-bottom:.75rem">
+                <div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:.5rem">
+                    Paso 2 — Inicia sesión en Recevet:
+                </div>
+                <a href="https://www.recevet.es" target="_blank" class="btn btn-primary btn-sm">
+                    Abrir recevet.es →
+                </a>
+                <div style="font-size:.75rem;color:#6b7280;margin-top:.4rem">
+                    Inicia sesión normal con tu usuario y contraseña (e introduce el código que te manden por email)
+                </div>
+            </div>
+
+            <!-- Paso 3: clic en bookmarklet -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:.5rem;padding:.75rem 1rem">
+                <div style="font-size:.8rem;font-weight:700;color:#374151;margin-bottom:.5rem">
+                    Paso 3 — Una vez dentro de Recevet, haz clic en "📎 Conectar Recevet" de tus favoritos
+                </div>
+                <div style="font-size:.75rem;color:#6b7280">
+                    Te redirigirá automáticamente de vuelta aquí con la sesión activa ✓
+                </div>
+            </div>
+
+            <div style="font-size:.75rem;color:#9ca3af;margin-top:.75rem">
+                La sesión dura ~10 días. Cuando caduque, repite solo los pasos 2 y 3.
+            </div>
         <?php endif; ?>
     </div>
 
@@ -132,7 +143,7 @@ if (!($req['dom']     ?? true)) $faltantes[] = 'DOM';
 </div>
 
 <!-- Formulario de sincronización -->
-<?php if ($sesionActiva && !$esperandoCodigo && !empty($granjasRecevet)): ?>
+<?php if ($sesionActiva && !empty($granjasRecevet)): ?>
 <div class="form-card" style="max-width:600px">
     <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:1rem">
         Sincronizar Libro de Tratamientos
@@ -178,11 +189,11 @@ if (!($req['dom']     ?? true)) $faltantes[] = 'DOM';
         </div>
     </form>
 </div>
-<?php elseif (!$sesionActiva && !$esperandoCodigo): ?>
+<?php elseif (!$sesionActiva): ?>
 <div class="empty-state">
-    Inicia sesión en Recevet para poder sincronizar el libro de tratamientos.
+    Conecta tu sesión de Recevet para poder sincronizar.
 </div>
-<?php elseif (empty($granjasRecevet)): ?>
+<?php else: ?>
 <div class="empty-state">
     Añade el código de explotación Recevet en al menos una <a href="<?= base_url('granjas') ?>">granja</a> para poder sincronizar.
 </div>
