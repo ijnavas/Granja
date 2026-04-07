@@ -429,12 +429,22 @@ class RecevtService
             if ($bName) $fields[$bName] = $bVal;
         }
 
-        $action    = $form->getAttribute('action') ?: self::LIBRO_URL;
-        $method    = strtoupper($form->getAttribute('method') ?: 'POST');
-        $respuesta = $this->request($method, $this->absoluteUrl($action), $fields);
+        $action = $form->getAttribute('action') ?: self::LIBRO_URL;
+        $method = strtoupper($form->getAttribute('method') ?: 'POST');
+        // POST para actualizar la sesión (puede redirigir fuera del libro)
+        $this->request($method, $this->absoluteUrl($action), $fields);
+
+        // GET al libro para cargar la página con la explotación ya seleccionada en sesión
+        $respuesta = $this->request('GET', self::LIBRO_URL);
 
         if ($respuesta === null) {
-            $this->addLog('error', 'Error al seleccionar la explotación');
+            $this->addLog('error', 'Error al cargar el libro tras seleccionar la explotación');
+            return null;
+        }
+
+        // Verificar que la nueva página tiene el filtro/DataTables correcto
+        if (!str_contains($respuesta, 'dame_lineasTratamientos')) {
+            $this->addLog('error', 'La página tras selección no tiene el libro de tratamientos');
             return null;
         }
 
