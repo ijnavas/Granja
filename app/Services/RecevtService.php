@@ -407,6 +407,23 @@ class RecevtService
         $select     = $selects->item(0);
         $selectName = $select->getAttribute('name');
 
+        // Log de todas las opciones del select para depuración
+        $opcionesLog = [];
+        foreach ($xpath->query('.//option', $select) as $opt) {
+            $opcionesLog[] = 'value="' . $opt->getAttribute('value') . '" text="' . trim($opt->textContent) . '"';
+        }
+        $this->addLog('info', 'Opciones del select (' . $selectName . '): ' . implode(' | ', $opcionesLog));
+
+        // Buscar el value numérico del option cuyo texto contenga el código de explotación
+        $valorSeleccion = $explotacion; // fallback: el código en bruto
+        foreach ($xpath->query('.//option', $select) as $opt) {
+            if (str_contains($opt->textContent, $explotacion)) {
+                $valorSeleccion = $opt->getAttribute('value');
+                $this->addLog('info', "Opción encontrada para '{$explotacion}': value='{$valorSeleccion}' text='" . trim($opt->textContent) . "'");
+                break;
+            }
+        }
+
         $form = $select;
         while ($form && $form->nodeName !== 'form') {
             $form = $form->parentNode;
@@ -417,7 +434,7 @@ class RecevtService
         }
 
         $fields              = $this->extraerCamposForm($form);
-        $fields[$selectName] = $explotacion;
+        $fields[$selectName] = $valorSeleccion;
 
         $botones = $xpath->query(".//button[@type='submit'] | .//input[@type='submit']", $form);
         if ($botones->length > 0) {
