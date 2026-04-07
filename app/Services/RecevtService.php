@@ -884,15 +884,20 @@ class RecevtService
             }
         }
 
-        // Buscar en scripts externos
+        // Log todos los scripts externos y buscar función
         preg_match_all('/<script[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $extScripts);
-        foreach (($extScripts[1] ?? []) as $src) {
+        $srcList = $extScripts[1] ?? [];
+        $this->addLog('info', 'Scripts externos (' . count($srcList) . '): ' . implode(' | ', $srcList));
+        foreach ($srcList as $src) {
             $url = (strpos($src, 'http') === 0) ? $src : self::BASE_URL . '/' . ltrim($src, '/');
             $jsContent = $this->request('GET', $url, []);
-            if ($jsContent && strpos($jsContent, 'actualizarLineaTratamiento') !== false) {
+            if ($jsContent === null) continue;
+            if (strpos($jsContent, 'actualizarLineaTratamiento') !== false) {
                 $pos   = strpos($jsContent, 'actualizarLineaTratamiento');
                 $start = max(0, $pos - 50);
-                $this->addLog('info', "JS externo [{$src}] actualizarLineaTratamiento: " . substr($jsContent, $start, 1500));
+                $this->addLog('info', "ENCONTRADO en [{$src}]: " . substr($jsContent, $start, 1500));
+            } else {
+                $this->addLog('info', "Sin función en [{$src}] (" . strlen($jsContent) . " bytes)");
             }
         }
     }
