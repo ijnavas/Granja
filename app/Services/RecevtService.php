@@ -863,6 +863,7 @@ class RecevtService
         $diasValue        = 0;
 
         $existingFechaInicio = '';
+        $existingFechaFin    = '';
         if ($dom3) {
             $xpath3 = new \DOMXPath($dom3);
             foreach ($xpath3->query('//input') as $inp) {
@@ -872,13 +873,15 @@ class RecevtService
                     $fechaInicioField    = $name;
                     $existingFechaInicio = $inp->getAttribute('value');
                 } elseif (str_contains($nl, 'fechafintratamiento')) {
-                    $fechaFinField = $name;
+                    $fechaFinField    = $name;
+                    $existingFechaFin = $inp->getAttribute('value');
                 } elseif (str_contains($nl, 'diastratamiento') || str_contains($nl, 'dias_tratamiento')) {
                     $diasField  = $name;
                     $diasValue  = (int)$inp->getAttribute('value');
                 }
             }
         }
+        $this->addLog('info', "  Form actual: fechaInicio='{$existingFechaInicio}' fechaFin='{$existingFechaFin}'");
 
         // Si no encontramos input de días, buscarlo como texto en las celdas
         // (ej: "Días de tratamiento Receta:7" o "(Días de tratamiento Receta: 7)")
