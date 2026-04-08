@@ -29,4 +29,29 @@ abstract class BaseController
     {
         return trim((string)($this->post($key, '')));
     }
+
+    /**
+     * Extrae solo las claves permitidas del array indicado (por defecto $_POST).
+     *
+     * Sirve como allowlist explícita para evitar mass assignment: en lugar de
+     * pasar $_POST entero a un modelo, se pasa solo lo que esperas.
+     *
+     *   $data = $this->only(['nombre', 'email']);
+     *   $this->model->create($data);
+     *
+     * Las claves ausentes en la fuente NO aparecen en el resultado (no se
+     * rellenan con null). Si necesitas defaults, úsalos en el modelo o en
+     * un array_merge previo.
+     */
+    protected function only(array $keys, ?array $source = null): array
+    {
+        $source = $source ?? $_POST;
+        $out = [];
+        foreach ($keys as $k) {
+            if (array_key_exists($k, $source)) {
+                $out[$k] = $source[$k];
+            }
+        }
+        return $out;
+    }
 }

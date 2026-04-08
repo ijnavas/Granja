@@ -57,6 +57,30 @@ class Router
 
     private function call(array $handler, array $params = []): void
     {
+        // Validación CSRF centralizada para todas las peticiones POST.
+        // Cada form de la app ya incluye csrf_field(); si algún request
+        // llega sin token válido, lo rechazamos aquí antes de tocar el
+        // controlador.
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $token = (string)($_POST['csrf_token'] ?? '');
+            if (!Session::validateCsrf($token)) {
+                error_log('CSRF fallido en ' . ($_SERVER['REQUEST_URI'] ?? '?')
+                    . ' desde ' . ($_SERVER['REMOTE_ADDR'] ?? '?'));
+                Session::flash('error', 'Token de seguridad inválido. Recarga la página e inténtalo de nuevo.');
+
+                $cfg  = require ROOT_PATH . '/config.php';
+                $base = rtrim($cfg['app']['base_url'], '/');
+                $ref  = $_SERVER['HTTP_REFERER'] ?? null;
+                // Solo aceptamos referers del propio dominio
+                if ($ref && str_starts_with($ref, $base)) {
+                    header('Location: ' . $ref);
+                } else {
+                    header('Location: ' . $base . '/login');
+                }
+                exit;
+            }
+        }
+
         [$class, $method] = $handler;
         $controller = new $class();
         $controller->$method(...array_values($params));

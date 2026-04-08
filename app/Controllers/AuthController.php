@@ -30,12 +30,7 @@ class AuthController extends BaseController
     public function login(): void
     {
         guest_only();
-
-        // Validar CSRF
-        if (!Session::validateCsrf($this->postString('csrf_token'))) {
-            Session::flash('error', 'Token de seguridad inválido. Recarga la página.');
-            $this->redirect('login');
-        }
+        // Nota: la validación CSRF la hace el Router para todos los POST.
 
         $email    = $this->postString('email');
         $password = $this->postString('password');
@@ -62,6 +57,8 @@ class AuthController extends BaseController
 
         // Regenerar ID de sesión para prevenir session fixation
         session_regenerate_id(true);
+        // Rotar CSRF token: invalida cualquier token filtrado previo
+        Session::rotateCsrf();
 
         Session::set('usuario_id',     $user['id']);
         Session::set('usuario_nombre', $user['nombre']);
@@ -86,11 +83,7 @@ class AuthController extends BaseController
     public function register(): void
     {
         guest_only();
-
-        if (!Session::validateCsrf($this->postString('csrf_token'))) {
-            Session::flash('error', 'Token de seguridad inválido. Recarga la página.');
-            $this->redirect('register');
-        }
+        // CSRF validado en el Router.
 
         $nombre    = $this->postString('nombre');
         $email     = strtolower($this->postString('email'));
@@ -121,10 +114,7 @@ class AuthController extends BaseController
     // ── POST /logout ─────────────────────────────────────────────
     public function logout(): void
     {
-        if (!Session::validateCsrf((string)($_POST['csrf_token'] ?? ''))) {
-            Session::flash('error', 'Token inválido. Inténtalo de nuevo.');
-            $this->redirect('dashboard');
-        }
+        // CSRF validado en el Router.
         Session::destroy();
         $this->redirect('login');
     }

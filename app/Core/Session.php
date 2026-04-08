@@ -73,6 +73,18 @@ class Session
 
     public static function validateCsrf(string $token): bool
     {
-        return hash_equals(self::get('csrf_token', ''), $token);
+        $stored = self::get('csrf_token', '');
+        if ($stored === '' || $token === '') return false;
+        return hash_equals((string)$stored, $token);
+    }
+
+    /**
+     * Genera un nuevo token CSRF invalidando el anterior.
+     * Debe llamarse tras acciones sensibles (login, logout, cambio de
+     * contraseña) para impedir que tokens antiguos sigan siendo válidos.
+     */
+    public static function rotateCsrf(): void
+    {
+        self::set('csrf_token', bin2hex(random_bytes(32)));
     }
 }

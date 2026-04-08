@@ -113,6 +113,10 @@ class PerfilController extends BaseController
             $this->redirect('perfil');
         }
 
+        // Cambio de contraseña: regenerar sesión y rotar CSRF
+        session_regenerate_id(true);
+        Session::rotateCsrf();
+
         Session::flash('success', 'Contraseña cambiada correctamente.');
         $this->redirect('perfil');
     }
