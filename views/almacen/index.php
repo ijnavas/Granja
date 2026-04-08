@@ -145,7 +145,7 @@ $hayFiltros = !empty(array_filter($filtros));
             <td><?= $r['tipo_pienso'] ? e($r['tipo_pienso']) : '<span style="color:#d1d5db">—</span>' ?></td>
             <td style="text-align:right;font-weight:600"><?= number_format((float)$r['cantidad_kg'], 0) ?></td>
             <td style="font-size:.82rem;color:#6b7280"><?= $r['proveedor'] ? e($r['proveedor']) : '—' ?></td>
-            <td style="font-size:.82rem;color:#6b7280"><?= $r['albaran'] ? e($r['albaran']) : '—' ?></td>
+            <td style="font-size:.82rem;color:#6b7280"><?= !empty($r['albaran']) ? e($r['albaran']) : '—' ?></td>
             <td style="font-size:.82rem;color:#6b7280"><?= e($r['usuario_nombre']) ?></td>
             <td>
                 <div class="actions">

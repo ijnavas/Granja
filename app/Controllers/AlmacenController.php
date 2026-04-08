@@ -134,14 +134,20 @@ class AlmacenController extends BaseController
             $this->redirect("almacen/recargas/{$recargaId}/editar");
         }
 
+        // Albarán: la BD no tiene columna dedicada, se prefija en observaciones.
+        $albaran      = $this->postString('albaran');
+        $observaciones = $this->postString('observaciones') ?: null;
+        if ($albaran) {
+            $observaciones = "Albarán: {$albaran}" . ($observaciones ? " · {$observaciones}" : '');
+        }
+
         $this->model->updateRecarga((int)$recargaId, [
             'silo_id'      => $nuevoSiloId,
             'fecha'        => $this->postString('fecha') ?: date('Y-m-d'),
             'cantidad_kg'  => $cantidad,
             'tipo_pienso'  => $this->postString('tipo_pienso') ?: null,
             'proveedor'    => $this->postString('proveedor') ?: null,
-            'albaran'      => $this->postString('albaran') ?: null,
-            'observaciones'=> $this->postString('observaciones') ?: null,
+            'observaciones'=> $observaciones,
         ], (float)$recarga['cantidad_kg'], (int)$recarga['silo_id']);
 
         Session::flash('success', 'Recarga actualizada correctamente.');

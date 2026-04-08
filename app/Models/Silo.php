@@ -276,11 +276,15 @@ class Silo
 
     public function updateRecarga(int $recargaId, array $data, float $cantidadAnterior, int $siloAnterior): void
     {
+        // Defensa: la columna `albaran` no existe en silo_recargas; el albarán se
+        // almacena dentro de observaciones (convención compartida con EscaneoController).
+        unset($data['albaran']);
+
         $stmt = $this->db->prepare("
             UPDATE silo_recargas
             SET silo_id = :silo_id, fecha = :fecha, cantidad_kg = :cantidad_kg,
                 tipo_pienso = :tipo_pienso, proveedor = :proveedor,
-                albaran = :albaran, observaciones = :observaciones
+                observaciones = :observaciones
             WHERE id = :id
         ");
         $data['id'] = $recargaId;
@@ -306,8 +310,8 @@ class Silo
         $this->db->beginTransaction();
         try {
             $stmt = $this->db->prepare("
-                INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, albaran, observaciones, usuario_id)
-                VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :albaran, :observaciones, :usuario_id)
+                INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, observaciones, usuario_id)
+                VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :observaciones, :usuario_id)
             ");
             $stmt->execute([
                 'silo_id'      => $siloId,
@@ -315,7 +319,6 @@ class Silo
                 'cantidad_kg'  => $cantidadKg,
                 'tipo_pienso'  => $tipoPienso,
                 'proveedor'    => $proveedor,
-                'albaran'      => null,
                 'observaciones'=> $obs,
                 'usuario_id'   => $userId,
             ]);

@@ -62,27 +62,19 @@ if (!headers_sent()) {
 
 // Handler global: convierte cualquier excepción no capturada en un 500
 // genérico sin filtrar detalles.
-// >>> DEBUG TEMPORAL: forzando trace en pantalla para diagnosticar 500. REVERTIR. <<<
 set_exception_handler(function (\Throwable $e) use ($__debug): void {
     error_log('Uncaught ' . get_class($e) . ': ' . $e->getMessage()
         . ' in ' . $e->getFile() . ':' . $e->getLine()
         . "\n" . $e->getTraceAsString());
     http_response_code(500);
-    echo '<pre style="font-family:monospace;padding:2rem;white-space:pre-wrap">';
-    echo htmlspecialchars((string)$e, ENT_QUOTES, 'UTF-8');
-    echo '</pre>';
-    exit;
-});
-// Capturar fatales que el handler de excepciones no atrapa
-register_shutdown_function(function (): void {
-    $err = error_get_last();
-    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
-        if (!headers_sent()) http_response_code(500);
-        echo '<pre style="font-family:monospace;padding:2rem;background:#fee;color:#900;white-space:pre-wrap">';
-        echo 'FATAL: ' . htmlspecialchars($err['message'] ?? '', ENT_QUOTES, 'UTF-8') . "\n";
-        echo 'in ' . htmlspecialchars($err['file'] ?? '', ENT_QUOTES, 'UTF-8') . ':' . ($err['line'] ?? 0);
+    if ($__debug) {
+        echo '<pre style="font-family:monospace;padding:2rem">';
+        echo htmlspecialchars((string)$e, ENT_QUOTES, 'UTF-8');
         echo '</pre>';
+    } else {
+        echo '<h1 style="font-family:sans-serif;padding:2rem">500 — Error interno del servidor</h1>';
     }
+    exit;
 });
 
 // Iniciar sesión
