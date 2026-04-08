@@ -795,9 +795,8 @@ class RecevtService
     }
 
     /**
-     * Llama a dame_fila_lineasTratamientos para obtener el HTML completo de la fila
-     * (medicamento, dispensacion, fechas, acciones con el form del botón "Aceptar").
-     * Devuelve array de 7 celdas HTML, o null si falla.
+     * Llama a dame_fila_lineasTratamientos para obtener el HTML completo de la fila.
+     * Devuelve ['celdas'=>array, 'raw'=>array] o null si falla.
      */
     private function obtenerFilaCompleta(string $idReceta, string $idRecetaLinea, string $idRecetaLineaTratamiento = ''): ?array
     {
@@ -805,7 +804,7 @@ class RecevtService
             'idLineaTratamiento' => $idRecetaLineaTratamiento,
             'idReceta'           => $idReceta,
             'idRecetaLinea'      => $idRecetaLinea,
-        ], true);
+        ]);
 
         if ($resp === null) return null;
 
@@ -816,7 +815,7 @@ class RecevtService
         $celdas = isset($json['data']) ? $json['data'] : $json;
         if (!is_array($celdas) || count($celdas) < 6) return null;
 
-        return $celdas;
+        return ['celdas' => $celdas, 'raw' => $json];
     }
 
     private function completarLineaConIDs(array $linea, string $fechaInicio, ?string $fechaFin): bool
@@ -829,19 +828,32 @@ class RecevtService
         $idRecetaLinea            = $linea['idRecetaLinea']            ?? '';
         $idRecetaLineaTratamiento = $linea['idRecetaLineaTratamiento'] ?? '';
 
-        $celdas = $this->obtenerFilaCompleta($idReceta, $idRecetaLinea, $idRecetaLineaTratamiento);
-        if ($celdas === null) {
+        $filaResult = $this->obtenerFilaCompleta($idReceta, $idRecetaLinea, $idRecetaLineaTratamiento);
+        if ($filaResult === null) {
             $this->addLog('error', "  dame_fila_lineasTratamientos falló (idRecetaLinea={$idRecetaLinea})");
             return false;
         }
+        $celdas  = $filaResult['celdas'];
+        $rawJson = $filaResult['raw'];
 
-        // ── DEBUG: volcar todas las celdas del primer registro ─────────────
+        // ── DEBUG: volcar celdas completas y claves extra del JSON ─────────
         static $debugDumped = false;
         if (!$debugDumped) {
             $debugDumped = true;
+            // Claves extra del JSON (fuera del array de celdas)
+            $extraKeys = array_diff_key($rawJson, array_flip(array_keys($celdas)));
+            if ($extraKeys) {
+                $this->addLog('info', '  JSON extra keys: ' . json_encode($extraKeys));
+            }
             $this->addLog('info', '  === DEBUG CELDAS (' . count($celdas) . ' celdas) ===');
             foreach ($celdas as $idx => $celda) {
-                $this->addLog('info', "  celda[{$idx}]: " . substr((string)$celda, 0, 800));
+                // Sin límite de longitud para ver el HTML completo
+                $full = (string)$celda;
+                $chunk = 0;
+                while ($chunk * 1000 < strlen($full)) {
+                    $this->addLog('info', "  celda[{$idx}]" . ($chunk ? "(cont)" : "") . ': ' . substr($full, $chunk * 1000, 1000));
+                    $chunk++;
+                }
             }
         }
 
@@ -939,13 +951,16 @@ class RecevtService
         }
 
         // ── POST a actualizar_lineasTratamientos ──────────────────────────
-        // Estructura igual que jQuery $.param({ lineasTratamiento: [obtenerLineaTratamiento()] })
-        $campos  = ['fechaInicioTratamiento'];
-        $valores = ['fechaInicioTratamiento' => $fechaInicio];
-        if ($fechaFin) {
-            $campos[]                        = 'fechaFinTratamiento';
-            $valores['fechaFinTratamiento']  = $fechaFin;
-        }
+        // Replicamos exactamente lo que hace el browser con obtenerLineaTratamiento(a, true=n):
+        //   campos siempre contiene: fechaInicioTratamiento, fechaFinTratamiento, dispensaciones
+        //   valores.fechaFinTratamiento = '' cuando es futura (browser también la envía vacía)
+        //   valores.dispensaciones = [] (empty cuando no hay datos de dispensación en DOM)
+        $campos  = ['fechaInicioTratamiento', 'fechaFinTratamiento', 'dispensaciones'];
+        $valores = [
+            'fechaInicioTratamiento' => $fechaInicio,
+            'fechaFinTratamiento'    => $fechaFin ?? '',
+            'dispensaciones'         => [],
+        ];
 
         $postData = [
             'lineasTratamiento' => [
@@ -957,6 +972,7 @@ class RecevtService
                 ],
             ],
         ];
+        $this->addLog('info', '  POST body: ' . http_build_query($postData));
 
         $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizar_lineasTratamientos', $postData);
         if ($respuesta === null) {
@@ -1016,23 +1032,29 @@ class RecevtService
             }
         }
 
-        // Log todos los scripts externos y buscar función
+        // Log todos los scripts externos y buscar funciones clave
         preg_match_all('/<script[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $extScripts);
         $srcList = $extScripts[1] ?? [];
         $this->addLog('info', 'Scripts externos (' . count($srcList) . '): ' . implode(' | ', $srcList));
+        $targetScripts = ['libroTratamiento', 'animalesTratados', 'inicializa_ajax'];
         foreach ($srcList as $src) {
-            if (strpos($src, 'libroTratamiento') === false) continue; // solo el relevante
+            $match = false;
+            foreach ($targetScripts as $t) { if (strpos($src, $t) !== false) { $match = true; break; } }
+            if (!$match) continue;
             $url = (strpos($src, 'http') === 0) ? $src : self::BASE_URL . '/' . ltrim($src, '/');
             $jsContent = $this->request('GET', $url, []);
             if ($jsContent === null) continue;
-            // Buscar función actualizarLineas
-            foreach (['actualizarLineas', 'obtenerLineaTratamiento'] as $fn) {
+            // Buscar funciones relevantes
+            $searchFns = strpos($src, 'libroTratamiento') !== false
+                ? ['actualizarLineas', 'obtenerLineaTratamiento', 'obtenerValoresDispensacion']
+                : ['obtenerValoresDispensacion', 'obtenerRespuesta'];
+            foreach ($searchFns as $fn) {
                 if (preg_match('/function\s+' . $fn . '[\s\(]/', $jsContent, $mm, PREG_OFFSET_CAPTURE)) {
                     $pos = $mm[0][1];
                     $this->addLog('info', "DEF {$fn} en [{$src}]: " . substr($jsContent, $pos, 1500));
                 } elseif (($pos = strpos($jsContent, $fn)) !== false) {
                     $start = max(0, $pos - 20);
-                    $this->addLog('info', "USE {$fn} en [{$src}]: " . substr($jsContent, $start, 800));
+                    $this->addLog('info', "USE {$fn} en [{$src}]: " . substr($jsContent, $start, 600));
                 }
             }
         }
