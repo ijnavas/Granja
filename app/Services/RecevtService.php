@@ -555,10 +555,10 @@ class RecevtService
         }
 
         // ── Fallback: todos los registros con ID pero fechas posiblemente vacías/incorrectas ──
-        // length=-1 / 99999 = sin límite (DataTables convention). El skip temprano
-        // "Ya completado" evita POSTs innecesarios para los ya procesados.
-        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando TODOS los registros con =1');
-        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1', 'length' => '-1', 'iDisplayLength' => '-1']);
+        // Usamos un número grande (10000) porque el servidor rechaza -1. El skip
+        // temprano "Ya completado" evita POSTs innecesarios para los ya procesados.
+        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando todos los registros con =1 (length=10000)');
+        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1', 'length' => '10000', 'iDisplayLength' => '10000']);
         $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
         if ($respuesta === null) {
             $this->addLog('error', 'No se pudo obtener las líneas de tratamiento (intento 2).');
