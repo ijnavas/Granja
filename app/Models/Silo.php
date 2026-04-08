@@ -303,45 +303,55 @@ class Silo
 
     public function addRecarga(int $siloId, float $cantidadKg, string $fecha, ?string $proveedor, ?string $obs, int $userId, ?string $tipoPienso = null): int
     {
-        $stmt = $this->db->prepare("
-            INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, albaran, observaciones, usuario_id)
-            VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :albaran, :observaciones, :usuario_id)
-        ");
-        $stmt->execute([
-            'silo_id'      => $siloId,
-            'fecha'        => $fecha,
-            'cantidad_kg'  => $cantidadKg,
-            'tipo_pienso'  => $tipoPienso,
-            'proveedor'    => $proveedor,
-            'albaran'      => null,
-            'observaciones'=> $obs,
-            'usuario_id'   => $userId,
-        ]);
-        $id = (int) $this->db->lastInsertId();
-
-        // Consolidar el stock real hasta la fecha de la recarga, sumar la cantidad
-        // y mover stock_base_fecha a esa fecha. Así el descuento por consumo
-        // no duplica los días previos.
-        $cur = $this->db->prepare("SELECT stock_actual_kg, stock_base_fecha FROM silos WHERE id = :id");
-        $cur->execute(['id' => $siloId]);
-        $silo = $cur->fetch();
-        if ($silo) {
-            $base       = (float)$silo['stock_actual_kg'];
-            $baseFecha  = $silo['stock_base_fecha'] ?? $fecha;
-            $consumo    = ($baseFecha && $baseFecha < $fecha)
-                ? $this->consumoAcumulado($siloId, $baseFecha, $fecha)
-                : 0.0;
-            $nuevoBase  = max(0.0, $base - $consumo) + $cantidadKg;
-
-            $upd = $this->db->prepare("
-                UPDATE silos
-                SET stock_actual_kg = :stock, stock_base_fecha = :fecha
-                WHERE id = :id
+        $this->db->beginTransaction();
+        try {
+            $stmt = $this->db->prepare("
+                INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, albaran, observaciones, usuario_id)
+                VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :albaran, :observaciones, :usuario_id)
             ");
-            $upd->execute(['stock' => $nuevoBase, 'fecha' => $fecha, 'id' => $siloId]);
-        }
+            $stmt->execute([
+                'silo_id'      => $siloId,
+                'fecha'        => $fecha,
+                'cantidad_kg'  => $cantidadKg,
+                'tipo_pienso'  => $tipoPienso,
+                'proveedor'    => $proveedor,
+                'albaran'      => null,
+                'observaciones'=> $obs,
+                'usuario_id'   => $userId,
+            ]);
+            $id = (int) $this->db->lastInsertId();
 
-        return $id;
+            // Consolidar el stock real hasta la fecha de la recarga, sumar la
+            // cantidad y mover stock_base_fecha a esa fecha. Así el descuento
+            // por consumo no duplica los días previos.
+            $cur = $this->db->prepare("SELECT stock_actual_kg, stock_base_fecha FROM silos WHERE id = :id");
+            $cur->execute(['id' => $siloId]);
+            $silo = $cur->fetch();
+            if ($silo) {
+                $base       = (float)$silo['stock_actual_kg'];
+                $baseFecha  = !empty($silo['stock_base_fecha']) ? (string)$silo['stock_base_fecha'] : $fecha;
+                $consumo    = ($baseFecha < $fecha)
+                    ? $this->consumoAcumulado($siloId, $baseFecha, $fecha)
+                    : 0.0;
+                $nuevoBase  = max(0.0, $base - $consumo) + $cantidadKg;
+
+                $upd = $this->db->prepare("
+                    UPDATE silos
+                    SET stock_actual_kg = :stock, stock_base_fecha = :fecha
+                    WHERE id = :id
+                ");
+                $upd->execute(['stock' => $nuevoBase, 'fecha' => $fecha, 'id' => $siloId]);
+            }
+
+            $this->db->commit();
+            return $id;
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log('Silo::addRecarga FAIL silo=' . $siloId . ' fecha=' . $fecha . ' kg=' . $cantidadKg
+                    . ' :: ' . $e->getMessage()
+                    . ' @ ' . $e->getFile() . ':' . $e->getLine());
+            throw $e;
+        }
     }
 
     public function deleteRecarga(int $recargaId, int $siloId): void
