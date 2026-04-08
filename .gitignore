@@ -2,6 +2,7 @@ config.local.php
 .env
 .env.local
 uploads/
+logs/
 .claude/
 .DS_Store
 **/.DS_Store

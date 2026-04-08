@@ -166,8 +166,12 @@ class Usuario
     // ── Password reset tokens ────────────────────────────────────
 
     /**
-     * Crea un token de restablecimiento (válido 1 hora) y devuelve el token.
-     * Borra tokens previos del mismo email antes de crear uno nuevo.
+     * Crea un token de restablecimiento (válido 1 hora).
+     *
+     * En BD se guarda HASH(sha256) del token, nunca el plain.
+     * Si la BD se filtra, los tokens activos no se pueden usar.
+     *
+     * Devuelve el token plain (64 chars hex) que se envía por email.
      */
     public function createPasswordReset(string $email): string
     {
@@ -175,40 +179,44 @@ class Usuario
         $del = $this->db->prepare('DELETE FROM password_resets WHERE email = :email');
         $del->execute(['email' => $email]);
 
-        $token     = bin2hex(random_bytes(32)); // 64 chars hex
+        $plain     = bin2hex(random_bytes(32));     // 64 chars hex
+        $hashed    = hash('sha256', $plain);        // 64 chars hex
         $expiresAt = date('Y-m-d H:i:s', time() + 3600);
 
         $stmt = $this->db->prepare(
             'INSERT INTO password_resets (email, token, expires_at)
              VALUES (:email, :token, :expires_at)'
         );
-        $stmt->execute(['email' => $email, 'token' => $token, 'expires_at' => $expiresAt]);
+        $stmt->execute(['email' => $email, 'token' => $hashed, 'expires_at' => $expiresAt]);
 
-        return $token;
+        return $plain;
     }
 
     /**
-     * Busca un reset válido (no expirado) por token.
-     * Devuelve ['email' => ..., 'token' => ...] o null si no es válido.
+     * Busca un reset válido (no expirado) por su token plain.
+     * Internamente lo hashea y busca el hash en BD.
+     * Devuelve ['email' => ...] o null.
      */
     public function findValidReset(string $token): ?array
     {
+        $hashed = hash('sha256', $token);
         $stmt = $this->db->prepare(
-            'SELECT email, token FROM password_resets
+            'SELECT email FROM password_resets
              WHERE token = :token AND expires_at > NOW()
              LIMIT 1'
         );
-        $stmt->execute(['token' => $token]);
+        $stmt->execute(['token' => $hashed]);
         $row = $stmt->fetch();
         return $row ?: null;
     }
 
     /**
-     * Elimina el token de reset (después de usarlo)
+     * Elimina el token de reset (después de usarlo, garantiza un solo uso)
      */
     public function deletePasswordReset(string $token): void
     {
+        $hashed = hash('sha256', $token);
         $stmt = $this->db->prepare('DELETE FROM password_resets WHERE token = :token');
-        $stmt->execute(['token' => $token]);
+        $stmt->execute(['token' => $hashed]);
     }
 }

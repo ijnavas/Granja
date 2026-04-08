@@ -64,8 +64,7 @@ class Router
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $token = (string)($_POST['csrf_token'] ?? '');
             if (!Session::validateCsrf($token)) {
-                error_log('CSRF fallido en ' . ($_SERVER['REQUEST_URI'] ?? '?')
-                    . ' desde ' . ($_SERVER['REMOTE_ADDR'] ?? '?'));
+                SecurityLog::log('csrf_failed');
                 Session::flash('error', 'Token de seguridad inválido. Recarga la página e inténtalo de nuevo.');
 
                 $cfg  = require ROOT_PATH . '/config.php';

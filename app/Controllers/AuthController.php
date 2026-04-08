@@ -6,6 +6,8 @@ namespace App\Controllers;
 use App\Models\Usuario;
 use App\Core\Session;
 use App\Core\Mailer;
+use App\Core\RateLimiter;
+use App\Core\SecurityLog;
 
 class AuthController extends BaseController
 {
@@ -30,10 +32,22 @@ class AuthController extends BaseController
     public function login(): void
     {
         guest_only();
-        // Nota: la validación CSRF la hace el Router para todos los POST.
+        // CSRF validado en el Router.
 
-        $email    = $this->postString('email');
+        $email    = strtolower($this->postString('email'));
         $password = $this->postString('password');
+        $ip       = client_ip();
+
+        // ─── Rate limit ──────────────────────────────────────────
+        // 5 intentos por (IP+email) cada 15 min (anti-bruteforce de cuenta)
+        // 20 intentos por IP cada 15 min (anti-spray)
+        $perAccount = "{$ip}|{$email}";
+        if (!RateLimiter::attempt('login_account', $perAccount, 5, 900)
+            || !RateLimiter::attempt('login_ip', $ip, 20, 900)) {
+            SecurityLog::log('login_rate_limited', ['email' => $email]);
+            Session::flash('error', 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.');
+            $this->redirect('login');
+        }
 
         // Validaciones básicas
         if (empty($email) || empty($password)) {
@@ -50,20 +64,25 @@ class AuthController extends BaseController
         $user = $this->usuario->authenticate($email, $password);
 
         if (!$user) {
+            SecurityLog::log('login_failed', ['email' => $email]);
             // Mensaje genérico para no revelar si el email existe
             Session::flash('error', 'Email o contraseña incorrectos.');
             $this->redirect('login');
         }
 
-        // Regenerar ID de sesión para prevenir session fixation
+        // Éxito: limpiar contadores y rotar sesión
+        RateLimiter::clear('login_account', $perAccount);
+        RateLimiter::clear('login_ip', $ip);
+
         session_regenerate_id(true);
-        // Rotar CSRF token: invalida cualquier token filtrado previo
         Session::rotateCsrf();
 
         Session::set('usuario_id',     $user['id']);
         Session::set('usuario_nombre', $user['nombre']);
         Session::set('usuario_email',  $user['email']);
         Session::set('usuario_rol',    $user['rol'] ?? 'usuario');
+
+        SecurityLog::log('login_success', ['user_id' => (int)$user['id']]);
 
         $this->redirect('dashboard');
     }
@@ -85,6 +104,14 @@ class AuthController extends BaseController
         guest_only();
         // CSRF validado en el Router.
 
+        $ip = client_ip();
+        // Rate limit: 5 registros por IP cada hora
+        if (!RateLimiter::attempt('register', $ip, 5, 3600)) {
+            SecurityLog::log('register_rate_limited');
+            Session::flash('error', 'Demasiados intentos. Inténtalo más tarde.');
+            $this->redirect('register');
+        }
+
         $nombre    = $this->postString('nombre');
         $email     = strtolower($this->postString('email'));
         $password  = $this->postString('password');
@@ -105,7 +132,8 @@ class AuthController extends BaseController
             $this->redirect('register');
         }
 
-        $this->usuario->create($nombre, $email, $password);
+        $newId = $this->usuario->create($nombre, $email, $password);
+        SecurityLog::log('register_success', ['user_id' => $newId, 'email' => $email]);
 
         Session::flash('success', '¡Cuenta creada! Ya puedes iniciar sesión.');
         $this->redirect('login');
@@ -115,7 +143,9 @@ class AuthController extends BaseController
     public function logout(): void
     {
         // CSRF validado en el Router.
+        $uid = Session::get('usuario_id');
         Session::destroy();
+        SecurityLog::log('logout', ['user_id' => $uid]);
         $this->redirect('login');
     }
 
@@ -133,9 +163,13 @@ class AuthController extends BaseController
     public function forgotPassword(): void
     {
         guest_only();
+        // CSRF validado en el Router.
 
-        if (!Session::validateCsrf($this->postString('csrf_token'))) {
-            Session::flash('error', 'Token de seguridad inválido. Recarga la página.');
+        $ip = client_ip();
+        // Rate limit: 5 solicitudes por IP cada hora.
+        if (!RateLimiter::attempt('forgot', $ip, 5, 3600)) {
+            SecurityLog::log('forgot_rate_limited');
+            Session::flash('error', 'Demasiadas solicitudes. Inténtalo más tarde.');
             $this->redirect('forgot-password');
         }
 
@@ -146,11 +180,17 @@ class AuthController extends BaseController
             $this->redirect('forgot-password');
         }
 
-        // Respuesta genérica para no revelar si el email existe
+        // Respuesta uniforme: ni el contenido ni el tiempo de respuesta
+        // deben permitir distinguir si el email existe o no.
         if ($this->usuario->emailExists($email)) {
-            $token   = $this->usuario->createPasswordReset($email);
+            $token    = $this->usuario->createPasswordReset($email);
             $resetUrl = base_url('reset-password/' . $token);
             $this->sendResetEmail($email, $resetUrl);
+            SecurityLog::log('password_reset_requested', ['email' => $email]);
+        } else {
+            // Igualar timing de un envío SMTP normal: 300–800 ms
+            usleep(random_int(300_000, 800_000));
+            SecurityLog::log('password_reset_requested_unknown', ['email' => $email]);
         }
 
         Session::flash('success', 'Si existe una cuenta con ese email, recibirás un enlace para restablecer tu contraseña.');
@@ -178,14 +218,19 @@ class AuthController extends BaseController
     public function resetPassword(string $token): void
     {
         guest_only();
+        // CSRF validado en el Router.
 
-        if (!Session::validateCsrf($this->postString('csrf_token'))) {
-            Session::flash('error', 'Token de seguridad inválido. Recarga la página.');
+        $ip = client_ip();
+        // Rate limit: 10 intentos por IP cada hora
+        if (!RateLimiter::attempt('reset', $ip, 10, 3600)) {
+            SecurityLog::log('reset_rate_limited');
+            Session::flash('error', 'Demasiados intentos. Inténtalo más tarde.');
             $this->redirect('reset-password/' . $token);
         }
 
         $reset = $this->usuario->findValidReset($token);
         if (!$reset) {
+            SecurityLog::log('reset_invalid_token');
             Session::flash('error', 'El enlace de restablecimiento no es válido o ha expirado.');
             $this->redirect('forgot-password');
         }
@@ -207,6 +252,7 @@ class AuthController extends BaseController
 
         $this->usuario->resetPasswordById((int) $user['id'], $password);
         $this->usuario->deletePasswordReset($token);
+        SecurityLog::log('password_reset_completed', ['user_id' => (int)$user['id']]);
 
         Session::flash('success', '¡Contraseña actualizada! Ya puedes iniciar sesión con tu nueva contraseña.');
         $this->redirect('login');

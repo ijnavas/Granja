@@ -19,3 +19,4 @@ RewriteRule ^ index.php [L]
 RedirectMatch 403 ^/app/.*$
 RedirectMatch 403 ^/database/.*$
 RedirectMatch 403 ^/sql/.*$
+RedirectMatch 403 ^/logs/.*$

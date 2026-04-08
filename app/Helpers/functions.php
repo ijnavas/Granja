@@ -12,6 +12,27 @@ function e(string $value): string
 }
 
 /**
+ * Devuelve la IP del cliente. Por defecto usa REMOTE_ADDR.
+ * Si se configura APP_TRUST_PROXY=true en el .env, respeta el primer
+ * IP válido de X-Forwarded-For (úsalo solo si hay un proxy/CDN delante).
+ */
+function client_ip(): string
+{
+    if (\App\Core\Env::getBool('APP_TRUST_PROXY', false)) {
+        $xff = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? '';
+        if ($xff) {
+            foreach (explode(',', $xff) as $candidate) {
+                $candidate = trim($candidate);
+                if (filter_var($candidate, FILTER_VALIDATE_IP)) {
+                    return $candidate;
+                }
+            }
+        }
+    }
+    return $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+}
+
+/**
  * Redirige a una URL relativa a base_url
  */
 function redirect(string $path): never

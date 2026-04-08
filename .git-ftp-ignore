@@ -8,3 +8,4 @@ config.local.php
 .gitignore
 .gitattributes
 .git-ftp-ignore
+logs/
