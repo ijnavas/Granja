@@ -34,6 +34,32 @@ ini_set('log_errors', '1');
 ini_set('display_errors', $__debug ? '1' : '0');
 ini_set('display_startup_errors', $__debug ? '1' : '0');
 
+// ── Headers de seguridad HTTP ────────────────────────────────
+// Se envían en TODA respuesta. CSP permite 'unsafe-inline' porque la
+// app aún tiene mucho JS/CSS inline; refactor a nonces queda pendiente.
+if (!headers_sent()) {
+    header('X-Frame-Options: DENY');
+    header('X-Content-Type-Options: nosniff');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: geolocation=(self), microphone=(), camera=(), payment=(), usb=()');
+    if (($_SERVER['HTTPS'] ?? '') === 'on' || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
+    header(
+        "Content-Security-Policy: "
+        . "default-src 'self'; "
+        . "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+        . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+        . "font-src 'self' https://fonts.gstatic.com data:; "
+        . "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.arcgisonline.com https://server.arcgisonline.com; "
+        . "connect-src 'self' https://nominatim.openstreetmap.org; "
+        . "frame-ancestors 'none'; "
+        . "base-uri 'self'; "
+        . "form-action 'self'; "
+        . "object-src 'none'"
+    );
+}
+
 // Handler global: convierte cualquier excepción no capturada en un 500
 // genérico sin filtrar detalles.
 set_exception_handler(function (\Throwable $e) use ($__debug): void {

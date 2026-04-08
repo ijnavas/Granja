@@ -122,7 +122,8 @@ function es_admin(): bool    { return auth_rol() === 'admin'; }
 function es_director(): bool { return in_array(auth_rol(), ['admin', 'director']); }
 
 /**
- * Aborta con 403 si el usuario no tiene el rol mínimo requerido
+ * Aborta con 403 si el usuario no tiene el rol mínimo requerido.
+ * Loguea el intento y muestra una vista 403 con el layout normal.
  */
 function require_rol(string $rolMinimo): void
 {
@@ -131,8 +132,18 @@ function require_rol(string $rolMinimo): void
     $requerido = $jerarquia[$rolMinimo] ?? 1;
 
     if ($actual < $requerido) {
+        \App\Core\SecurityLog::log('forbidden', [
+            'user_id'      => Session::get('usuario_id'),
+            'rol_actual'   => auth_rol(),
+            'rol_requerido'=> $rolMinimo,
+        ]);
         http_response_code(403);
-        die('<h1 style="font-family:sans-serif;padding:2rem">403 — Sin permiso para realizar esta acción.</h1>');
+        // Si hay sesión, mostramos la vista con layout principal;
+        // si no, vista standalone (no debería ocurrir porque
+        // require_rol siempre va tras auth_required).
+        $layout = Session::has('usuario_id') ? 'main' : 'none';
+        view('errors/403', ['pageTitle' => '403 — Sin permiso'], $layout);
+        exit;
     }
 }
 

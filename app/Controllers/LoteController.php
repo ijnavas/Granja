@@ -75,6 +75,8 @@ class LoteController extends BaseController
             $this->redirect('lotes/crear');
         }
 
+        $uid = Session::get('usuario_id');
+
         $fechaNac = $this->postString('fecha_nacimiento');
         if (!$fechaNac) {
             Session::flash('error', 'La fecha de nacimiento es obligatoria.');
@@ -100,9 +102,13 @@ class LoteController extends BaseController
         }
         $granjaId = $this->post('granja_id') ?: null;
 
+        // ── IDOR guard: granja y nave deben pertenecer al usuario ───
+        $naveId   = $this->guardOwnedNave($naveId ? (int)$naveId : null, $uid);
+        $granjaId = $this->guardOwnedGranja($granjaId ? (int)$granjaId : null, $uid);
+
         $this->model->create([
-            'nave_id'          => $naveId ? (int)$naveId : null,
-            'granja_id'        => $granjaId ? (int)$granjaId : null,
+            'nave_id'          => $naveId,
+            'granja_id'        => $granjaId,
             'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
             'raza_id'          => $razaId,
             'codigo'           => $codigo,
@@ -122,9 +128,10 @@ class LoteController extends BaseController
             $cuadraModel = new \App\Models\Cuadra();
             foreach ($cuadrasIds as $i => $cuadraId) {
                 $num = (int)($cuadrasNums[$i] ?? 0);
-                if ($num > 0) {
-                    $cuadraModel->asignarLote((int)$cuadraId, (int)$loteId, $num, date('Y-m-d'));
-                }
+                if ($num <= 0) continue;
+                // IDOR guard: la cuadra debe ser del usuario
+                if (!$cuadraModel->find((int)$cuadraId, $uid)) continue;
+                $cuadraModel->asignarLote((int)$cuadraId, (int)$loteId, $num, date('Y-m-d'));
             }
         }
 
@@ -203,13 +210,24 @@ class LoteController extends BaseController
             $this->redirect("lotes/{$id}/editar");
         }
 
+        $uid = Session::get('usuario_id');
+
+        // El propio lote debe pertenecer al usuario
+        if (!$this->model->find((int)$id, $uid)) {
+            $this->redirect('lotes');
+        }
+
         $naveId   = $this->post('nave_id') ?: null;
         $granjaId = $this->post('granja_id') ?: null;
         $codigoManual = trim($this->postString('codigo_manual'));
 
-        $this->model->update((int)$id, Session::get('usuario_id'), [
-            'nave_id'          => $naveId ? (int)$naveId : null,
-            'granja_id'        => $granjaId ? (int)$granjaId : null,
+        // ── IDOR guard: granja y nave deben pertenecer al usuario ───
+        $naveId   = $this->guardOwnedNave($naveId ? (int)$naveId : null, $uid);
+        $granjaId = $this->guardOwnedGranja($granjaId ? (int)$granjaId : null, $uid);
+
+        $this->model->update((int)$id, $uid, [
+            'nave_id'          => $naveId,
+            'granja_id'        => $granjaId,
             'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
             'raza_id'          => $this->post('raza_id') ? (int)$this->post('raza_id') : null,
             'codigo'           => !empty($codigoManual) ? $codigoManual : null,
@@ -228,13 +246,13 @@ class LoteController extends BaseController
             // Borrar asignaciones activas del lote
             $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE lote_id = :lid")
                ->execute(['lid' => (int)$id]);
-            // Crear las nuevas
+            // Crear las nuevas, validando ownership de cada cuadra
             $cuadraModel = new \App\Models\Cuadra();
             foreach ($cuadrasIds as $i => $cuadraId) {
                 $num = (int)($cuadrasNums[$i] ?? 0);
-                if ($num > 0) {
-                    $cuadraModel->asignarLote((int)$cuadraId, (int)$id, $num, date('Y-m-d'));
-                }
+                if ($num <= 0) continue;
+                if (!$cuadraModel->find((int)$cuadraId, $uid)) continue;
+                $cuadraModel->asignarLote((int)$cuadraId, (int)$id, $num, date('Y-m-d'));
             }
         }
 
@@ -248,6 +266,11 @@ class LoteController extends BaseController
         if (!Session::validateCsrf($this->postString('csrf_token'))) {
             $this->redirect('lotes');
         }
+        $uid = Session::get('usuario_id');
+        // IDOR guard: el lote debe pertenecer al usuario
+        if (!$this->model->find((int)$id, $uid)) {
+            $this->redirect('lotes');
+        }
         $cantidad = abs((int)$this->post('cantidad', 0));
         $tipo     = $this->postString('tipo');
         if ($cantidad > 0 && in_array($tipo, ['añadir', 'reducir'])) {
@@ -256,6 +279,25 @@ class LoteController extends BaseController
             Session::flash('success', "{$cantidad} animales {$accion} correctamente.");
         }
         $this->redirect('lotes');
+    }
+
+    // ── Helpers de autorización (IDOR) ───────────────────────────
+    /**
+     * Devuelve $naveId si pertenece al usuario; null en otro caso.
+     */
+    private function guardOwnedNave(?int $naveId, int $uid): ?int
+    {
+        if (!$naveId) return null;
+        return $this->naveModel->find($naveId, $uid) ? $naveId : null;
+    }
+
+    /**
+     * Devuelve $granjaId si pertenece al usuario; null en otro caso.
+     */
+    private function guardOwnedGranja(?int $granjaId, int $uid): ?int
+    {
+        if (!$granjaId) return null;
+        return $this->granjaModel->find($granjaId, $uid) ? $granjaId : null;
     }
 
     // ── Crear raza personalizada (AJAX) ──────────────────────────
@@ -328,7 +370,13 @@ class LoteController extends BaseController
     public function delete(string $id): void
     {
         auth_required();
-        $this->model->cerrar((int)$id, Session::get('usuario_id'));
+        // CSRF: el Router ya valida en POST, pero defensa en profundidad.
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('lotes');
+        }
+        $uid = Session::get('usuario_id');
+        // cerrar() ya filtra por usuario_id en el WHERE; aquí solo redirigimos.
+        $this->model->cerrar((int)$id, $uid);
         Session::flash('success', 'Lote cerrado y guardado en histórico.');
         $this->redirect('lotes');
     }

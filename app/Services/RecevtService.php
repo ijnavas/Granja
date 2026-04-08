@@ -56,31 +56,82 @@ class RecevtService
     }
 
     // ── Cifrado ───────────────────────────────────────────────────
+    //
+    // Formato v2 (autenticado): "v2:" + base64(nonce(12) | tag(16) | ciphertext)
+    //   AES-256-GCM con clave derivada de RECEVET_KEY (.env) vía HKDF.
+    //
+    // Formato legacy (compatibilidad): base64(iv(16) | ciphertext) con AES-128-CBC
+    //   y clave derivada de las credenciales de BD. Solo se usa para descifrar
+    //   contraseñas guardadas antes de la migración; se re-encriptan a v2 al
+    //   próximo guardado.
+
+    private const CIPHER_V2 = 'aes-256-gcm';
+    private const PREFIX_V2 = 'v2:';
 
     public static function encryptPassword(string $plain): string
     {
-        $key = self::deriveKey();
-        $iv  = random_bytes(16);
-        $enc = openssl_encrypt($plain, 'AES-128-CBC', $key, OPENSSL_RAW_DATA, $iv);
-        return base64_encode($iv . $enc);
+        $key   = self::deriveKeyV2();
+        $nonce = random_bytes(12);
+        $tag   = '';
+        $ct    = openssl_encrypt($plain, self::CIPHER_V2, $key, OPENSSL_RAW_DATA, $nonce, $tag, '', 16);
+        if ($ct === false) {
+            throw new \RuntimeException('No se pudo cifrar la credencial.');
+        }
+        return self::PREFIX_V2 . base64_encode($nonce . $tag . $ct);
     }
 
     public static function decryptPassword(string $encrypted): string
     {
         try {
+            if (str_starts_with($encrypted, self::PREFIX_V2)) {
+                $data = base64_decode(substr($encrypted, strlen(self::PREFIX_V2)), true);
+                if ($data === false || strlen($data) < 12 + 16 + 1) return '';
+                $nonce = substr($data, 0, 12);
+                $tag   = substr($data, 12, 16);
+                $ct    = substr($data, 28);
+                $key   = self::deriveKeyV2();
+                $dec   = openssl_decrypt($ct, self::CIPHER_V2, $key, OPENSSL_RAW_DATA, $nonce, $tag);
+                return $dec !== false ? $dec : '';
+            }
+            // Legacy AES-128-CBC (sin autenticación) — solo descifrado para migración
             $data = base64_decode($encrypted, true);
             if ($data === false || strlen($data) < 17) return '';
-            $key = self::deriveKey();
+            $key = self::deriveKeyLegacy();
             $iv  = substr($data, 0, 16);
             $enc = substr($data, 16);
-            $dec = openssl_decrypt($enc, 'AES-128-CBC', $key, OPENSSL_RAW_DATA, $iv);
+            $dec = openssl_decrypt($enc, 'aes-128-cbc', $key, OPENSSL_RAW_DATA, $iv);
             return $dec !== false ? $dec : '';
         } catch (\Throwable $e) {
             return '';
         }
     }
 
-    private static function deriveKey(): string
+    /**
+     * ¿El blob está cifrado en formato v2 (autenticado)? Útil para
+     * detectar legados que conviene re-encriptar al guardar de nuevo.
+     */
+    public static function isLegacyEncryption(string $encrypted): bool
+    {
+        return $encrypted !== '' && !str_starts_with($encrypted, self::PREFIX_V2);
+    }
+
+    private static function deriveKeyV2(): string
+    {
+        $secret = \App\Core\Env::get('RECEVET_KEY', '');
+        if ($secret === null || $secret === '') {
+            throw new \RuntimeException('RECEVET_KEY no está definida en .env');
+        }
+        // Permite que la clave sea hex de 64 chars (32 bytes) o passphrase arbitraria.
+        if (preg_match('/^[0-9a-f]{64}$/i', $secret)) {
+            $ikm = hex2bin($secret);
+        } else {
+            $ikm = $secret;
+        }
+        // HKDF-SHA256 → 32 bytes para AES-256-GCM
+        return hash_hkdf('sha256', $ikm, 32, 'baltae:recevet:v2');
+    }
+
+    private static function deriveKeyLegacy(): string
     {
         $cfg = require ROOT_PATH . '/config.php';
         return substr(hash('sha256', ($cfg['db']['host'] ?? '') . ($cfg['db']['user'] ?? '') . ($cfg['db']['pass'] ?? '')), 0, 16);

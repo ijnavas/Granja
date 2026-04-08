@@ -23,37 +23,68 @@ class EscaneoController extends BaseController
     public function analizar(): void
     {
         auth_required();
-        if (!Session::validateCsrf($this->postString('csrf_token'))) {
-            Session::flash('error', 'Token inválido.');
-            $this->redirect('escaneo');
-        }
+        // CSRF validado en el Router.
 
         $file = $_FILES['foto'] ?? null;
-        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+        if (!$file || !isset($file['error']) || $file['error'] !== UPLOAD_ERR_OK) {
             Session::flash('error', 'No se ha subido ninguna imagen.');
             $this->redirect('escaneo');
         }
 
-        // Validar tipo
-        $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
-        $mime = mime_content_type($file['tmp_name']);
-        if (!in_array($mime, $allowedMime)) {
+        // ─── Validar tamaño ─────────────────────────────────────
+        $maxBytes = 10 * 1024 * 1024; // 10 MB
+        if (!is_uploaded_file($file['tmp_name']) || $file['size'] > $maxBytes) {
+            Session::flash('error', 'La imagen supera el tamaño máximo permitido (10 MB).');
+            $this->redirect('escaneo');
+        }
+
+        // ─── Validar MIME real (magic bytes), no la extensión ──
+        $allowedMime = [
+            'image/jpeg' => 'jpg',
+            'image/png'  => 'png',
+            'image/webp' => 'webp',
+        ];
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mime  = $finfo->file($file['tmp_name']) ?: '';
+        if (!isset($allowedMime[$mime])) {
             Session::flash('error', 'Solo se permiten imágenes JPG, PNG o WEBP.');
             $this->redirect('escaneo');
         }
 
-        // Guardar imagen
-        $uploadDir = ROOT_PATH . '/uploads/escaneos/';
-        if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
+        // ─── Sanity check: que sea realmente una imagen ────────
+        $imgInfo = @getimagesize($file['tmp_name']);
+        if (!$imgInfo || $imgInfo[0] < 32 || $imgInfo[1] < 32) {
+            Session::flash('error', 'La imagen no es válida.');
+            $this->redirect('escaneo');
+        }
 
-        $ext      = pathinfo($file['name'], PATHINFO_EXTENSION) ?: 'jpg';
-        $filename = date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+        // ─── Preparar destino ──────────────────────────────────
+        $uploadDir = ROOT_PATH . '/uploads/escaneos/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0750, true);
+        }
+        // .htaccess que prohíbe ejecución de PHP en /uploads
+        $htUploads = ROOT_PATH . '/uploads/.htaccess';
+        if (!is_file($htUploads)) {
+            @file_put_contents($htUploads,
+                "# Bloquea cualquier ejecución de scripts en /uploads\n" .
+                "<FilesMatch \"\\.(php|phtml|phar|pl|py|jsp|asp|sh|cgi)$\">\n" .
+                "    Require all denied\n" .
+                "</FilesMatch>\n" .
+                "Options -ExecCGI -Indexes\n"
+            );
+        }
+
+        // Extensión derivada del MIME real (no confiamos en el nombre)
+        $ext      = $allowedMime[$mime];
+        $filename = date('Ymd_His') . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
         $destPath = $uploadDir . $filename;
 
         if (!move_uploaded_file($file['tmp_name'], $destPath)) {
             Session::flash('error', 'Error al guardar la imagen.');
             $this->redirect('escaneo');
         }
+        @chmod($destPath, 0640);
 
         // Analizar con Claude Vision
         try {

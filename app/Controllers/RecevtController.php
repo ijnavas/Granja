@@ -227,8 +227,13 @@ class RecevtController extends BaseController
      */
     public static function bookmarkletToken(int $uid): string
     {
-        $cfg = require ROOT_PATH . '/config.php';
-        $secret = ($cfg['db']['host'] ?? '') . ($cfg['db']['user'] ?? '') . ($cfg['db']['pass'] ?? '');
+        // Preferimos RECEVET_KEY del .env. Fallback legacy a las creds de BD
+        // para no invalidar bookmarklets ya distribuidos antes de la migración.
+        $secret = \App\Core\Env::get('RECEVET_KEY', '');
+        if ($secret === null || $secret === '') {
+            $cfg    = require ROOT_PATH . '/config.php';
+            $secret = ($cfg['db']['host'] ?? '') . ($cfg['db']['user'] ?? '') . ($cfg['db']['pass'] ?? '');
+        }
         return hash_hmac('sha256', 'recevet_bookmarklet_' . $uid, $secret);
     }
 

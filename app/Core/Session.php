@@ -13,8 +13,10 @@ class Session
                 'path'     => '/',
                 'secure'   => true,
                 'httponly' => true,
-                'samesite' => 'Lax',
+                'samesite' => 'Strict',
             ]);
+            // Nombre de cookie sin valor por defecto PHPSESSID
+            session_name('baltae_sid');
             session_start();
         }
     }
