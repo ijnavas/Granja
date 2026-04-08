@@ -879,6 +879,20 @@ class RecevtService
             }
         }
 
+        // Si no encontramos input de días, buscarlo como texto en las celdas
+        // (ej: "Días de tratamiento Receta:7" o "(Días de tratamiento Receta: 7)")
+        if ($diasValue === 0) {
+            foreach ($celdas as $celda) {
+                if (preg_match('/[Dd][íi]as?\s+(?:de\s+)?tratamiento[^:\d]*:?\s*(\d+)/u', strip_tags((string)$celda), $mD)) {
+                    $diasValue = (int)$mD[1];
+                    if ($diasValue > 0) {
+                        $this->addLog('info', "  Días extraídos del texto: {$diasValue}");
+                        break;
+                    }
+                }
+            }
+        }
+
         // Siempre enviamos el POST aunque el input ya tenga un valor:
         // el servidor pre-rellena fechaInicioTratamiento con dispensación+1 como sugerencia
         // visual, pero ese valor NO está almacenado hasta que se envía el formulario.
