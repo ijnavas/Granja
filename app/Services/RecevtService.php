@@ -835,6 +835,16 @@ class RecevtService
             return false;
         }
 
+        // ── DEBUG: volcar todas las celdas del primer registro ─────────────
+        static $debugDumped = false;
+        if (!$debugDumped) {
+            $debugDumped = true;
+            $this->addLog('info', '  === DEBUG CELDAS (' . count($celdas) . ' celdas) ===');
+            foreach ($celdas as $idx => $celda) {
+                $this->addLog('info', "  celda[{$idx}]: " . substr((string)$celda, 0, 800));
+            }
+        }
+
         // ── Fecha dispensación desde celda[0] ──────────────────────────────
         // Formato: "(Fecha Dispensacion:</br>DD/MM/YYYY)"
         if (preg_match('/Fecha Dispensacion:(?:<[^>]+>|\s)+(\d{2}\/\d{2}\/\d{4})/i', (string)($celdas[0] ?? ''), $m)) {
