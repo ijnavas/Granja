@@ -2,3 +2,9 @@
 CLAUDE.md
 database/
 config.local.php
+.env
+.env.local
+.env.example
+.gitignore
+.gitattributes
+.git-ftp-ignore

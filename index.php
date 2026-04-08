@@ -22,6 +22,9 @@ spl_autoload_register(function (string $class): void {
 // Helpers globales
 require ROOT_PATH . '/app/Helpers/functions.php';
 
+// Cargar variables de entorno desde .env (si existe)
+\App\Core\Env::load(ROOT_PATH . '/.env');
+
 // Iniciar sesión
 use App\Core\Session;
 use App\Core\Router;

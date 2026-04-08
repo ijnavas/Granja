@@ -1,0 +1,21 @@
+# ─── Rewrite: enrutar todo a index.php ─────────────────────────
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [L]
+
+# ─── Bloquear archivos sensibles ──────────────────────────────
+# Dotfiles (.env, .git, .htaccess, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Archivos de configuración y similares
+<FilesMatch "^(config\.php|config\.local\.php|composer\.(json|lock)|package(-lock)?\.json|README\.md|CLAUDE\.md|diagnostico_recevet\.php)$">
+    Require all denied
+</FilesMatch>
+
+# ─── Bloquear acceso directo a carpetas de código ────────────
+RedirectMatch 403 ^/app/.*$
+RedirectMatch 403 ^/database/.*$
+RedirectMatch 403 ^/sql/.*$

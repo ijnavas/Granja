@@ -1,4 +1,6 @@
 config.local.php
+.env
+.env.local
 uploads/
 .claude/
 .DS_Store
