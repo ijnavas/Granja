@@ -913,11 +913,19 @@ class RecevtService
         if ($diasValue >= 1) {
             $fechaFin = $this->calcularFechaFin($fechaInicio, $diasValue);
         }
-        // Si diasValue=0 (campo no encontrado en el form), fechaFin queda null → solo se graba fechaInicio
+        // El servidor rechaza fechas futuras (error 103): si fechaFin aún no ha llegado,
+        // no la enviamos — se actualizará en la siguiente ejecución cuando haya pasado.
         if ($fechaFin) {
-            $this->addLog('info', "  Fin: {$fechaFin} ({$diasValue} días)");
+            $tsFin = $this->esDateToTimestamp($fechaFin);
+            $today = mktime(0, 0, 0);
+            if ($tsFin !== null && $tsFin > $today) {
+                $this->addLog('info', "  Fin: {$fechaFin} ({$diasValue} días) — futura, no se envía aún");
+                $fechaFin = null;
+            } else {
+                $this->addLog('info', "  Fin: {$fechaFin} ({$diasValue} días)");
+            }
         } else {
-            $this->addLog('info', "  Sin fechaFin (tratamiento de 1 día o campo no encontrado)");
+            $this->addLog('info', "  Sin fechaFin (1 día o días no encontrados)");
         }
 
         // ── POST a actualizar_lineasTratamientos ──────────────────────────
