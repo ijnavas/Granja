@@ -940,10 +940,11 @@ class RecevtService
                     'identificador'     => $token,
                     'campos'            => $campos,
                     'valores'           => $valores,
-                    'algunCampoRelleno' => '1',
+                    'algunCampoRelleno' => 'true',
                 ],
             ],
         ];
+        $this->addLog('info', '  POST body: ' . http_build_query($postData));
         $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizar_lineasTratamientos', $postData);
         if ($respuesta === null) {
             $this->addLog('error', '  Error HTTP al enviar actualizar_lineasTratamientos');
