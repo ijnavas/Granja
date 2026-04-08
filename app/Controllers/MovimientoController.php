@@ -98,15 +98,31 @@ class MovimientoController extends BaseController
         $uid  = Session::get('usuario_id');
         $tipo = $this->postString('tipo');
 
+        // ── IDOR guards: todos los IDs deben pertenecer al usuario ──
+        $loteOrigenId    = (int)$this->post('lote_origen_id');
+        if ($loteOrigenId && !$this->loteModel->find($loteOrigenId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Lote', 'target_id' => $loteOrigenId,
+                'context' => 'movimientos/store',
+            ]);
+            Session::flash('error', 'Lote de origen no válido.');
+            $this->redirect('movimientos/crear?tipo=' . $tipo);
+        }
+        $loteDestinoId   = $this->ownedIdOrNull($this->loteModel, (int)$this->post('lote_destino_id') ?: null);
+        $cuadraOrigenId  = $this->ownedIdOrNull($this->cuadraModel, (int)$this->post('cuadra_origen_id') ?: null);
+        $cuadraDestinoId = $this->ownedIdOrNull($this->cuadraModel, (int)$this->post('cuadra_destino_id') ?: null);
+
         // Múltiples cuadras origen (venta/baja multi-cuadra)
         $cuadrasOrigenIds  = $_POST['cuadras_origen_ids']  ?? [];
         $cuadrasOrigenNums = $_POST['cuadras_origen_nums'] ?? [];
         $cuadrasOrigen = [];
         foreach ($cuadrasOrigenIds as $i => $cid) {
             $num = (int)($cuadrasOrigenNums[$i] ?? 0);
-            if ($cid && $num > 0) {
-                $cuadrasOrigen[] = ['cuadra_id' => (int)$cid, 'num' => $num];
-            }
+            if (!$cid || $num <= 0) continue;
+            // IDOR: cada cuadra debe ser del usuario
+            $cidOk = $this->ownedIdOrNull($this->cuadraModel, (int)$cid);
+            if (!$cidOk) continue;
+            $cuadrasOrigen[] = ['cuadra_id' => $cidOk, 'num' => $num];
         }
         $totalAnimales = !empty($cuadrasOrigen)
             ? array_sum(array_column($cuadrasOrigen, 'num'))
@@ -115,10 +131,10 @@ class MovimientoController extends BaseController
         $data = [
             'tipo'              => $tipo,
             'fecha'             => $this->postString('fecha') ?: date('Y-m-d'),
-            'lote_origen_id'    => (int)$this->post('lote_origen_id'),
-            'lote_destino_id'   => $this->post('lote_destino_id')   ?: null,
-            'cuadra_origen_id'  => $this->post('cuadra_origen_id')  ?: null,
-            'cuadra_destino_id' => $this->post('cuadra_destino_id') ?: null,
+            'lote_origen_id'    => $loteOrigenId,
+            'lote_destino_id'   => $loteDestinoId,
+            'cuadra_origen_id'  => $cuadraOrigenId,
+            'cuadra_destino_id' => $cuadraDestinoId,
             'num_animales'      => $totalAnimales,
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
@@ -158,8 +174,7 @@ class MovimientoController extends BaseController
     {
         auth_required();
         $uid = Session::get('usuario_id');
-        $mov = $this->model->find((int)$id);
-        if (!$mov) $this->redirect('movimientos');
+        $mov = $this->ownedMovimientoOrAbort((int)$id, $uid);
 
         $this->view('movimientos/form', [
             'movimiento' => $mov,
@@ -183,16 +198,29 @@ class MovimientoController extends BaseController
 
         $uid       = Session::get('usuario_id');
         $tipo      = $this->postString('tipo');
-        $movActual = $this->model->find((int)$id);
-        if (!$movActual) $this->redirect('movimientos');
+        $movActual = $this->ownedMovimientoOrAbort((int)$id, $uid);
+
+        // ── IDOR guards: nuevos IDs deben ser del usuario ───────────
+        $loteOrigenId = (int)$this->post('lote_origen_id');
+        if ($loteOrigenId && !$this->loteModel->find($loteOrigenId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Lote', 'target_id' => $loteOrigenId,
+                'context' => 'movimientos/update',
+            ]);
+            Session::flash('error', 'Lote de origen no válido.');
+            $this->redirect("movimientos/{$id}/editar");
+        }
+        $loteDestinoId   = $this->ownedIdOrNull($this->loteModel, (int)$this->post('lote_destino_id') ?: null);
+        $cuadraOrigenId  = $this->ownedIdOrNull($this->cuadraModel, (int)$this->post('cuadra_origen_id') ?: null);
+        $cuadraDestinoId = $this->ownedIdOrNull($this->cuadraModel, (int)$this->post('cuadra_destino_id') ?: null);
 
         $data = [
             'tipo'              => $tipo,
             'fecha'             => $this->postString('fecha') ?: date('Y-m-d'),
-            'lote_origen_id'    => (int)$this->post('lote_origen_id'),
-            'lote_destino_id'   => $this->post('lote_destino_id')   ?: null,
-            'cuadra_origen_id'  => $this->post('cuadra_origen_id')  ?: null,
-            'cuadra_destino_id' => $this->post('cuadra_destino_id') ?: null,
+            'lote_origen_id'    => $loteOrigenId,
+            'lote_destino_id'   => $loteDestinoId,
+            'cuadra_origen_id'  => $cuadraOrigenId,
+            'cuadra_destino_id' => $cuadraDestinoId,
             'num_animales'      => (int)$this->post('num_animales'),
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
@@ -219,14 +247,16 @@ class MovimientoController extends BaseController
     public function delete(string $id): void
     {
         auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('movimientos');
+        }
         $uid = Session::get('usuario_id');
-        $mov = $this->model->find((int)$id);
-        if ($mov) {
-            try {
-                $this->revertirMovimiento($mov, $uid);
-            } catch (\Exception $e) {
-                // Si no se puede revertir, eliminar igualmente pero avisar
-            }
+        // IDOR guard: el movimiento debe ser del usuario
+        $mov = $this->ownedMovimientoOrAbort((int)$id, $uid);
+        try {
+            $this->revertirMovimiento($mov, $uid);
+        } catch (\Exception $e) {
+            // Si no se puede revertir, eliminar igualmente
         }
         \App\Core\Database::getInstance()
             ->prepare("DELETE FROM movimiento_cuadras WHERE movimiento_id = :id")
@@ -236,11 +266,31 @@ class MovimientoController extends BaseController
         $this->redirect('movimientos');
     }
 
+    /**
+     * Devuelve el movimiento si pertenece al usuario; redirige y loguea
+     * idor_attempt en caso contrario. Movimiento::find() no filtra por
+     * usuario_id (lo haría falta refactor del modelo), así que validamos
+     * aquí.
+     */
+    private function ownedMovimientoOrAbort(int $id, int $uid): array
+    {
+        $mov = $this->model->find($id);
+        if (!$mov || (int)($mov['usuario_id'] ?? 0) !== $uid) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Movimiento', 'target_id' => $id,
+            ]);
+            Session::flash('error', 'Movimiento no encontrado o sin permisos.');
+            $this->redirect('movimientos');
+        }
+        return $mov;
+    }
+
     // ── API AJAX: cuadras de una o varias naves ──────────────────
     public function cuadrasPorNave(): void
     {
         auth_required();
         header('Content-Type: application/json');
+        $uid = (int) Session::get('usuario_id');
 
         // Soporta ?nave_id=X (legacy) o ?nave_ids[]=X&nave_ids[]=Y
         $naveIds = [];
@@ -249,6 +299,17 @@ class MovimientoController extends BaseController
         } elseif (!empty($_GET['nave_id'])) {
             $naveIds = [(int)$_GET['nave_id']];
         }
+        if (empty($naveIds)) { echo json_encode([]); return; }
+
+        // IDOR guard: las naves deben pertenecer al usuario
+        $ph0 = implode(',', array_fill(0, count($naveIds), '?'));
+        $check = \App\Core\Database::getInstance()->prepare("
+            SELECT n.id FROM naves n
+            JOIN granjas g ON n.granja_id = g.id
+            WHERE n.id IN ({$ph0}) AND g.usuario_id = ?
+        ");
+        $check->execute([...$naveIds, $uid]);
+        $naveIds = array_map('intval', $check->fetchAll(\PDO::FETCH_COLUMN));
         if (empty($naveIds)) { echo json_encode([]); return; }
 
         $ph   = implode(',', array_fill(0, count($naveIds), '?'));
@@ -280,8 +341,17 @@ class MovimientoController extends BaseController
     {
         auth_required();
         header('Content-Type: application/json');
+        $uid    = (int) Session::get('usuario_id');
         $loteId = (int)($_GET['lote_id'] ?? 0);
         if (!$loteId) { echo json_encode([]); return; }
+        // IDOR guard: el lote debe ser del usuario
+        if (!$this->loteModel->find($loteId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Lote', 'target_id' => $loteId,
+                'context' => 'movimientos/cuadras-lote',
+            ]);
+            echo json_encode([]); return;
+        }
 
         $stmt = \App\Core\Database::getInstance()->prepare("
             SELECT c.id, c.nombre, cl.num_animales,
@@ -289,12 +359,14 @@ class MovimientoController extends BaseController
             FROM cuadra_lote cl
             JOIN cuadras c ON c.id = cl.cuadra_id
             JOIN naves n   ON c.nave_id = n.id
+            JOIN granjas g ON n.granja_id = g.id
             WHERE cl.lote_id = :lote_id
               AND cl.activo = 1
               AND cl.num_animales > 0
+              AND g.usuario_id = :uid
             ORDER BY n.nombre, LENGTH(c.nombre), c.nombre
         ");
-        $stmt->execute(['lote_id' => $loteId]);
+        $stmt->execute(['lote_id' => $loteId, 'uid' => $uid]);
         echo json_encode($stmt->fetchAll(\PDO::FETCH_ASSOC));
     }
 
@@ -323,8 +395,17 @@ class MovimientoController extends BaseController
     {
         auth_required();
         header('Content-Type: application/json');
+        $uid      = (int) Session::get('usuario_id');
         $cuadraId = (int)($_GET['cuadra_id'] ?? 0);
         if (!$cuadraId) { echo json_encode([]); return; }
+        // IDOR guard: la cuadra debe ser del usuario
+        if (!$this->cuadraModel->find($cuadraId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Cuadra', 'target_id' => $cuadraId,
+                'context' => 'movimientos/lotes-cuadra',
+            ]);
+            echo json_encode([]); return;
+        }
 
         $stmt = \App\Core\Database::getInstance()->prepare("
             SELECT l.id, l.codigo, cl.num_animales

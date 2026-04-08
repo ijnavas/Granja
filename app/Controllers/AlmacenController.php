@@ -151,9 +151,28 @@ class AlmacenController extends BaseController
     public function deleteRecarga(string $id, string $recargaId): void
     {
         auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('almacen');
+        }
         $uid  = Session::get('usuario_id');
+        // IDOR guard: el silo debe ser del usuario
         $silo = $this->model->find((int)$id, $uid);
-        if (!$silo) $this->redirect('almacen');
+        if (!$silo) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Silo', 'target_id' => (int)$id,
+                'context' => 'almacen/deleteRecarga',
+            ]);
+            $this->redirect('almacen');
+        }
+        // Y la recarga debe pertenecer a ese silo
+        $recarga = $this->model->findRecarga((int)$recargaId);
+        if (!$recarga || (int)$recarga['silo_id'] !== (int)$id) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'SiloRecarga', 'target_id' => (int)$recargaId,
+                'context' => 'almacen/deleteRecarga',
+            ]);
+            $this->redirect("almacen/{$id}");
+        }
 
         $this->model->deleteRecarga((int)$recargaId, (int)$id);
         Session::flash('success', 'Recarga eliminada y stock revertido.');

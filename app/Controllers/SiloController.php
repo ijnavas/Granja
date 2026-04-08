@@ -65,15 +65,27 @@ class SiloController extends BaseController
             $this->redirect('silos/crear');
         }
 
-        if (!$this->post('granja_id') || !$this->postString('nombre')) {
+        $uid      = Session::get('usuario_id');
+        $granjaId = (int)$this->post('granja_id');
+        if (!$granjaId || !$this->postString('nombre')) {
             Session::flash('error', 'Nombre y granja son obligatorios.');
             $this->redirect('silos/crear');
         }
+        // ── IDOR guard: la granja debe ser del usuario
+        if (!$this->granjaModel->find($granjaId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Granja', 'target_id' => $granjaId,
+                'context' => 'silos/store',
+            ]);
+            Session::flash('error', 'Granja no válida.');
+            $this->redirect('silos/crear');
+        }
 
-        $naveIds = $_POST['nave_ids'] ?? [];
+        // Filtrar nave_ids[] dejando solo las del usuario
+        $naveIds = $this->filterOwnedNaveIds($_POST['nave_ids'] ?? [], $uid);
 
         $this->model->create([
-            'granja_id'       => (int)$this->post('granja_id'),
+            'granja_id'       => $granjaId,
             'nombre'          => $this->postString('nombre'),
             'capacidad_kg'    => (float)$this->post('capacidad_kg', 0),
             'stock_actual_kg' => (float)$this->post('stock_actual_kg', 0),
@@ -110,9 +122,20 @@ class SiloController extends BaseController
             $this->redirect("silos/{$id}/editar");
         }
 
-        $naveIds = $_POST['nave_ids'] ?? [];
+        $uid = Session::get('usuario_id');
+        // IDOR guard: el silo debe ser del usuario (find filtra por uid)
+        if (!$this->model->find((int)$id, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Silo', 'target_id' => (int)$id,
+                'context' => 'silos/update',
+            ]);
+            $this->redirect('silos');
+        }
 
-        $this->model->update((int)$id, Session::get('usuario_id'), [
+        // Filtrar nave_ids[] dejando solo las del usuario
+        $naveIds = $this->filterOwnedNaveIds($_POST['nave_ids'] ?? [], $uid);
+
+        $this->model->update((int)$id, $uid, [
             'nombre'          => $this->postString('nombre'),
             'capacidad_kg'    => (float)$this->post('capacidad_kg', 0),
             'stock_actual_kg' => (float)$this->post('stock_actual_kg', 0),
@@ -127,8 +150,33 @@ class SiloController extends BaseController
     public function delete(string $id): void
     {
         auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('silos');
+        }
+        // delete() en el modelo ya filtra por usuario_id en el WHERE
         $this->model->delete((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Silo eliminado.');
         $this->redirect('silos');
+    }
+
+    /**
+     * Devuelve solo los IDs de nave que pertenecen al usuario.
+     * Útil para filtrar arrays de nave_ids[] venidos de POST.
+     */
+    private function filterOwnedNaveIds(array $rawIds, int $uid): array
+    {
+        $out = [];
+        foreach ($rawIds as $nid) {
+            $nid = (int)$nid;
+            if ($nid && $this->naveModel->find($nid, $uid)) {
+                $out[] = $nid;
+            } elseif ($nid) {
+                \App\Core\SecurityLog::log('idor_attempt', [
+                    'user_id' => $uid, 'resource' => 'Nave', 'target_id' => $nid,
+                    'context' => 'silos/filterOwnedNaveIds',
+                ]);
+            }
+        }
+        return $out;
     }
 }

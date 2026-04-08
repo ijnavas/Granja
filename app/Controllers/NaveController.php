@@ -65,13 +65,24 @@ class NaveController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect('naves/crear');
         }
-        $nombre = capitalizar($this->postString('nombre'));
-        if (strlen($nombre) < 1 || !$this->post('granja_id')) {
+        $uid      = Session::get('usuario_id');
+        $nombre   = capitalizar($this->postString('nombre'));
+        $granjaId = (int)$this->post('granja_id');
+        if (strlen($nombre) < 1 || !$granjaId) {
             Session::flash('error', 'Nombre y granja son obligatorios.');
             $this->redirect('naves/crear');
         }
+        // ── IDOR guard: la granja debe ser del usuario
+        if (!$this->granjaModel->find($granjaId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Granja', 'target_id' => $granjaId,
+                'context' => 'naves/store',
+            ]);
+            Session::flash('error', 'Granja no válida.');
+            $this->redirect('naves/crear');
+        }
         $this->model->create([
-            'granja_id'        => (int)$this->post('granja_id'),
+            'granja_id'        => $granjaId,
             'nombre'           => $nombre,
             'especie'          => $this->postString('especie'),
             'capacidad_maxima' => (int)$this->post('capacidad_maxima', 0),
@@ -122,6 +133,10 @@ class NaveController extends BaseController
     {
         auth_required();
         require_rol('director');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('naves');
+        }
+        // delete() en el modelo ya filtra por usuario_id en el WHERE
         $this->model->delete((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Nave eliminada.');
         $this->redirect('naves');

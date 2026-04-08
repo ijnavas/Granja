@@ -252,9 +252,19 @@ class InventarioController extends BaseController
     public function delete(string $id): void
     {
         auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('inventarios');
+        }
         $uid = Session::get('usuario_id');
+        // IDOR guard
         $inv = $this->model->find((int)$id, $uid);
-        if ($inv) $this->model->delete((int)$id);
+        if (!$inv) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Inventario', 'target_id' => (int)$id,
+            ]);
+            $this->redirect('inventarios');
+        }
+        $this->model->delete((int)$id);
         Session::flash('success', 'Inventario eliminado.');
         $this->redirect('inventarios');
     }

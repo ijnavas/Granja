@@ -77,12 +77,23 @@ class CuadraController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect('cuadras/crear');
         }
-        if (!$this->post('nave_id') || !$this->postString('nombre')) {
+        $uid    = Session::get('usuario_id');
+        $naveId = (int)$this->post('nave_id');
+        if (!$naveId || !$this->postString('nombre')) {
             Session::flash('error', 'Nombre y nave son obligatorios.');
             $this->redirect('cuadras/crear');
         }
+        // ── IDOR guard: la nave debe pertenecer al usuario
+        if (!$this->naveModel->find($naveId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Nave', 'target_id' => $naveId,
+                'context' => 'cuadras/store',
+            ]);
+            Session::flash('error', 'Nave no válida.');
+            $this->redirect('cuadras/crear');
+        }
         $this->model->create([
-            'nave_id'          => (int)$this->post('nave_id'),
+            'nave_id'          => $naveId,
             'nombre'           => capitalizar($this->postString('nombre')),
             'capacidad_maxima' => (int)$this->post('capacidad_maxima', 0),
             'ancho_m'          => $this->post('ancho_m') ?: null,
@@ -114,7 +125,17 @@ class CuadraController extends BaseController
             $this->redirect('cuadras/masiva');
         }
 
+        $uid       = Session::get('usuario_id');
         $naveId    = (int)$this->post('nave_id');
+        // ── IDOR guard: la nave debe pertenecer al usuario
+        if ($naveId && !$this->naveModel->find($naveId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Nave', 'target_id' => $naveId,
+                'context' => 'cuadras/storeMasiva',
+            ]);
+            Session::flash('error', 'Nave no válida.');
+            $this->redirect('cuadras/masiva');
+        }
         $inicio    = (int)$this->post('inicio', 1);
         $cantidad  = (int)$this->post('cantidad', 0);
         $prefijo   = $this->postString('prefijo');   // ya viene sin capitalizar raro
@@ -170,8 +191,26 @@ class CuadraController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect("cuadras/{$id}/editar");
         }
-        $this->model->update((int)$id, Session::get('usuario_id'), [
-            'nave_id'          => (int)$this->post('nave_id'),
+        $uid = Session::get('usuario_id');
+        // IDOR guard: la cuadra debe ser del usuario
+        if (!$this->model->find((int)$id, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Cuadra', 'target_id' => (int)$id,
+                'context' => 'cuadras/update',
+            ]);
+            $this->redirect('cuadras');
+        }
+        $naveId = (int)$this->post('nave_id');
+        if ($naveId && !$this->naveModel->find($naveId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Nave', 'target_id' => $naveId,
+                'context' => 'cuadras/update',
+            ]);
+            Session::flash('error', 'Nave no válida.');
+            $this->redirect("cuadras/{$id}/editar");
+        }
+        $this->model->update((int)$id, $uid, [
+            'nave_id'          => $naveId,
             'nombre'           => capitalizar($this->postString('nombre')),
             'capacidad_maxima' => (int)$this->post('capacidad_maxima', 0),
             'ancho_m'          => $this->post('ancho_m') ?: null,
@@ -187,6 +226,10 @@ class CuadraController extends BaseController
     {
         auth_required();
         require_rol('director');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('cuadras');
+        }
+        // delete() en el modelo ya filtra por usuario_id en el WHERE
         $this->model->delete((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Cuadra eliminada.');
         $this->redirect('cuadras');
@@ -199,12 +242,30 @@ class CuadraController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect("cuadras/{$id}");
         }
+        $uid = Session::get('usuario_id');
+        // IDOR guard: la cuadra debe ser del usuario
+        if (!$this->model->find((int)$id, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Cuadra', 'target_id' => (int)$id,
+                'context' => 'cuadras/asignarLote',
+            ]);
+            $this->redirect('cuadras');
+        }
         $loteId      = (int)$this->post('lote_id');
         $numAnimales = (int)$this->post('num_animales', 0);
         $fecha       = $this->postString('fecha_entrada') ?: date('Y-m-d');
         $obs         = $this->postString('observaciones');
         if (!$loteId || $numAnimales < 1) {
             Session::flash('error', 'Lote y número de animales son obligatorios.');
+            $this->redirect("cuadras/{$id}");
+        }
+        // IDOR guard: el lote debe ser del usuario
+        if (!$this->loteModel->find($loteId, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Lote', 'target_id' => $loteId,
+                'context' => 'cuadras/asignarLote',
+            ]);
+            Session::flash('error', 'Lote no válido.');
             $this->redirect("cuadras/{$id}");
         }
         $this->model->asignarLote((int)$id, $loteId, $numAnimales, $fecha, $obs);
@@ -219,8 +280,28 @@ class CuadraController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect("cuadras/{$id}");
         }
+        $uid = Session::get('usuario_id');
+        // IDOR guard: la cuadra debe ser del usuario
+        if (!$this->model->find((int)$id, $uid)) {
+            \App\Core\SecurityLog::log('idor_attempt', [
+                'user_id' => $uid, 'resource' => 'Cuadra', 'target_id' => (int)$id,
+                'context' => 'cuadras/retirarLote',
+            ]);
+            $this->redirect('cuadras');
+        }
         $cuadraLoteId = (int)$this->post('cuadra_lote_id');
         if ($cuadraLoteId) {
+            // IDOR: verificar que el cuadra_lote pertenece a esta cuadra del usuario
+            $db   = \App\Core\Database::getInstance();
+            $stmt = $db->prepare("SELECT 1 FROM cuadra_lote WHERE id = :id AND cuadra_id = :cid");
+            $stmt->execute(['id' => $cuadraLoteId, 'cid' => (int)$id]);
+            if (!$stmt->fetchColumn()) {
+                \App\Core\SecurityLog::log('idor_attempt', [
+                    'user_id' => $uid, 'resource' => 'CuadraLote', 'target_id' => $cuadraLoteId,
+                    'context' => 'cuadras/retirarLote',
+                ]);
+                $this->redirect("cuadras/{$id}");
+            }
             $this->model->retirarLote($cuadraLoteId);
             Session::flash('success', 'Lote retirado de la cuadra.');
         }

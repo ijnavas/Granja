@@ -130,8 +130,9 @@ class EscaneoController extends BaseController
         $registrados = 0;
         $errores     = [];
 
-        $movModel = new \App\Models\Movimiento();
-        $loteModel = new \App\Models\Lote();
+        $movModel    = new \App\Models\Movimiento();
+        $loteModel   = new Lote();
+        $cuadraModel = new \App\Models\Cuadra();
 
         foreach ($loteIds as $i => $loteId) {
             $loteId   = (int)$loteId;
@@ -148,7 +149,17 @@ class EscaneoController extends BaseController
             }
             if ($cantidad <= 0 || !$tipo) continue;
 
-            $cuadraDestinoId = (int)($cuadraDestinoIds[$i] ?? 0) ?: null;
+            // ── IDOR guards: lote y cuadras deben pertenecer al usuario
+            if (!$loteModel->find($loteId, $uid)) {
+                \App\Core\SecurityLog::log('idor_attempt', [
+                    'user_id' => $uid, 'resource' => 'Lote', 'target_id' => $loteId,
+                    'context' => 'escaneo/confirmar',
+                ]);
+                $errores[] = "Fila " . ((int)$i + 1) . ": lote no válido.";
+                continue;
+            }
+            $cuadraId        = $this->ownedIdOrNull($cuadraModel, $cuadraId);
+            $cuadraDestinoId = $this->ownedIdOrNull($cuadraModel, (int)($cuadraDestinoIds[$i] ?? 0) ?: null);
 
             $data = [
                 'tipo'              => $tipo,
@@ -223,9 +234,19 @@ class EscaneoController extends BaseController
             if (!isset($_POST['confirmar_p'][$j])) continue;
             $loteId  = (int)$loteId;
             $pesoKg  = (float)str_replace(',', '.', $pesosKg[$j] ?? '0');
-            $numAnim = (int)($numAnimalesPesaje[$j] ?? 0);
+            $numAnim = (int)($numAnimalesPes[$j] ?? 0);
             $cuadraId = (int)($cuadraIdsPesaje[$j] ?? 0) ?: null;
             if (!$loteId || $pesoKg <= 0) continue;
+            // ── IDOR guard: lote y cuadra deben pertenecer al usuario
+            if (!$loteModel->find($loteId, $uid)) {
+                \App\Core\SecurityLog::log('idor_attempt', [
+                    'user_id' => $uid, 'resource' => 'Lote', 'target_id' => $loteId,
+                    'context' => 'escaneo/confirmar:pesaje',
+                ]);
+                $errores[] = "Pesaje fila {$j}: lote no válido.";
+                continue;
+            }
+            $cuadraId = $this->ownedIdOrNull($cuadraModel, $cuadraId);
             try {
                 $pesajeModel->create([
                     'lote_id'              => $loteId,
@@ -261,6 +282,15 @@ class EscaneoController extends BaseController
             $proveedor = trim($proveedores[$k] ?? '') ?: null;
             $albaran   = trim($albaranes[$k]   ?? '') ?: null;
             if (!$siloId || $cantKg <= 0) continue;
+            // ── IDOR guard: silo debe pertenecer al usuario
+            if (!$siloModel->find($siloId, $uid)) {
+                \App\Core\SecurityLog::log('idor_attempt', [
+                    'user_id' => $uid, 'resource' => 'Silo', 'target_id' => $siloId,
+                    'context' => 'escaneo/confirmar:silo',
+                ]);
+                $errores[] = "Silo fila {$k}: silo no válido.";
+                continue;
+            }
             $obs = $albaran ? "Albarán: {$albaran}" : null;
             try {
                 $siloModel->addRecarga($siloId, $cantKg, $fecha, $proveedor, $obs, $uid, $tipoPienso);
