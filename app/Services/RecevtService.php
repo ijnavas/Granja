@@ -881,7 +881,6 @@ class RecevtService
                 }
             }
         }
-        $this->addLog('info', "  Form actual: fechaInicio='{$existingFechaInicio}' fechaFin='{$existingFechaFin}'");
 
         // Si no encontramos input de días, buscarlo como texto en las celdas
         // (ej: "Días de tratamiento Receta:7" o "(Días de tratamiento Receta: 7)")
@@ -904,6 +903,14 @@ class RecevtService
         // Calcular fechaFin desde los días del formulario (fechaFin del loop externo ya fue descartada)
         if ($diasValue >= 1) {
             $fechaFin = $this->calcularFechaFin($fechaInicio, $diasValue);
+        }
+
+        // ── Skip si ya está completo ────────────────────────────────────────
+        // Si el formulario ya tiene fechaInicio Y fechaFin con los mismos valores
+        // que íbamos a enviar, no hace falta repostear.
+        if ($existingFechaInicio === $fechaInicio && $existingFechaFin !== '' && $existingFechaFin === ($fechaFin ?? '')) {
+            $this->addLog('info', "  Ya completado (Inicio={$existingFechaInicio}, Fin={$existingFechaFin}) — saltando");
+            return true;
         }
         // El servidor rechaza fechas futuras (error 103): si fechaFin aún no ha llegado,
         // no la enviamos — se actualizará en la siguiente ejecución cuando haya pasado.
@@ -944,7 +951,6 @@ class RecevtService
                 ],
             ],
         ];
-        $this->addLog('info', '  POST body: ' . http_build_query($postData));
         $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizar_lineasTratamientos', $postData);
         if ($respuesta === null) {
             $this->addLog('error', '  Error HTTP al enviar actualizar_lineasTratamientos');
