@@ -933,28 +933,28 @@ class RecevtService
         }
 
         // ── POST a actualizar_lineasTratamientos ──────────────────────────
-        // Replicamos exactamente lo que hace el browser con obtenerLineaTratamiento(a, true=n):
-        //   campos siempre contiene: fechaInicioTratamiento, fechaFinTratamiento, dispensaciones
-        //   valores.fechaFinTratamiento = '' cuando es futura (browser también la envía vacía)
-        //   valores.dispensaciones = [] (empty cuando no hay datos de dispensación en DOM)
-        $campos  = ['fechaInicioTratamiento', 'fechaFinTratamiento', 'dispensaciones'];
-        $valores = [
-            'fechaInicioTratamiento' => $fechaInicio,
-            'fechaFinTratamiento'    => $fechaFin ?? '',
-            'dispensaciones'         => [],
-        ];
+        // Replicamos EXACTAMENTE el body que genera jQuery $.param en el browser:
+        //   lineasTratamiento[0][identificador]=TOKEN
+        //   lineasTratamiento[0][campos][]=fechaInicioTratamiento
+        //   lineasTratamiento[0][campos][]=fechaFinTratamiento
+        //   lineasTratamiento[0][campos][]=dispensaciones
+        //   lineasTratamiento[0][valores][fechaInicioTratamiento]=DD/MM/YYYY
+        //   lineasTratamiento[0][valores][fechaFinTratamiento]=DD/MM/YYYY (o vacío)
+        //   lineasTratamiento[0][algunCampoRelleno]=true
+        // Nota: NO se incluye valores[dispensaciones] cuando el array está vacío
+        // (jQuery $.param omite las claves con array vacío).
+        $prefix = 'lineasTratamiento[0]';
+        $parts  = [];
+        $parts[] = rawurlencode($prefix.'[identificador]') . '=' . rawurlencode($token);
+        $parts[] = rawurlencode($prefix.'[campos][]') . '=' . rawurlencode('fechaInicioTratamiento');
+        $parts[] = rawurlencode($prefix.'[campos][]') . '=' . rawurlencode('fechaFinTratamiento');
+        $parts[] = rawurlencode($prefix.'[campos][]') . '=' . rawurlencode('dispensaciones');
+        $parts[] = rawurlencode($prefix.'[valores][fechaInicioTratamiento]') . '=' . rawurlencode($fechaInicio);
+        $parts[] = rawurlencode($prefix.'[valores][fechaFinTratamiento]') . '=' . rawurlencode($fechaFin ?? '');
+        $parts[] = rawurlencode($prefix.'[algunCampoRelleno]') . '=' . rawurlencode('true');
+        $rawBody = implode('&', $parts);
 
-        $postData = [
-            'lineasTratamiento' => [
-                [
-                    'identificador'     => $token,
-                    'campos'            => $campos,
-                    'valores'           => $valores,
-                    'algunCampoRelleno' => 'true',
-                ],
-            ],
-        ];
-        $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizar_lineasTratamientos', $postData);
+        $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizar_lineasTratamientos', $rawBody);
         if ($respuesta === null) {
             $this->addLog('error', '  Error HTTP al enviar actualizar_lineasTratamientos');
             return false;
@@ -1011,7 +1011,10 @@ class RecevtService
 
     // ── HTTP ──────────────────────────────────────────────────────
 
-    private function request(string $method, string $url, array $data = []): ?string
+    /**
+     * @param array|string $data  Array → http_build_query;  string → body crudo
+     */
+    private function request(string $method, string $url, $data = []): ?string
     {
         if (!function_exists('curl_init')) {
             $this->addLog('error', 'cURL no disponible.');
@@ -1028,19 +1031,22 @@ class RecevtService
             CURLOPT_COOKIEFILE     => $this->cookieFile,
             CURLOPT_COOKIEJAR      => $this->cookieFile,
             CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
             CURLOPT_HTTPHEADER     => [
                 'Accept: application/json, text/javascript, */*; q=0.01',
-                'Accept-Language: es-ES,es;q=0.9',
+                'Accept-Language: es-ES,es;q=0.9,en;q=0.8',
                 'Accept-Encoding: identity',
-                'Referer: https://www.recevet.es/index.php',
+                'Content-Type: application/x-www-form-urlencoded; charset=UTF-8',
+                'Origin: https://www.recevet.es',
+                'Referer: https://www.recevet.es/index.php?operacion=listadoLineasTratamientos',
                 'X-Requested-With: XMLHttpRequest',
             ],
         ]);
 
         if ($method === 'POST') {
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($data));
+            $body = is_string($data) ? $data : http_build_query($data);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
         }
 
         $response = curl_exec($ch);
