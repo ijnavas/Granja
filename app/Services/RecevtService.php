@@ -879,15 +879,11 @@ class RecevtService
             }
         }
 
-        // Si ya tiene la fecha exacta que íbamos a poner → ya completado, nada que hacer.
-        // NO saltamos si el valor existente es distinto (ej: el servidor pre-rellena con la
-        // fecha de dispensación, pero nosotros queremos dispensación+1 día).
-        if ($existingFechaInicio !== '' && $existingFechaInicio === $fechaInicio) {
-            $this->addLog('info', "  Ya completado (fechaInicio={$existingFechaInicio}) — omitiendo");
-            return true;
-        }
+        // Siempre enviamos el POST aunque el input ya tenga un valor:
+        // el servidor pre-rellena fechaInicioTratamiento con dispensación+1 como sugerencia
+        // visual, pero ese valor NO está almacenado hasta que se envía el formulario.
         if ($existingFechaInicio !== '') {
-            $this->addLog('info', "  Pre-rellenado con '{$existingFechaInicio}' → actualizando a '{$fechaInicio}'");
+            $this->addLog('info', "  Input pre-rellenado con '{$existingFechaInicio}' → enviando '{$fechaInicio}'");
         }
 
         if (!$fechaInicioField) {
