@@ -24,7 +24,7 @@ class Granja
             FROM granjas g
             LEFT JOIN naves n ON n.granja_id = g.id AND n.activa = 1
             LEFT JOIN silos s ON s.granja_id = g.id AND s.activo = 1
-            WHERE g.usuario_id = :uid
+            WHERE g.usuario_id = :uid AND g.activa = 1
             GROUP BY g.id
             ORDER BY g.nombre
         ");
@@ -35,7 +35,7 @@ class Granja
     public function find(int $id, int $userId): ?array
     {
         $stmt = $this->db->prepare("
-            SELECT * FROM granjas WHERE id = :id AND usuario_id = :uid
+            SELECT * FROM granjas WHERE id = :id AND usuario_id = :uid AND activa = 1
         ");
         $stmt->execute(['id' => $id, 'uid' => $userId]);
         $row = $stmt->fetch();
