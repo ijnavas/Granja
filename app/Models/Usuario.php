@@ -50,16 +50,91 @@ class Usuario
     }
 
     /**
-     * Variante interna que SÍ devuelve password_hash. Solo para authenticate().
+     * Variante interna que SÍ devuelve password_hash + estado de lockout.
+     * Solo para authenticate() y lógica de bloqueo.
      */
     private function findByEmailWithHash(string $email): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT id, email, password_hash FROM usuarios WHERE email = :email AND activo = 1 LIMIT 1'
+            'SELECT id, email, password_hash, failed_login_attempts, locked_until
+             FROM usuarios WHERE email = :email AND activo = 1 LIMIT 1'
         );
         $stmt->execute(['email' => $email]);
         $row = $stmt->fetch();
         return $row ?: null;
+    }
+
+    // ── Account lockout ──────────────────────────────────────────
+    // Umbral: 10 intentos fallidos → 30 min de bloqueo.
+    public const LOCKOUT_THRESHOLD = 10;
+    public const LOCKOUT_MINUTES   = 30;
+
+    /**
+     * ¿La cuenta está bloqueada AHORA mismo?
+     * Devuelve segundos restantes (>0) si está bloqueada, 0 si no.
+     */
+    public function lockoutSecondsRemaining(string $email): int
+    {
+        $stmt = $this->db->prepare(
+            'SELECT locked_until FROM usuarios WHERE email = :email AND activo = 1 LIMIT 1'
+        );
+        $stmt->execute(['email' => $email]);
+        $until = $stmt->fetchColumn();
+        if (!$until) return 0;
+        $rem = strtotime((string)$until) - time();
+        return $rem > 0 ? $rem : 0;
+    }
+
+    /**
+     * Registra un intento fallido. Si supera el umbral, bloquea la cuenta.
+     * Devuelve true si con este intento la cuenta ha quedado bloqueada.
+     */
+    public function registerFailedLogin(string $email): bool
+    {
+        // Solo actúa si la cuenta existe (no filtra: la ruta de error es la misma).
+        $stmt = $this->db->prepare(
+            'SELECT id, failed_login_attempts FROM usuarios WHERE email = :email AND activo = 1 LIMIT 1'
+        );
+        $stmt->execute(['email' => $email]);
+        $row = $stmt->fetch();
+        if (!$row) return false;
+
+        $newCount = (int)$row['failed_login_attempts'] + 1;
+        $shouldLock = $newCount >= self::LOCKOUT_THRESHOLD;
+
+        if ($shouldLock) {
+            $lockUntil = date('Y-m-d H:i:s', time() + self::LOCKOUT_MINUTES * 60);
+            $upd = $this->db->prepare(
+                'UPDATE usuarios
+                 SET failed_login_attempts = :n,
+                     locked_until          = :until,
+                     last_failed_login_at  = NOW()
+                 WHERE id = :id'
+            );
+            $upd->execute(['n' => $newCount, 'until' => $lockUntil, 'id' => (int)$row['id']]);
+        } else {
+            $upd = $this->db->prepare(
+                'UPDATE usuarios
+                 SET failed_login_attempts = :n,
+                     last_failed_login_at  = NOW()
+                 WHERE id = :id'
+            );
+            $upd->execute(['n' => $newCount, 'id' => (int)$row['id']]);
+        }
+        return $shouldLock;
+    }
+
+    /**
+     * Resetea los contadores de lockout tras un login exitoso.
+     */
+    public function clearFailedLogins(int $id): void
+    {
+        $this->db->prepare(
+            'UPDATE usuarios
+             SET failed_login_attempts = 0,
+                 locked_until          = NULL
+             WHERE id = :id'
+        )->execute(['id' => $id]);
     }
 
     /**

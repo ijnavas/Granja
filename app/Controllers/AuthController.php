@@ -60,17 +60,40 @@ class AuthController extends BaseController
             $this->redirect('login');
         }
 
+        // ─── Account lockout (persistente, sobrevive al rotar IP) ───
+        // Si la cuenta está bloqueada, se rechaza ANTES de verificar el
+        // password para no tocar el hash (timing) ni regalar pistas.
+        $lockRemaining = $this->usuario->lockoutSecondsRemaining($email);
+        if ($lockRemaining > 0) {
+            SecurityLog::log('login_locked', ['email' => $email, 'seconds_remaining' => $lockRemaining]);
+            // Mensaje genérico (no confirma existencia de cuenta).
+            Session::flash('error', 'Email o contraseña incorrectos.');
+            $this->redirect('login');
+        }
+
         // Autenticar
         $user = $this->usuario->authenticate($email, $password);
 
         if (!$user) {
-            SecurityLog::log('login_failed', ['email' => $email]);
+            // Incrementa el contador persistente si la cuenta existe.
+            $justLocked = $this->usuario->registerFailedLogin($email);
+            SecurityLog::log('login_failed', [
+                'email'       => $email,
+                'just_locked' => $justLocked,
+            ]);
+            if ($justLocked) {
+                SecurityLog::log('account_locked', [
+                    'email'   => $email,
+                    'minutes' => \App\Models\Usuario::LOCKOUT_MINUTES,
+                ]);
+            }
             // Mensaje genérico para no revelar si el email existe
             Session::flash('error', 'Email o contraseña incorrectos.');
             $this->redirect('login');
         }
 
         // Éxito: limpiar contadores y rotar sesión
+        $this->usuario->clearFailedLogins((int)$user['id']);
         RateLimiter::clear('login_account', $perAccount);
         RateLimiter::clear('login_ip', $ip);
 
