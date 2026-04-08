@@ -118,9 +118,13 @@ class AuthController extends BaseController
         $this->redirect('login');
     }
 
-    // ── GET /logout ──────────────────────────────────────────────
+    // ── POST /logout ─────────────────────────────────────────────
     public function logout(): void
     {
+        if (!Session::validateCsrf((string)($_POST['csrf_token'] ?? ''))) {
+            Session::flash('error', 'Token inválido. Inténtalo de nuevo.');
+            $this->redirect('dashboard');
+        }
         Session::destroy();
         $this->redirect('login');
     }

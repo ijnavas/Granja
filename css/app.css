@@ -228,11 +228,16 @@ body {
     color: #fff; font-weight: 600; font-size: .8rem; flex-shrink: 0;
 }
 
+.logout-form { margin: 0; padding: 0; display: inline; }
+
 .btn-logout {
     font-size: .8rem; color: var(--text-2);
     text-decoration: none;
     padding: .3rem .65rem;
     border-radius: 6px; border: 1px solid var(--border);
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
     transition: all .15s;
 }
 

@@ -137,7 +137,10 @@
                 <div class="user-avatar"><?= strtoupper(substr($u['nombre'] ?? 'U', 0, 1)) ?></div>
                 <span><?= e($u['nombre'] ?? '') ?></span>
             </a>
-            <a href="<?= base_url('logout') ?>" class="btn-logout">Salir</a>
+            <form method="POST" action="<?= base_url('logout') ?>" class="logout-form">
+                <?= csrf_field() ?>
+                <button type="submit" class="btn-logout">Salir</button>
+            </form>
         </div>
     </header>
 
