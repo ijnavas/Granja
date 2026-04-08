@@ -937,17 +937,19 @@ class RecevtService
         }
         // El servidor rechaza fechas futuras (error 103): si fechaFin aún no ha llegado,
         // no la enviamos — se actualizará en la siguiente ejecución cuando haya pasado.
+        // Comparamos sólo la fecha (sin hora) para evitar problemas con mktime y mediodía.
         if ($fechaFin) {
             $tsFin = $this->esDateToTimestamp($fechaFin);
-            $today = mktime(0, 0, 0);
-            if ($tsFin !== null && $tsFin > $today) {
+            $todayStr = date('d/m/Y'); // hoy en formato ES
+            $todayTs  = $this->esDateToTimestamp($todayStr);
+            if ($tsFin !== null && $todayTs !== null && $tsFin > $todayTs) {
                 $this->addLog('info', "  Fin: {$fechaFin} ({$diasValue} días) — futura, no se envía aún");
                 $fechaFin = null;
             } else {
                 $this->addLog('info', "  Fin: {$fechaFin} ({$diasValue} días)");
             }
         } else {
-            $this->addLog('info', "  Sin fechaFin (1 día o días no encontrados)");
+            $this->addLog('info', "  Sin fechaFin (días no encontrados: diasValue={$diasValue})");
         }
 
         // ── POST a actualizar_lineasTratamientos ──────────────────────────
@@ -1093,8 +1095,9 @@ class RecevtService
 
     private function calcularFechaFin(string $fechaInicio, int $diasTratamiento): ?string
     {
-        if ($diasTratamiento <= 1) return null;
+        if ($diasTratamiento <= 0) return null;
         $ts = $this->esDateToTimestamp($fechaInicio);
+        // dias=1 → fechaFin = fechaInicio (tratamiento de un solo día)
         return $ts !== null ? date('d/m/Y', $ts + ($diasTratamiento - 1) * 86400) : null;
     }
 
