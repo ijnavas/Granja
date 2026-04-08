@@ -551,11 +551,10 @@ class RecevtService
         }
 
         // ── Fallback: registros con ID pero fechas posiblemente vacías/incorrectas ──
-        // Limitamos a los 50 más recientes para evitar timeouts (los pendientes siempre
-        // son los más nuevos). El servidor pre-rellena fechaInicio con la fecha de
-        // dispensación; completarLineaConIDs lo detectará y actualizará a dispensación+1.
-        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando últimos 50 registros con =1');
-        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1', 'length' => '50', 'iDisplayLength' => '50']);
+        // Subimos a 400 para cubrir todos los registros del usuario (actualmente 394).
+        // El skip temprano "Ya completado" evita hacer POSTs innecesarios.
+        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando últimos 400 registros con =1');
+        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1', 'length' => '400', 'iDisplayLength' => '400']);
         $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
         if ($respuesta === null) {
             $this->addLog('error', 'No se pudo obtener las líneas de tratamiento (intento 2).');
@@ -977,8 +976,8 @@ class RecevtService
             }
         }
 
-        // Pequeña pausa solo tras un POST real (no en los skips)
-        usleep(300000);
+        // Pequeña pausa solo tras un POST real
+        usleep(150000);
         return true;
     }
 
