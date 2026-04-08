@@ -982,7 +982,8 @@ class RecevtService
             return false;
         }
 
-        $this->addLog('debug', '  Respuesta: ' . substr(trim($respuesta), 0, 300));
+        $this->addLog('info', '  POST body: ' . $rawBody);
+        $this->addLog('info', '  Respuesta: ' . substr(trim($respuesta), 0, 300));
 
         // La respuesta es JSON: {"TOKEN": {"campo": []}} donde [] vacío = sin errores
         $json = json_decode($respuesta, true);
@@ -1000,6 +1001,28 @@ class RecevtService
                     return false;
                 }
             }
+        }
+
+        // ── Verificación post-save: releer la fila y comparar ──────────────
+        // Si tras el POST el servidor no devuelve los valores enviados, el
+        // registro no se persistió (aunque la respuesta diga "sin errores").
+        usleep(150000);
+        $v2 = $this->obtenerFilaCompleta($idReceta, $idRecetaLinea, $idRecetaLineaTratamiento);
+        if ($v2 !== null) {
+            $cel3v = (string)($v2['celdas'][3] ?? '');
+            preg_match('/id="fechaInicioTratamiento[^"]*"[^>]*value="([^"]*)"/', $cel3v, $mVI);
+            preg_match('/id="fechaFinTratamiento[^"]*"[^>]*value="([^"]*)"/', $cel3v, $mVF);
+            $realInicio = $mVI[1] ?? '';
+            $realFin    = $mVF[1] ?? '';
+            $expInicio  = $fechaInicio;
+            $expFin     = $fechaFin ?? '';
+            $okI = ($realInicio === $expInicio);
+            $okF = ($realFin === $expFin);
+            if (!$okI || !$okF) {
+                $this->addLog('error', "  ✗ NO PERSISTE: enviado Inicio='{$expInicio}' Fin='{$expFin}' · servidor devuelve Inicio='{$realInicio}' Fin='{$realFin}'");
+                return false;
+            }
+            $this->addLog('info', "  ✓ VERIF: servidor confirma Inicio='{$realInicio}' Fin='{$realFin}'");
         }
 
         // Pequeña pausa solo tras un POST real
