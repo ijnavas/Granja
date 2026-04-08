@@ -81,16 +81,19 @@ class RateLimiter
         $row = $sel->fetch();
 
         if (!$row || $row['expires_at'] <= $now) {
-            // Nueva ventana: insertar o sustituir
+            // Nueva ventana: insertar o sustituir.
+            // Nota: PDO con prepares reales no permite reutilizar el mismo
+            // placeholder, por eso usamos :expires_ins y :expires_upd.
             $up = $db->prepare(
                 'INSERT INTO rate_limits (bucket, `key`, attempts, expires_at)
-                 VALUES (:bucket, :key, 1, :expires)
-                 ON DUPLICATE KEY UPDATE attempts = 1, expires_at = :expires'
+                 VALUES (:bucket, :key, 1, :expires_ins)
+                 ON DUPLICATE KEY UPDATE attempts = 1, expires_at = :expires_upd'
             );
             $up->execute([
-                'bucket'  => $bucket,
-                'key'     => $hashedKey,
-                'expires' => $expires,
+                'bucket'      => $bucket,
+                'key'         => $hashedKey,
+                'expires_ins' => $expires,
+                'expires_upd' => $expires,
             ]);
             return true;
         }
