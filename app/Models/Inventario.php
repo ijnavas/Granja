@@ -123,10 +123,10 @@ class Inventario
         $stmt = $this->db->prepare("
             SELECT s.id AS silo_id, s.nombre AS silo_nombre,
                    g.nombre AS granja_nombre,
-                   s.stock_actual_kg  AS stock_kg,
+                   s.stock_actual_kg  AS stock_base_kg,
+                   s.stock_base_fecha,
                    s.capacidad_kg,
                    s.stock_minimo_kg,
-                   ROUND((s.stock_actual_kg / NULLIF(s.capacidad_kg, 0)) * 100) AS pct_stock,
                    GROUP_CONCAT(DISTINCT r.tipo_pienso ORDER BY r.fecha DESC SEPARATOR ' / ') AS tipo_pienso
             FROM silos s
             JOIN granjas g ON s.granja_id = g.id
@@ -141,7 +141,22 @@ class Inventario
             ORDER BY g.nombre, s.nombre
         ");
         $stmt->execute(['uid' => $userId]);
-        return $stmt->fetchAll();
+        $rows = $stmt->fetchAll();
+
+        // Enriquecer con stock real (descontando consumo desde stock_base_fecha)
+        $silo = new Silo();
+        foreach ($rows as &$r) {
+            $base    = (float)$r['stock_base_kg'];
+            $consumo = !empty($r['stock_base_fecha'])
+                ? $silo->consumoAcumulado((int)$r['silo_id'], $r['stock_base_fecha'], date('Y-m-d'))
+                : 0.0;
+            $real = max(0.0, $base - $consumo);
+            $r['stock_kg']  = round($real, 2);
+            $r['pct_stock'] = ((float)$r['capacidad_kg'] > 0)
+                ? (int) round(($real / (float)$r['capacidad_kg']) * 100)
+                : 0;
+        }
+        return $rows;
     }
 
     // ── Cálculo de líneas a una fecha dada ───────────────────────

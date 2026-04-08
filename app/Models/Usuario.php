@@ -16,12 +16,20 @@ class Usuario
     }
 
     /**
-     * Busca un usuario por email
+     * Columnas "seguras" de usuarios — NUNCA password_hash, recevet_password_enc ni recevet_session_cookie.
+     * Se usan en findById/findByEmail y cualquier consumo "normal" del modelo.
+     */
+    private const SAFE_COLS =
+        'id, nombre, apellidos, email, movil, rol, activo, '
+      . 'recevet_usuario, email_pedidos, created_at, updated_at';
+
+    /**
+     * Busca un usuario por email (sin secretos).
      */
     public function findByEmail(string $email): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT * FROM usuarios WHERE email = :email AND activo = 1 LIMIT 1'
+            'SELECT ' . self::SAFE_COLS . ' FROM usuarios WHERE email = :email AND activo = 1 LIMIT 1'
         );
         $stmt->execute(['email' => $email]);
         $row = $stmt->fetch();
@@ -29,12 +37,51 @@ class Usuario
     }
 
     /**
-     * Busca un usuario por ID
+     * Busca un usuario por ID (sin secretos).
      */
     public function findById(int $id): ?array
     {
         $stmt = $this->db->prepare(
-            'SELECT * FROM usuarios WHERE id = :id LIMIT 1'
+            'SELECT ' . self::SAFE_COLS . ' FROM usuarios WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    /**
+     * Variante interna que SÍ devuelve password_hash. Solo para authenticate().
+     */
+    private function findByEmailWithHash(string $email): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT id, email, password_hash FROM usuarios WHERE email = :email AND activo = 1 LIMIT 1'
+        );
+        $stmt->execute(['email' => $email]);
+        $row = $stmt->fetch();
+        return $row ?: null;
+    }
+
+    /**
+     * ¿Hay sesión Recevet activa? (no expone la cookie)
+     */
+    public function hasRecevetSession(int $id): bool
+    {
+        $stmt = $this->db->prepare(
+            'SELECT recevet_session_cookie FROM usuarios WHERE id = :id LIMIT 1'
+        );
+        $stmt->execute(['id' => $id]);
+        return (bool) $stmt->fetchColumn();
+    }
+
+    /**
+     * Devuelve recevet_password_enc + recevet_session_cookie (uso restringido a RecevtController).
+     */
+    public function findRecevetSecretsById(int $id): ?array
+    {
+        $stmt = $this->db->prepare(
+            'SELECT recevet_usuario, recevet_password_enc, recevet_session_cookie
+             FROM usuarios WHERE id = :id LIMIT 1'
         );
         $stmt->execute(['id' => $id]);
         $row = $stmt->fetch();
@@ -128,17 +175,18 @@ class Usuario
      */
     public function authenticate(string $email, string $password): ?array
     {
-        $user = $this->findByEmail($email);
-        if (!$user) return null;
+        $row = $this->findByEmailWithHash($email);
+        if (!$row) return null;
 
-        if (!password_verify($password, $user['password_hash'])) return null;
+        if (!password_verify($password, $row['password_hash'])) return null;
 
         // Re-hashear si el coste ha cambiado
-        if (password_needs_rehash($user['password_hash'], PASSWORD_BCRYPT, ['cost' => 12])) {
-            $this->updatePassword($user['id'], $password);
+        if (password_needs_rehash($row['password_hash'], PASSWORD_BCRYPT, ['cost' => 12])) {
+            $this->updatePassword((int)$row['id'], $password);
         }
 
-        return $user;
+        // Devolver el usuario "seguro" (sin password_hash) — el resto del sistema lo espera así.
+        return $this->findById((int)$row['id']);
     }
 
     /**

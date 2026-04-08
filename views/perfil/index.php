@@ -76,7 +76,7 @@
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         Recevet — Libro de Tratamientos
     </div>
-    <?php if (!empty($user['recevet_session_cookie'])): ?>
+    <?php if (!empty($user['recevet_session_set'])): ?>
         <div style="display:flex;align-items:center;gap:.5rem;font-size:.85rem;margin-bottom:.75rem">
             <span style="width:9px;height:9px;border-radius:50%;background:#16a34a;flex-shrink:0"></span>
             Sesión activa — usuario: <strong><?= e($user['recevet_usuario'] ?? '') ?></strong>

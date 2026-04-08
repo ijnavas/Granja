@@ -20,7 +20,11 @@ class PerfilController extends BaseController
     {
         auth_required();
         $uid  = Session::get('usuario_id');
-        $user = $this->model->findById($uid);
+        $user = $this->model->findById($uid) ?? [];
+        // Para la vista, exponer SOLO booleanos derivados, nunca los valores reales.
+        $secrets = $this->model->findRecevetSecretsById($uid) ?? [];
+        $user['recevet_password_set']  = !empty($secrets['recevet_password_enc']);
+        $user['recevet_session_set']   = !empty($secrets['recevet_session_cookie']);
 
         $this->view('perfil/index', [
             'user'      => $user,
@@ -139,8 +143,8 @@ class PerfilController extends BaseController
             $this->redirect('perfil');
         }
 
-        $user        = $this->model->findById($uid);
-        $passwordEnc = $user['recevet_password_enc'] ?? null; // Mantener la anterior si no se cambia
+        $secrets     = $this->model->findRecevetSecretsById($uid);
+        $passwordEnc = $secrets['recevet_password_enc'] ?? null; // Mantener la anterior si no se cambia
 
         if (!empty($recevtPassword)) {
             $passwordEnc = RecevtService::encryptPassword($recevtPassword);

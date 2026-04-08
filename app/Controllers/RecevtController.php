@@ -38,7 +38,7 @@ class RecevtController extends BaseController
         }
 
         $granjasRecevet  = array_values(array_filter($granjas, fn($g) => !empty($g['recevet_explotacion'])));
-        $sesionActiva    = !empty($usuario['recevet_session_cookie']);
+        $sesionActiva    = (new Usuario())->hasRecevetSession($uid);
         $esperandoCodigo = !empty($_SESSION['_recevet_2fa_pending']);
 
         $this->view('recevet/index', [
@@ -276,12 +276,13 @@ class RecevtController extends BaseController
 
         try {
             $usuario = (new Usuario())->findById($uid);
+            $secrets = (new Usuario())->findRecevetSecretsById($uid);
         } catch (\Throwable $e) {
             Session::flash('error', 'Error de base de datos: ' . $e->getMessage());
             $this->redirect('recevet');
         }
 
-        if (empty($usuario['recevet_session_cookie'])) {
+        if (empty($secrets['recevet_session_cookie'])) {
             Session::flash('error', 'Inicia sesión en Recevet primero.');
             $this->redirect('recevet');
         }
@@ -296,7 +297,7 @@ class RecevtController extends BaseController
         $allLogs = [];
 
         try {
-            $service  = new RecevtService(0, $usuario['recevet_session_cookie']);
+            $service  = new RecevtService(0, $secrets['recevet_session_cookie']);
             $loggedIn = $service->login();
             $allLogs  = array_merge($allLogs, $service->getLogs());
 

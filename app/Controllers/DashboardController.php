@@ -112,24 +112,20 @@ class DashboardController extends BaseController
     {
         $alertas = [];
 
-        // Silos por debajo del mínimo
-        $stmt = $this->db->prepare("
-            SELECT s.nombre, g.nombre AS granja,
-                   s.stock_actual_kg, s.stock_minimo_kg,
-                   ROUND((s.stock_actual_kg / s.capacidad_kg) * 100) AS pct
-            FROM silos s
-            JOIN granjas g ON s.granja_id = g.id
-            WHERE g.usuario_id = :uid
-              AND s.activo = 1
-              AND s.stock_actual_kg <= s.stock_minimo_kg
-            ORDER BY pct ASC
-        ");
-        $stmt->execute(['uid' => $userId]);
-        foreach ($stmt->fetchAll() as $row) {
+        // Silos por debajo del mínimo (usa el modelo para calcular stock real)
+        $silos = (new \App\Models\Silo())->allByUsuario($userId);
+        $bajos = array_filter(
+            $silos,
+            fn($s) => (float)$s['stock_actual_kg'] <= (float)$s['stock_minimo_kg']
+        );
+        usort($bajos, fn($a, $b) => ($a['pct_stock'] ?? 0) <=> ($b['pct_stock'] ?? 0));
+        foreach ($bajos as $row) {
             $alertas[] = [
                 'tipo'     => 'pienso',
                 'nivel'    => 'danger',
-                'mensaje'  => "Silo <strong>{$row['nombre']}</strong> ({$row['granja']}): {$row['stock_actual_kg']} kg — {$row['pct']}% de capacidad",
+                'mensaje'  => "Silo <strong>{$row['nombre']}</strong> ({$row['granja_nombre']}): "
+                            . number_format((float)$row['stock_actual_kg'], 0) . " kg — "
+                            . ($row['pct_stock'] ?? 0) . "% de capacidad",
             ];
         }
 
