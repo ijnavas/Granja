@@ -25,6 +25,32 @@ require ROOT_PATH . '/app/Helpers/functions.php';
 // Cargar variables de entorno desde .env (si existe)
 \App\Core\Env::load(ROOT_PATH . '/.env');
 
+// ── Configuración de errores ─────────────────────────────────
+// En producción: NUNCA mostrar errores al usuario, solo loguearlos.
+// En desarrollo (APP_DEBUG=true): mostrar todo.
+$__debug = \App\Core\Env::getBool('APP_DEBUG', false);
+error_reporting(E_ALL);
+ini_set('log_errors', '1');
+ini_set('display_errors', $__debug ? '1' : '0');
+ini_set('display_startup_errors', $__debug ? '1' : '0');
+
+// Handler global: convierte cualquier excepción no capturada en un 500
+// genérico sin filtrar detalles.
+set_exception_handler(function (\Throwable $e) use ($__debug): void {
+    error_log('Uncaught ' . get_class($e) . ': ' . $e->getMessage()
+        . ' in ' . $e->getFile() . ':' . $e->getLine()
+        . "\n" . $e->getTraceAsString());
+    http_response_code(500);
+    if ($__debug) {
+        echo '<pre style="font-family:monospace;padding:2rem">';
+        echo htmlspecialchars((string)$e, ENT_QUOTES, 'UTF-8');
+        echo '</pre>';
+    } else {
+        echo '<h1 style="font-family:sans-serif;padding:2rem">500 — Error interno del servidor</h1>';
+    }
+    exit;
+});
+
 // Iniciar sesión
 use App\Core\Session;
 use App\Core\Router;
