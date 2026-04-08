@@ -530,6 +530,7 @@ class RecevtService
             'sEcho'         => '1',
         ]);
 
+        // ── Primer intento: solo pendientes nuevos (idRecetaLineaTratamiento vacío) ──
         $postData = array_merge($baseParams, ['mostrarLineasCompletadas' => '0']);
         $this->addLog('info', 'Params AJAX: filtros=' . (isset($postData['filtros']) ? 'sí' : 'no')
             . ' upSeleccionada=' . ($postData['upSeleccionada'] ?? '(vacío)'));
@@ -540,6 +541,28 @@ class RecevtService
             return [];
         }
         $this->addLog('info', 'Respuesta AJAX (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
+
+        $json = json_decode($respuesta, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            $total = (int)($json['recordsTotal'] ?? $json['iTotalRecords'] ?? count($json['aaData'] ?? $json['data'] ?? []));
+            if ($total > 0) {
+                return $this->parsearLineasDesdeJson($json);
+            }
+        } else {
+            return $this->parsearLineasPendientes($respuesta);
+        }
+
+        // ── Fallback: registros con ID pero fechas posiblemente vacías/incorrectas ──
+        // El servidor pre-rellena fechaInicio con la fecha de dispensación (no +1 día).
+        // completarLineaConIDs detectará si el valor coincide con el calculado y saltará si ya es correcto.
+        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando registros existentes con =1');
+        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1']);
+        $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
+        if ($respuesta === null) {
+            $this->addLog('error', 'No se pudo obtener las líneas de tratamiento (intento 2).');
+            return [];
+        }
+        $this->addLog('info', 'Respuesta AJAX/1 (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
 
         $json = json_decode($respuesta, true);
         if (json_last_error() === JSON_ERROR_NONE) {
@@ -857,10 +880,15 @@ class RecevtService
             }
         }
 
-        // Si ya tiene fecha de inicio rellenada → ya completado, nada que hacer
-        if ($existingFechaInicio !== '') {
+        // Si ya tiene la fecha exacta que íbamos a poner → ya completado, nada que hacer.
+        // NO saltamos si el valor existente es distinto (ej: el servidor pre-rellena con la
+        // fecha de dispensación, pero nosotros queremos dispensación+1 día).
+        if ($existingFechaInicio !== '' && $existingFechaInicio === $fechaInicio) {
             $this->addLog('info', "  Ya completado (fechaInicio={$existingFechaInicio}) — omitiendo");
             return true;
+        }
+        if ($existingFechaInicio !== '') {
+            $this->addLog('info', "  Pre-rellenado con '{$existingFechaInicio}' → actualizando a '{$fechaInicio}'");
         }
 
         if (!$fechaInicioField) {
