@@ -1000,6 +1000,21 @@ class RecevtService
             }
         }
 
+        // ── Verificación post-save (solo primer registro con fechaFin enviada) ──
+        static $postSaveVerified = false;
+        if (!$postSaveVerified && $fechaFin !== null) {
+            $postSaveVerified = true;
+            usleep(200000);
+            $v2 = $this->obtenerFilaCompleta($idReceta, $idRecetaLinea, $idRecetaLineaTratamiento);
+            if ($v2 !== null) {
+                $cel3v = (string)($v2['celdas'][3] ?? '');
+                preg_match('/id="fechaInicioTratamiento[^"]*"[^>]*value="([^"]*)"/', $cel3v, $mVI);
+                preg_match('/id="fechaFinTratamiento[^"]*"[^>]*value="([^"]*)"/', $cel3v, $mVF);
+                $this->addLog('info', '  VERIF post-save: fechaInicio="' . ($mVI[1] ?? 'n/a') . '" fechaFin="' . ($mVF[1] ?? 'n/a') . '"');
+                $this->addLog('info', '  Esperado:        fechaInicio="' . $fechaInicio . '" fechaFin="' . $fechaFin . '"');
+            }
+        }
+
         // Pequeña pausa solo tras un POST real (no en los skips)
         usleep(300000);
         return true;
@@ -1043,7 +1058,12 @@ class RecevtService
             if (!$match) continue;
             $url = (strpos($src, 'http') === 0) ? $src : self::BASE_URL . '/' . ltrim($src, '/');
             $jsContent = $this->request('GET', $url, []);
-            if ($jsContent === null) continue;
+            if ($jsContent === null) { $this->addLog('info', "FETCH null para [{$src}]"); continue; }
+            // Para inicializa_ajax: dump first 3000 chars to see obtenerRespuesta
+            if (strpos($src, 'inicializa_ajax') !== false) {
+                $this->addLog('info', "inicializa_ajax (primeros 3000): " . substr($jsContent, 0, 3000));
+                continue;
+            }
             // Buscar funciones relevantes
             $searchFns = strpos($src, 'libroTratamiento') !== false
                 ? ['actualizarLineas', 'obtenerLineaTratamiento', 'obtenerValoresDispensacion']
