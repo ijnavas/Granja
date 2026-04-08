@@ -241,6 +241,10 @@ class RecevtService
 
     public function sincronizar(string $explotacion, bool $dryRun = false): bool
     {
+        // Permitir procesar todos los registros sin que PHP mate el proceso
+        @set_time_limit(0);
+        @ini_set('max_execution_time', '0');
+
         if (!$this->loggedIn) {
             $this->addLog('error', 'No hay sesión activa.');
             return false;
@@ -550,11 +554,11 @@ class RecevtService
             return $this->parsearLineasPendientes($respuesta);
         }
 
-        // ── Fallback: registros con ID pero fechas posiblemente vacías/incorrectas ──
-        // Subimos a 400 para cubrir todos los registros del usuario (actualmente 394).
-        // El skip temprano "Ya completado" evita hacer POSTs innecesarios.
-        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando últimos 400 registros con =1');
-        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1', 'length' => '400', 'iDisplayLength' => '400']);
+        // ── Fallback: todos los registros con ID pero fechas posiblemente vacías/incorrectas ──
+        // length=-1 / 99999 = sin límite (DataTables convention). El skip temprano
+        // "Ya completado" evita POSTs innecesarios para los ya procesados.
+        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando TODOS los registros con =1');
+        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1', 'length' => '-1', 'iDisplayLength' => '-1']);
         $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
         if ($respuesta === null) {
             $this->addLog('error', 'No se pudo obtener las líneas de tratamiento (intento 2).');
