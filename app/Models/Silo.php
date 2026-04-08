@@ -78,24 +78,29 @@ class Silo
 
     /**
      * Reconstruye el stock real de un silo en una fecha dada replicando el
-     * timeline completo de recargas desde la última calibración.
+     * timeline completo de eventos (calibración + recargas).
      *
      * Modelo:
      *   - (silos.stock_actual_kg, silos.stock_base_fecha) representan la última
-     *     CALIBRACIÓN manual del silo — el estado físico conocido en una fecha.
-     *     Se fijan solo por silos/crear y silos/editar, no por recargas.
-     *   - silo_recargas contiene todas las recargas con su fecha real. Las que
-     *     tienen fecha >= calibracion_fecha se replican en orden cronológico,
-     *     aplicando el consumo entre evento y evento.
+     *     CALIBRACIÓN manual: un evento 'set' que fija el estado a un valor
+     *     concreto en una fecha concreta (sobrescribe lo anterior).
+     *   - silo_recargas contiene recargas: eventos 'add' que suman cantidad.
      *
-     * Algoritmo:
-     *   state = calibracion_kg
-     *   date  = calibracion_fecha
-     *   for each recarga R (asc fecha, R.fecha >= calibracion_fecha):
-     *       state = max(0, state - consumo(date, R.fecha)) + R.cantidad
-     *       date  = R.fecha
-     *   state = max(0, state - consumo(date, target_date))
-     *   return state
+     * Algoritmo (calibración como evento más en la timeline):
+     *   events = [(cal_fecha, 'set', cal_kg)] ∪ [(r.fecha, 'add', r.kg) ∀r]
+     *   sort asc (fecha, tipo: 'add' antes que 'set' si empatan — la
+     *   calibración del mismo día manda)
+     *   state = 0, date = first event date
+     *   for each event e:
+     *       if e.fecha > date: state = max(0, state - consumo(date, e.fecha))
+     *       if e.type == 'set': state = e.kg
+     *       else:               state += e.kg
+     *       date = e.fecha
+     *   if target > date: state = max(0, state - consumo(date, target))
+     *
+     * Esto permite recargas con fecha anterior a la calibración: si el usuario
+     * calibra hoy a 0 kg y luego registra una recarga de hace 3 días con 12.000
+     * kg, la calibración de hoy "mata" el estado previo, no al revés.
      */
     public function rebuildStockAt(int $siloId, string $targetDate): float
     {
@@ -106,32 +111,62 @@ class Silo
         $s = $siloStmt->fetch();
         if (!$s) return 0.0;
 
-        $state = (float)$s['stock_actual_kg'];
-        $date  = !empty($s['stock_base_fecha']) ? (string)$s['stock_base_fecha'] : null;
-
-        // Sin fecha de calibración no hay consumo que descontar.
-        if ($date === null) return $state;
-
-        // Recargas posteriores (o iguales) a la calibración, orden cronológico.
+        // Cargar todas las recargas (sin filtrar por calibración — la calibración
+        // es ahora un evento más dentro del timeline).
         $rStmt = $this->db->prepare("
             SELECT fecha, cantidad_kg
             FROM silo_recargas
-            WHERE silo_id = :sid AND fecha >= :cal
+            WHERE silo_id = :sid
             ORDER BY fecha ASC, id ASC
         ");
-        $rStmt->execute(['sid' => $siloId, 'cal' => $date]);
+        $rStmt->execute(['sid' => $siloId]);
         $recargas = $rStmt->fetchAll();
+
+        // Construir timeline unificado.
+        // Orden de desempate (misma fecha): las recargas ('add') se aplican ANTES
+        // que la calibración ('set'). Así si un usuario recarga y luego calibra
+        // el mismo día, la calibración manda.
+        $events = [];
+        foreach ($recargas as $r) {
+            $events[] = [
+                'fecha' => (string)$r['fecha'],
+                'tipo'  => 'add',
+                'kg'    => (float)$r['cantidad_kg'],
+                'ord'   => 0,
+            ];
+        }
+        if (!empty($s['stock_base_fecha'])) {
+            $events[] = [
+                'fecha' => (string)$s['stock_base_fecha'],
+                'tipo'  => 'set',
+                'kg'    => (float)$s['stock_actual_kg'],
+                'ord'   => 1,
+            ];
+        }
+
+        // Sin ningún evento: stock desconocido, devolvemos 0.
+        if (!$events) return 0.0;
+
+        usort($events, function ($a, $b) {
+            return ($a['fecha'] <=> $b['fecha']) ?: ($a['ord'] <=> $b['ord']);
+        });
 
         // Preload de lotes+tablas una sola vez, reusado para cada segmento.
         [$lotes, $tablas] = $this->loadConsumoData($siloId);
 
-        foreach ($recargas as $r) {
-            $rFecha = (string)$r['fecha'];
-            if ($rFecha > $date) {
-                $state = max(0.0, $state - $this->consumoEntre($date, $rFecha, $lotes, $tablas));
+        $state = 0.0;
+        $date  = $events[0]['fecha'];
+
+        foreach ($events as $e) {
+            if ($e['fecha'] > $date) {
+                $state = max(0.0, $state - $this->consumoEntre($date, $e['fecha'], $lotes, $tablas));
             }
-            $state += (float)$r['cantidad_kg'];
-            $date = $rFecha;
+            if ($e['tipo'] === 'set') {
+                $state = $e['kg'];
+            } else {
+                $state += $e['kg'];
+            }
+            $date = $e['fecha'];
         }
 
         if ($targetDate > $date) {
@@ -245,10 +280,18 @@ class Silo
 
     public function create(array $data, array $naveIds): int
     {
-        $stmt = $this->db->prepare("
-            INSERT INTO silos (granja_id, nombre, capacidad_kg, stock_actual_kg, stock_minimo_kg, stock_base_fecha, descripcion)
-            VALUES (:granja_id, :nombre, :capacidad_kg, :stock_actual_kg, :stock_minimo_kg, CURDATE(), :descripcion)
-        ");
+        // Si el usuario crea el silo con stock_actual_kg=0, interpretamos que
+        // NO está calibrando manualmente (es el default del form). Dejamos
+        // stock_base_fecha=NULL para que el replay no inyecte un evento 'set'
+        // que bloquee recargas retroactivas posteriores. Si introduce un valor
+        // >0, sí lo tratamos como calibración explícita con fecha de hoy.
+        $tieneCalibracion = ((float)($data['stock_actual_kg'] ?? 0)) > 0;
+        $sql = $tieneCalibracion
+            ? "INSERT INTO silos (granja_id, nombre, capacidad_kg, stock_actual_kg, stock_minimo_kg, stock_base_fecha, descripcion)
+               VALUES (:granja_id, :nombre, :capacidad_kg, :stock_actual_kg, :stock_minimo_kg, CURDATE(), :descripcion)"
+            : "INSERT INTO silos (granja_id, nombre, capacidad_kg, stock_actual_kg, stock_minimo_kg, stock_base_fecha, descripcion)
+               VALUES (:granja_id, :nombre, :capacidad_kg, :stock_actual_kg, :stock_minimo_kg, NULL, :descripcion)";
+        $stmt = $this->db->prepare($sql);
         $stmt->execute($data);
         $id = (int) $this->db->lastInsertId();
         $this->syncNaves($id, $naveIds);
@@ -257,11 +300,12 @@ class Silo
 
     public function update(int $id, int $userId, array $data, array $naveIds): bool
     {
-        // Editar el silo desde el formulario equivale a una CALIBRACIÓN manual:
-        // el valor introducido en stock_actual_kg es el estado físico conocido HOY.
-        // Fijamos stock_base_fecha = CURDATE() para que rebuildStockAt arranque
-        // desde este punto y solo procese recargas con fecha >= hoy. Las recargas
-        // anteriores quedan como histórico informativo pero no afectan al cálculo.
+        // Editar el silo: si el usuario introduce stock_actual_kg > 0, equivale
+        // a una CALIBRACIÓN manual HOY (sobrescribe el estado en el replay).
+        // Si lo deja en 0, asumimos que no quiere calibrar y limpiamos la
+        // calibración (stock_base_fecha = NULL) para no bloquear recargas.
+        $tieneCalibracion = ((float)($data['stock_actual_kg'] ?? 0)) > 0;
+        $fechaSql = $tieneCalibracion ? 'CURDATE()' : 'NULL';
         $stmt = $this->db->prepare("
             UPDATE silos s
             JOIN granjas g ON s.granja_id = g.id
@@ -269,7 +313,7 @@ class Silo
                 s.capacidad_kg = :capacidad_kg,
                 s.stock_actual_kg = :stock_actual_kg,
                 s.stock_minimo_kg = :stock_minimo_kg,
-                s.stock_base_fecha = CURDATE(),
+                s.stock_base_fecha = {$fechaSql},
                 s.descripcion = :descripcion
             WHERE s.id = :id AND g.usuario_id = :usuario_id
         ");
