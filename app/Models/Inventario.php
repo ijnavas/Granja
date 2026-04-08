@@ -143,14 +143,10 @@ class Inventario
         $stmt->execute(['uid' => $userId]);
         $rows = $stmt->fetchAll();
 
-        // Enriquecer con stock real (descontando consumo desde stock_base_fecha)
+        // Enriquecer con stock real via replay completo del timeline de recargas.
         $silo = new Silo();
         foreach ($rows as &$r) {
-            $base    = (float)$r['stock_base_kg'];
-            $consumo = !empty($r['stock_base_fecha'])
-                ? $silo->consumoAcumulado((int)$r['silo_id'], $r['stock_base_fecha'], date('Y-m-d'))
-                : 0.0;
-            $real = max(0.0, $base - $consumo);
+            $real = $silo->rebuildStockAt((int)$r['silo_id'], date('Y-m-d'));
             $r['stock_kg']  = round($real, 2);
             $r['pct_stock'] = ((float)$r['capacidad_kg'] > 0)
                 ? (int) round(($real / (float)$r['capacidad_kg']) * 100)

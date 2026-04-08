@@ -52,27 +52,23 @@ class Silo
     }
 
     /**
-     * Enriquece una fila de silo con el stock real (descontando consumo desde
-     * stock_base_fecha hasta hoy) y sobreescribe `stock_actual_kg` con ese
-     * valor para que vistas/dashboard/etc. consuman datos correctos.
+     * Enriquece una fila de silo con el stock real calculado via replay del
+     * timeline de recargas desde la calibración (stock_actual_kg/stock_base_fecha
+     * en la BD son ahora la CALIBRACIÓN, no un estado consolidado).
      *
-     * Mantiene el valor crudo de la BD en `stock_base_kg` por si algo lo necesita.
+     * Sobreescribe `stock_actual_kg` con el real calculado por compatibilidad
+     * con vistas existentes y mantiene el crudo en `stock_base_kg`.
      */
     private function withStockReal(array $row): array
     {
-        $base       = (float)($row['stock_actual_kg'] ?? 0);
-        $baseFecha  = $row['stock_base_fecha'] ?? null;
-        $consumo    = $baseFecha
-            ? $this->consumoAcumulado((int)$row['id'], $baseFecha, date('Y-m-d'))
-            : 0.0;
+        $base = (float)($row['stock_actual_kg'] ?? 0);
+        $real = $this->rebuildStockAt((int)$row['id'], date('Y-m-d'));
 
-        $real = max(0.0, $base - $consumo);
-
-        $row['stock_base_kg']      = $base;
-        $row['stock_consumido_kg'] = round($consumo, 2);
+        $row['stock_base_kg']      = $base;                 // calibración cruda
         $row['stock_real_kg']      = round($real, 2);
         // Compat: el resto del sistema lee stock_actual_kg, lo apuntamos al real.
         $row['stock_actual_kg']    = round($real, 2);
+        $row['stock_consumido_kg'] = 0; // legacy, deprecated con el modelo replay
         $row['pct_stock']          = ((float)($row['capacidad_kg'] ?? 0) > 0)
             ? (int) round(($real / (float)$row['capacidad_kg']) * 100)
             : 0;
@@ -81,22 +77,92 @@ class Silo
     }
 
     /**
-     * Consumo acumulado (kg) entre dos fechas para los lotes activos del silo.
-     * Itera día a día y, para cada lote, busca la línea de tabla de
-     * crecimiento correspondiente a la semana del lote en ese día.
+     * Reconstruye el stock real de un silo en una fecha dada replicando el
+     * timeline completo de recargas desde la última calibración.
      *
-     * Convención: $desde es exclusivo (ya está "contado" en el stock base),
-     * $hasta es exclusivo también (todavía no consumido). Es decir, calcula
-     * el consumo de los días [$desde+1 .. $hasta-1] inclusive — el consumo
-     * del día de hoy aún no se ha producido.
+     * Modelo:
+     *   - (silos.stock_actual_kg, silos.stock_base_fecha) representan la última
+     *     CALIBRACIÓN manual del silo — el estado físico conocido en una fecha.
+     *     Se fijan solo por silos/crear y silos/editar, no por recargas.
+     *   - silo_recargas contiene todas las recargas con su fecha real. Las que
+     *     tienen fecha >= calibracion_fecha se replican en orden cronológico,
+     *     aplicando el consumo entre evento y evento.
+     *
+     * Algoritmo:
+     *   state = calibracion_kg
+     *   date  = calibracion_fecha
+     *   for each recarga R (asc fecha, R.fecha >= calibracion_fecha):
+     *       state = max(0, state - consumo(date, R.fecha)) + R.cantidad
+     *       date  = R.fecha
+     *   state = max(0, state - consumo(date, target_date))
+     *   return state
+     */
+    public function rebuildStockAt(int $siloId, string $targetDate): float
+    {
+        $siloStmt = $this->db->prepare(
+            "SELECT stock_actual_kg, stock_base_fecha FROM silos WHERE id = :id"
+        );
+        $siloStmt->execute(['id' => $siloId]);
+        $s = $siloStmt->fetch();
+        if (!$s) return 0.0;
+
+        $state = (float)$s['stock_actual_kg'];
+        $date  = !empty($s['stock_base_fecha']) ? (string)$s['stock_base_fecha'] : null;
+
+        // Sin fecha de calibración no hay consumo que descontar.
+        if ($date === null) return $state;
+
+        // Recargas posteriores (o iguales) a la calibración, orden cronológico.
+        $rStmt = $this->db->prepare("
+            SELECT fecha, cantidad_kg
+            FROM silo_recargas
+            WHERE silo_id = :sid AND fecha >= :cal
+            ORDER BY fecha ASC, id ASC
+        ");
+        $rStmt->execute(['sid' => $siloId, 'cal' => $date]);
+        $recargas = $rStmt->fetchAll();
+
+        // Preload de lotes+tablas una sola vez, reusado para cada segmento.
+        [$lotes, $tablas] = $this->loadConsumoData($siloId);
+
+        foreach ($recargas as $r) {
+            $rFecha = (string)$r['fecha'];
+            if ($rFecha > $date) {
+                $state = max(0.0, $state - $this->consumoEntre($date, $rFecha, $lotes, $tablas));
+            }
+            $state += (float)$r['cantidad_kg'];
+            $date = $rFecha;
+        }
+
+        if ($targetDate > $date) {
+            $state = max(0.0, $state - $this->consumoEntre($date, $targetDate, $lotes, $tablas));
+        }
+
+        return $state;
+    }
+
+    /**
+     * Consumo acumulado (kg) entre dos fechas para los lotes activos del silo.
+     *
+     * Convención: $desde exclusivo, $hasta exclusivo. Es decir, calcula el
+     * consumo de los días [$desde+1 .. $hasta-1] inclusive — el consumo del
+     * día $hasta aún no se ha producido.
+     *
+     * Se mantiene como API pública para consumidores externos; internamente
+     * reusa loadConsumoData + consumoEntre.
      */
     public function consumoAcumulado(int $siloId, string $desde, string $hasta): float
     {
-        $tsDesde = strtotime($desde);
-        $tsHasta = strtotime($hasta);
-        if (!$tsDesde || !$tsHasta || $tsHasta <= $tsDesde) return 0.0;
+        [$lotes, $tablas] = $this->loadConsumoData($siloId);
+        return $this->consumoEntre($desde, $hasta, $lotes, $tablas);
+    }
 
-        // Lotes activos de las naves abastecidas por este silo + tabla_id de cada lote
+    /**
+     * Carga lotes activos del silo + líneas de tabla de crecimiento relevantes,
+     * para poder calcular consumo en varios segmentos sin re-consultar BD.
+     */
+    private function loadConsumoData(int $siloId): array
+    {
         $stmt = $this->db->prepare("
             SELECT l.id, l.num_animales, l.fecha_nacimiento, tr.tabla_id
             FROM silo_nave sn
@@ -108,9 +174,7 @@ class Silo
         ");
         $stmt->execute(['silo_id' => $siloId]);
         $lotes = $stmt->fetchAll();
-        if (!$lotes) return 0.0;
 
-        // Cargar todas las líneas de tabla relevantes una sola vez
         $tablaIds = array_values(array_unique(array_filter(array_map(
             fn($l) => (int)($l['tabla_id'] ?? 0), $lotes
         ))));
@@ -130,12 +194,25 @@ class Silo
             }
         }
 
+        return [$lotes, $tablas];
+    }
+
+    /**
+     * Consumo entre dos fechas dados lotes+tablas ya cargados (versión interna
+     * usada en bucles donde reloadear por cada segmento sería innecesario).
+     */
+    private function consumoEntre(string $desde, string $hasta, array $lotes, array $tablas): float
+    {
+        $tsDesde = strtotime($desde);
+        $tsHasta = strtotime($hasta);
+        if (!$tsDesde || !$tsHasta || $tsHasta <= $tsDesde) return 0.0;
+        if (!$lotes) return 0.0;
+
         $total = 0.0;
-        // Iterar por días: del día siguiente a $desde hasta el día anterior a $hasta (inclusive)
         for ($d = $tsDesde + 86400; $d < $tsHasta; $d += 86400) {
             foreach ($lotes as $l) {
                 $tsNac = strtotime((string)$l['fecha_nacimiento']);
-                if (!$tsNac || $tsNac > $d) continue; // aún no había nacido ese día
+                if (!$tsNac || $tsNac > $d) continue;
 
                 $semana = (int) ceil(($d - $tsNac) / 86400 / 7);
                 if ($semana < 1) $semana = 1;
@@ -143,7 +220,7 @@ class Silo
                 $tablaId = (int)($l['tabla_id'] ?? 0);
                 if (!$tablaId || empty($tablas[$tablaId])) continue;
 
-                // Buscar la línea con la mayor semana <= semana actual
+                // Línea con la mayor semana <= semana actual.
                 $consumoG = 0.0;
                 foreach ($tablas[$tablaId] as $sem => $g) {
                     if ($sem <= $semana) $consumoG = $g;
@@ -180,10 +257,11 @@ class Silo
 
     public function update(int $id, int $userId, array $data, array $naveIds): bool
     {
-        // Editar el silo desde el formulario equivale a una "calibración manual":
-        // el valor introducido en stock_actual_kg es el stock real conocido HOY,
-        // así que reseteamos stock_base_fecha = CURDATE() para que el descuento
-        // por consumo arranque desde cero a partir de ahora.
+        // Editar el silo desde el formulario equivale a una CALIBRACIÓN manual:
+        // el valor introducido en stock_actual_kg es el estado físico conocido HOY.
+        // Fijamos stock_base_fecha = CURDATE() para que rebuildStockAt arranque
+        // desde este punto y solo procese recargas con fecha >= hoy. Las recargas
+        // anteriores quedan como histórico informativo pero no afectan al cálculo.
         $stmt = $this->db->prepare("
             UPDATE silos s
             JOIN granjas g ON s.granja_id = g.id
@@ -274,235 +352,59 @@ class Silo
         return $stmt->fetch() ?: null;
     }
 
-    public function updateRecarga(int $recargaId, array $data, float $cantidadAnterior, int $siloAnterior): void
+    /**
+     * Con el modelo replay, actualizar una recarga es simplemente tocar la fila.
+     * El stock se recalcula siempre dinámicamente desde silo_recargas + calibración.
+     *
+     * $cantidadAnterior y $siloAnterior se mantienen en la firma por back-compat
+     * con el controller pero ya no se usan.
+     */
+    public function updateRecarga(int $recargaId, array $data, float $cantidadAnterior = 0, int $siloAnterior = 0): void
     {
         // Defensa: la columna `albaran` no existe en silo_recargas; el albarán se
         // almacena dentro de observaciones (convención compartida con EscaneoController).
         unset($data['albaran']);
 
-        $this->db->beginTransaction();
-        try {
-            // Cargar estado completo actual de la recarga (fecha/silo antiguos reales).
-            $old = $this->findRecarga($recargaId);
-            if (!$old) {
-                throw new \RuntimeException('Recarga no encontrada');
-            }
-
-            // 1. Revertir el efecto de la recarga antigua sobre su silo original.
-            $this->revertRecargaEffect(
-                (int)$old['silo_id'],
-                (string)$old['fecha'],
-                (float)$old['cantidad_kg'],
-                $recargaId
-            );
-
-            // 2. Actualizar la fila silo_recargas con los nuevos valores.
-            $stmt = $this->db->prepare("
-                UPDATE silo_recargas
-                SET silo_id = :silo_id, fecha = :fecha, cantidad_kg = :cantidad_kg,
-                    tipo_pienso = :tipo_pienso, proveedor = :proveedor,
-                    observaciones = :observaciones
-                WHERE id = :id
-            ");
-            $data['id'] = $recargaId;
-            $stmt->execute($data);
-
-            // 3. Aplicar el efecto de la recarga nueva sobre el silo (posiblemente otro).
-            $this->applyRecargaEffect(
-                (int)$data['silo_id'],
-                (string)$data['fecha'],
-                (float)$data['cantidad_kg']
-            );
-
-            $this->db->commit();
-        } catch (\Throwable $e) {
-            if ($this->db->inTransaction()) $this->db->rollBack();
-            error_log('Silo::updateRecarga FAIL recarga=' . $recargaId
-                    . ' :: ' . $e->getMessage()
-                    . ' @ ' . $e->getFile() . ':' . $e->getLine());
-            throw $e;
-        }
+        $stmt = $this->db->prepare("
+            UPDATE silo_recargas
+            SET silo_id = :silo_id, fecha = :fecha, cantidad_kg = :cantidad_kg,
+                tipo_pienso = :tipo_pienso, proveedor = :proveedor,
+                observaciones = :observaciones
+            WHERE id = :id
+        ");
+        $data['id'] = $recargaId;
+        $stmt->execute($data);
     }
 
+    /**
+     * Con el modelo replay, añadir una recarga es un simple INSERT. El stock
+     * se reconstruye dinámicamente al leer el silo via rebuildStockAt.
+     */
     public function addRecarga(int $siloId, float $cantidadKg, string $fecha, ?string $proveedor, ?string $obs, int $userId, ?string $tipoPienso = null): int
     {
-        $this->db->beginTransaction();
-        try {
-            $stmt = $this->db->prepare("
-                INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, observaciones, usuario_id)
-                VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :observaciones, :usuario_id)
-            ");
-            $stmt->execute([
-                'silo_id'      => $siloId,
-                'fecha'        => $fecha,
-                'cantidad_kg'  => $cantidadKg,
-                'tipo_pienso'  => $tipoPienso,
-                'proveedor'    => $proveedor,
-                'observaciones'=> $obs,
-                'usuario_id'   => $userId,
-            ]);
-            $id = (int) $this->db->lastInsertId();
-
-            // Consolidar stock y mover base_fecha → helper compartido.
-            $this->applyRecargaEffect($siloId, $fecha, $cantidadKg);
-
-            $this->db->commit();
-            return $id;
-        } catch (\Throwable $e) {
-            if ($this->db->inTransaction()) $this->db->rollBack();
-            error_log('Silo::addRecarga FAIL silo=' . $siloId . ' fecha=' . $fecha . ' kg=' . $cantidadKg
-                    . ' :: ' . $e->getMessage()
-                    . ' @ ' . $e->getFile() . ':' . $e->getLine());
-            throw $e;
-        }
+        $stmt = $this->db->prepare("
+            INSERT INTO silo_recargas (silo_id, fecha, cantidad_kg, tipo_pienso, proveedor, observaciones, usuario_id)
+            VALUES (:silo_id, :fecha, :cantidad_kg, :tipo_pienso, :proveedor, :observaciones, :usuario_id)
+        ");
+        $stmt->execute([
+            'silo_id'      => $siloId,
+            'fecha'        => $fecha,
+            'cantidad_kg'  => $cantidadKg,
+            'tipo_pienso'  => $tipoPienso,
+            'proveedor'    => $proveedor,
+            'observaciones'=> $obs,
+            'usuario_id'   => $userId,
+        ]);
+        return (int) $this->db->lastInsertId();
     }
 
+    /**
+     * Con el modelo replay, borrar una recarga es un simple DELETE.
+     */
     public function deleteRecarga(int $recargaId, int $siloId): void
     {
-        $this->db->beginTransaction();
-        try {
-            // Cargar datos completos antes de borrar (fecha + cantidad).
-            $stmt = $this->db->prepare(
-                "SELECT fecha, cantidad_kg FROM silo_recargas WHERE id = :id AND silo_id = :silo_id"
-            );
-            $stmt->execute(['id' => $recargaId, 'silo_id' => $siloId]);
-            $r = $stmt->fetch();
-            if (!$r) { $this->db->rollBack(); return; }
-
-            // 1. Revertir efecto sobre el silo (maneja el caso "era la más reciente").
-            //    Pasamos $recargaId como exclude para que el MAX de fecha ignore esta fila,
-            //    aunque técnicamente aún no la hemos borrado.
-            $this->revertRecargaEffect(
-                $siloId,
-                (string)$r['fecha'],
-                (float)$r['cantidad_kg'],
-                $recargaId
-            );
-
-            // 2. Borrar la fila.
-            $this->db->prepare("DELETE FROM silo_recargas WHERE id = :id")
-                ->execute(['id' => $recargaId]);
-
-            $this->db->commit();
-        } catch (\Throwable $e) {
-            if ($this->db->inTransaction()) $this->db->rollBack();
-            error_log('Silo::deleteRecarga FAIL recarga=' . $recargaId . ' silo=' . $siloId
-                    . ' :: ' . $e->getMessage()
-                    . ' @ ' . $e->getFile() . ':' . $e->getLine());
-            throw $e;
-        }
-    }
-
-    // ── Helpers de stock ─────────────────────────────────────────
-
-    /**
-     * Aplica el efecto de una recarga sobre (stock_actual_kg, stock_base_fecha) del silo.
-     *
-     * Invariante que mantiene: `stock_base_fecha = MAX(recargas.fecha)` para el silo.
-     *
-     * - Si la recarga es posterior a la base actual: consolida el stock real hasta esa
-     *   fecha y desplaza base_fecha hacia adelante.
-     * - Si la recarga es anterior a la base actual (inserción retroactiva): suma la
-     *   cantidad sin tocar base_fecha (la consolidación posterior ya absorberá el efecto
-     *   linealmente).
-     */
-    private function applyRecargaEffect(int $siloId, string $recargaFecha, float $cantidadKg): void
-    {
-        $cur = $this->db->prepare("SELECT stock_actual_kg, stock_base_fecha FROM silos WHERE id = :id");
-        $cur->execute(['id' => $siloId]);
-        $silo = $cur->fetch();
-        if (!$silo) return;
-
-        $base       = (float)$silo['stock_actual_kg'];
-        $baseFecha  = !empty($silo['stock_base_fecha']) ? (string)$silo['stock_base_fecha'] : $recargaFecha;
-
-        if ($recargaFecha >= $baseFecha) {
-            // Caso normal: recarga al día o posterior → consolidar y deslizar base_fecha.
-            $consumo   = ($baseFecha < $recargaFecha)
-                ? $this->consumoAcumulado($siloId, $baseFecha, $recargaFecha)
-                : 0.0;
-            $nuevoBase = max(0.0, $base - $consumo) + $cantidadKg;
-            $nuevaFecha = $recargaFecha;
-        } else {
-            // Recarga retroactiva (fecha anterior a la base actual): suma lineal,
-            // base_fecha no se mueve hacia atrás (perdería el historial consolidado).
-            $nuevoBase  = $base + $cantidadKg;
-            $nuevaFecha = $baseFecha;
-        }
-
-        $upd = $this->db->prepare("
-            UPDATE silos SET stock_actual_kg = :stock, stock_base_fecha = :fecha WHERE id = :id
-        ");
-        $upd->execute(['stock' => $nuevoBase, 'fecha' => $nuevaFecha, 'id' => $siloId]);
-    }
-
-    /**
-     * Revierte el efecto de una recarga sobre (stock_actual_kg, stock_base_fecha).
-     *
-     * Dos casos:
-     *
-     * A) La recarga era la MÁS RECIENTE del silo (fecha == stock_base_fecha).
-     *    Hay que:
-     *      1. Buscar la fecha máxima de las OTRAS recargas del silo.
-     *      2. Si existe: mover base_fecha a esa fecha previa y recuperar el consumo
-     *         que se había absorbido en la consolidación → `+ consumo(prev, fecha)`.
-     *      3. Si no quedan otras recargas: simple resta, base_fecha se queda donde
-     *         está (equivale a "el silo queda como si no hubiera ocurrido nada").
-     *
-     * B) La recarga NO era la más reciente. Su cantidad se fue sumando linealmente
-     *    en las consolidaciones posteriores, así que basta con restarla. base_fecha
-     *    no cambia.
-     *
-     * @param int $siloId        Silo afectado.
-     * @param string $fecha      Fecha de la recarga que se revierte.
-     * @param float $cantidad    Cantidad de la recarga que se revierte.
-     * @param int $excludeId     ID de la recarga a excluir del MAX (para update/delete).
-     */
-    private function revertRecargaEffect(int $siloId, string $fecha, float $cantidad, int $excludeId): void
-    {
-        $cur = $this->db->prepare("SELECT stock_actual_kg, stock_base_fecha FROM silos WHERE id = :id");
-        $cur->execute(['id' => $siloId]);
-        $silo = $cur->fetch();
-        if (!$silo) return;
-
-        $base      = (float)$silo['stock_actual_kg'];
-        $baseFecha = (string)($silo['stock_base_fecha'] ?? '');
-
-        // ¿Era la recarga más reciente? (La que fija stock_base_fecha.)
-        $eraMasReciente = ($baseFecha !== '' && $fecha === $baseFecha);
-
-        if ($eraMasReciente) {
-            // Buscar la fecha máxima de las OTRAS recargas del silo.
-            $q = $this->db->prepare("
-                SELECT MAX(fecha) FROM silo_recargas
-                WHERE silo_id = :sid AND id != :rid
-            ");
-            $q->execute(['sid' => $siloId, 'rid' => $excludeId]);
-            $prevFecha = $q->fetchColumn();
-
-            if ($prevFecha) {
-                // Mover base_fecha a la recarga anterior y recuperar el consumo
-                // que se había absorbido al consolidar esta recarga.
-                $recuperado = $this->consumoAcumulado($siloId, (string)$prevFecha, $fecha);
-                $nuevoBase  = max(0.0, $base - $cantidad + $recuperado);
-                $nuevaFecha = (string)$prevFecha;
-            } else {
-                // No quedan otras recargas: restar y dejar base_fecha donde estaba.
-                // (No podemos reconstruir un estado pre-recarga sin historial adicional.)
-                $nuevoBase  = max(0.0, $base - $cantidad);
-                $nuevaFecha = $baseFecha;
-            }
-        } else {
-            // No era la más reciente: consolidaciones posteriores absorbieron su cantidad
-            // linealmente. Resta simple, base_fecha intacto.
-            $nuevoBase  = max(0.0, $base - $cantidad);
-            $nuevaFecha = $baseFecha;
-        }
-
-        $upd = $this->db->prepare("
-            UPDATE silos SET stock_actual_kg = :stock, stock_base_fecha = :fecha WHERE id = :id
-        ");
-        $upd->execute(['stock' => $nuevoBase, 'fecha' => $nuevaFecha, 'id' => $siloId]);
+        $this->db->prepare("DELETE FROM silo_recargas WHERE id = :id AND silo_id = :silo_id")
+            ->execute(['id' => $recargaId, 'silo_id' => $siloId]);
     }
 
     /**
@@ -546,22 +448,13 @@ class Silo
             $totalDiarioKg += $consumoDiarioKg;
         }
 
-        // Stock disponible hasta mínimo — usar el stock REAL (no el base)
-        $siloData = $this->db->prepare("
-            SELECT stock_actual_kg, stock_minimo_kg, stock_base_fecha
-            FROM silos WHERE id = :id
-        ");
+        // Stock disponible hasta mínimo — reconstruido dinámicamente via replay.
+        $siloData = $this->db->prepare("SELECT stock_minimo_kg FROM silos WHERE id = :id");
         $siloData->execute(['id' => $siloId]);
         $s = $siloData->fetch();
 
-        $stockReal = (float)$s['stock_actual_kg'];
-        if (!empty($s['stock_base_fecha'])) {
-            $stockReal = max(
-                0.0,
-                $stockReal - $this->consumoAcumulado($siloId, $s['stock_base_fecha'], date('Y-m-d'))
-            );
-        }
-        $margen = max(0, $stockReal - (float)$s['stock_minimo_kg']);
+        $stockReal = $this->rebuildStockAt($siloId, date('Y-m-d'));
+        $margen    = max(0, $stockReal - (float)($s['stock_minimo_kg'] ?? 0));
         $diasHastaMinimo = $totalDiarioKg > 0 ? (int) floor($margen / $totalDiarioKg) : null;
         $fechaMinimo     = $diasHastaMinimo !== null
             ? date('Y-m-d', strtotime("+{$diasHastaMinimo} days"))

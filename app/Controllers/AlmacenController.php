@@ -81,6 +81,28 @@ class AlmacenController extends BaseController
             $this->redirect("almacen/{$id}");
         }
 
+        // Validación de capacidad: stock_real (tras replay) + nueva recarga no debe
+        // superar la capacidad del silo. Margen del 5% para tolerar pequeñas
+        // discrepancias de medición/tabla de consumo.
+        $capacidad = (float)($silo['capacidad_kg'] ?? 0);
+        if ($capacidad > 0) {
+            // $silo['stock_actual_kg'] ya viene enriquecido con el stock real
+            // (ver Silo::withStockReal).
+            $stockReal = (float)$silo['stock_actual_kg'];
+            $margen    = $capacidad * 1.05;
+            if ($stockReal + $cantidad > $margen) {
+                $disponible = max(0, $capacidad - $stockReal);
+                Session::flash(
+                    'error',
+                    'La cantidad supera la capacidad del silo. '
+                    . 'Stock actual: ' . number_format($stockReal, 0) . ' kg · '
+                    . 'Capacidad: ' . number_format($capacidad, 0) . ' kg · '
+                    . 'Disponible: ' . number_format($disponible, 0) . ' kg.'
+                );
+                $this->redirect("almacen/{$id}");
+            }
+        }
+
         $this->model->addRecarga((int)$id, $cantidad, $fecha, $proveedor, $obs, $uid, $tipoPienso);
         Session::flash('success', number_format($cantidad, 0) . ' kg añadidos al silo.');
         $this->redirect("almacen/{$id}");
