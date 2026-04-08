@@ -301,8 +301,6 @@ class RecevtService
                 $this->addLog('error', "  ✗ Error al completar línea {$num}.");
                 $err++;
             }
-
-            usleep(500000);
         }
 
         $this->addLog('info', "Finalizado: {$ok} completadas, {$err} errores.");
@@ -553,10 +551,11 @@ class RecevtService
         }
 
         // ── Fallback: registros con ID pero fechas posiblemente vacías/incorrectas ──
-        // El servidor pre-rellena fechaInicio con la fecha de dispensación (no +1 día).
-        // completarLineaConIDs detectará si el valor coincide con el calculado y saltará si ya es correcto.
-        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando registros existentes con =1');
-        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1']);
+        // Limitamos a los 50 más recientes para evitar timeouts (los pendientes siempre
+        // son los más nuevos). El servidor pre-rellena fechaInicio con la fecha de
+        // dispensación; completarLineaConIDs lo detectará y actualizará a dispensación+1.
+        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando últimos 50 registros con =1');
+        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1', 'length' => '50', 'iDisplayLength' => '50']);
         $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
         if ($respuesta === null) {
             $this->addLog('error', 'No se pudo obtener las líneas de tratamiento (intento 2).');
@@ -957,6 +956,8 @@ class RecevtService
             }
         }
 
+        // Pequeña pausa solo tras un POST real (no en los skips)
+        usleep(300000);
         return true;
     }
 
