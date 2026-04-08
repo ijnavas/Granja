@@ -836,27 +836,6 @@ class RecevtService
         $celdas  = $filaResult['celdas'];
         $rawJson = $filaResult['raw'];
 
-        // ── DEBUG: volcar celdas completas y claves extra del JSON ─────────
-        static $debugDumped = false;
-        if (!$debugDumped) {
-            $debugDumped = true;
-            // Claves extra del JSON (fuera del array de celdas)
-            $extraKeys = array_diff_key($rawJson, array_flip(array_keys($celdas)));
-            if ($extraKeys) {
-                $this->addLog('info', '  JSON extra keys: ' . json_encode($extraKeys));
-            }
-            $this->addLog('info', '  === DEBUG CELDAS (' . count($celdas) . ' celdas) ===');
-            foreach ($celdas as $idx => $celda) {
-                // Sin límite de longitud para ver el HTML completo
-                $full = (string)$celda;
-                $chunk = 0;
-                while ($chunk * 1000 < strlen($full)) {
-                    $this->addLog('info', "  celda[{$idx}]" . ($chunk ? "(cont)" : "") . ': ' . substr($full, $chunk * 1000, 1000));
-                    $chunk++;
-                }
-            }
-        }
-
         // ── Fecha dispensación desde celda[0] ──────────────────────────────
         // Formato: "(Fecha Dispensacion:</br>DD/MM/YYYY)"
         if (preg_match('/Fecha Dispensacion:(?:<[^>]+>|\s)+(\d{2}\/\d{2}\/\d{4})/i', (string)($celdas[0] ?? ''), $m)) {
@@ -907,25 +886,13 @@ class RecevtService
             foreach ($celdas as $celda) {
                 if (preg_match('/[Dd][íi]as?\s+(?:de\s+)?tratamiento[^:\d]*:?\s*(\d+)/u', strip_tags((string)$celda), $mD)) {
                     $diasValue = (int)$mD[1];
-                    if ($diasValue > 0) {
-                        $this->addLog('info', "  Días extraídos del texto: {$diasValue}");
-                        break;
-                    }
+                    if ($diasValue > 0) break;
                 }
             }
         }
 
-        // Siempre enviamos el POST aunque el input ya tenga un valor:
-        // el servidor pre-rellena fechaInicioTratamiento con dispensación+1 como sugerencia
-        // visual, pero ese valor NO está almacenado hasta que se envía el formulario.
-        if ($existingFechaInicio !== '') {
-            $this->addLog('info', "  Input pre-rellenado con '{$existingFechaInicio}' → enviando '{$fechaInicio}'");
-        }
-
         if (!$fechaInicioField) {
-            // Fallback: nombre dinámico basado en el token
             $fechaInicioField = 'fechaInicioTratamiento' . $token;
-            $this->addLog('info', '  Usando nombre fallback para fechaInicio: ' . $fechaInicioField);
         }
         if (!$fechaFinField) {
             $fechaFinField = 'fechaFinTratamiento' . $token;
@@ -948,8 +915,8 @@ class RecevtService
             } else {
                 $this->addLog('info', "  Fin: {$fechaFin} ({$diasValue} días)");
             }
-        } else {
-            $this->addLog('info', "  Sin fechaFin (días no encontrados: diasValue={$diasValue})");
+        } else if ($diasValue === 0) {
+            $this->addLog('info', '  Sin fechaFin (días no encontrados)');
         }
 
         // ── POST a actualizar_lineasTratamientos ──────────────────────────
@@ -974,15 +941,13 @@ class RecevtService
                 ],
             ],
         ];
-        $this->addLog('info', '  POST body: ' . http_build_query($postData));
-
         $respuesta = $this->request('POST', self::BASE_URL . '/index.php?operacion=actualizar_lineasTratamientos', $postData);
         if ($respuesta === null) {
             $this->addLog('error', '  Error HTTP al enviar actualizar_lineasTratamientos');
             return false;
         }
 
-        $this->addLog('info', '  Respuesta: ' . substr(trim($respuesta), 0, 300));
+        $this->addLog('debug', '  Respuesta: ' . substr(trim($respuesta), 0, 300));
 
         // La respuesta es JSON: {"TOKEN": {"campo": []}} donde [] vacío = sin errores
         $json = json_decode($respuesta, true);
@@ -1002,21 +967,6 @@ class RecevtService
             }
         }
 
-        // ── Verificación post-save (solo primer registro con fechaFin enviada) ──
-        static $postSaveVerified = false;
-        if (!$postSaveVerified && $fechaFin !== null) {
-            $postSaveVerified = true;
-            usleep(200000);
-            $v2 = $this->obtenerFilaCompleta($idReceta, $idRecetaLinea, $idRecetaLineaTratamiento);
-            if ($v2 !== null) {
-                $cel3v = (string)($v2['celdas'][3] ?? '');
-                preg_match('/id="fechaInicioTratamiento[^"]*"[^>]*value="([^"]*)"/', $cel3v, $mVI);
-                preg_match('/id="fechaFinTratamiento[^"]*"[^>]*value="([^"]*)"/', $cel3v, $mVF);
-                $this->addLog('info', '  VERIF post-save: fechaInicio="' . ($mVI[1] ?? 'n/a') . '" fechaFin="' . ($mVF[1] ?? 'n/a') . '"');
-                $this->addLog('info', '  Esperado:        fechaInicio="' . $fechaInicio . '" fechaFin="' . $fechaFin . '"');
-            }
-        }
-
         // Pequeña pausa solo tras un POST real (no en los skips)
         usleep(300000);
         return true;
@@ -1024,62 +974,7 @@ class RecevtService
 
     private function logOperacionesJs(string $html): void
     {
-        // Extraer todas las operaciones referenciadas en el JS de la página
-        preg_match_all('/operacion=([a-zA-Z0-9_]+)/', $html, $m);
-        $ops = array_unique($m[1] ?? []);
-        if ($ops) {
-            $this->addLog('info', 'Operaciones en JS/HTML: ' . implode(', ', $ops));
-        }
-
-        // Buscar en scripts inline
-        preg_match_all('/<script[^>]*>(.*?)<\/script>/si', $html, $scripts);
-        foreach (($scripts[1] ?? []) as $script) {
-            if (strpos($script, 'actualizarLineaTratamiento') !== false) {
-                $pos   = strpos($script, 'actualizarLineaTratamiento');
-                $start = max(0, $pos - 100);
-                $this->addLog('info', 'JS inline actualizarLineaTratamiento: ' . substr($script, $start, 1200));
-            }
-            if (strpos($script, 'DataTable') !== false || strpos($script, 'dame_lineas') !== false) {
-                $scriptTrim = trim($script);
-                $offset = 0; $part = 1;
-                while ($offset < strlen($scriptTrim)) {
-                    $this->addLog('info', "Script DataTables (parte {$part}): " . substr($scriptTrim, $offset, 2000));
-                    $offset += 2000; $part++;
-                }
-            }
-        }
-
-        // Log todos los scripts externos y buscar funciones clave
-        preg_match_all('/<script[^>]+src=["\']([^"\']+)["\'][^>]*>/i', $html, $extScripts);
-        $srcList = $extScripts[1] ?? [];
-        $this->addLog('info', 'Scripts externos (' . count($srcList) . '): ' . implode(' | ', $srcList));
-        $targetScripts = ['libroTratamiento', 'animalesTratados', 'inicializa_ajax'];
-        foreach ($srcList as $src) {
-            $match = false;
-            foreach ($targetScripts as $t) { if (strpos($src, $t) !== false) { $match = true; break; } }
-            if (!$match) continue;
-            $url = (strpos($src, 'http') === 0) ? $src : self::BASE_URL . '/' . ltrim($src, '/');
-            $jsContent = $this->request('GET', $url, []);
-            if ($jsContent === null) { $this->addLog('info', "FETCH null para [{$src}]"); continue; }
-            // Para inicializa_ajax: dump first 3000 chars to see obtenerRespuesta
-            if (strpos($src, 'inicializa_ajax') !== false) {
-                $this->addLog('info', "inicializa_ajax (primeros 3000): " . substr($jsContent, 0, 3000));
-                continue;
-            }
-            // Buscar funciones relevantes
-            $searchFns = strpos($src, 'libroTratamiento') !== false
-                ? ['actualizarLineas', 'obtenerLineaTratamiento', 'obtenerValoresDispensacion']
-                : ['obtenerValoresDispensacion', 'obtenerRespuesta'];
-            foreach ($searchFns as $fn) {
-                if (preg_match('/function\s+' . $fn . '[\s\(]/', $jsContent, $mm, PREG_OFFSET_CAPTURE)) {
-                    $pos = $mm[0][1];
-                    $this->addLog('info', "DEF {$fn} en [{$src}]: " . substr($jsContent, $pos, 1500));
-                } elseif (($pos = strpos($jsContent, $fn)) !== false) {
-                    $start = max(0, $pos - 20);
-                    $this->addLog('info', "USE {$fn} en [{$src}]: " . substr($jsContent, $start, 600));
-                }
-            }
-        }
+        // No-op: función de debug, mantenida por si se necesita en el futuro
     }
 
     // ── Fechas ────────────────────────────────────────────────────
