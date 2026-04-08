@@ -75,12 +75,19 @@ class Granja
         return $stmt->execute($data);
     }
 
-    public function delete(int $id, int $userId): bool
+    /**
+     * Soft-delete. Si $userId es null, elimina sin filtrar por usuario (uso admin).
+     */
+    public function delete(int $id, ?int $userId = null): bool
     {
+        if ($userId === null) {
+            $stmt = $this->db->prepare("UPDATE granjas SET activa = 0 WHERE id = :id");
+            return $stmt->execute(['id' => $id]) && $stmt->rowCount() > 0;
+        }
         $stmt = $this->db->prepare("
             UPDATE granjas SET activa = 0 WHERE id = :id AND usuario_id = :uid
         ");
-        return $stmt->execute(['id' => $id, 'uid' => $userId]);
+        return $stmt->execute(['id' => $id, 'uid' => $userId]) && $stmt->rowCount() > 0;
     }
 
     public function selectOptions(int $userId): array
