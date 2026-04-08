@@ -554,23 +554,45 @@ class RecevtService
             return $this->parsearLineasPendientes($respuesta);
         }
 
-        // ── Fallback: todos los registros con ID pero fechas posiblemente vacías/incorrectas ──
-        // Usamos un número grande (10000) porque el servidor rechaza -1. El skip
-        // temprano "Ya completado" evita POSTs innecesarios para los ya procesados.
-        $this->addLog('info', 'Sin pendientes nuevos (=0) → comprobando todos los registros con =1 (length=10000)');
-        $postData  = array_merge($baseParams, ['mostrarLineasCompletadas' => '1', 'length' => '10000', 'iDisplayLength' => '10000']);
-        $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
-        if ($respuesta === null) {
-            $this->addLog('error', 'No se pudo obtener las líneas de tratamiento (intento 2).');
-            return [];
+        // ── Fallback: paginación real (50 en 50) como hace el navegador ───────
+        // El servidor rechaza length muy grandes (devuelve HTML). Usamos páginas
+        // de 100 y vamos avanzando con start=0, 100, 200... El skip "Ya completado"
+        // evita POSTs innecesarios en los ya procesados.
+        $this->addLog('info', 'Sin pendientes nuevos (=0) → paginando todos los registros con =1');
+        $pageSize  = 100;
+        $start     = 0;
+        $totalRecs = null;
+        $acumuladas = [];
+        while (true) {
+            $postData = array_merge($baseParams, [
+                'mostrarLineasCompletadas' => '1',
+                'length'         => (string)$pageSize,
+                'iDisplayLength' => (string)$pageSize,
+                'start'          => (string)$start,
+                'iDisplayStart'  => (string)$start,
+            ]);
+            $respuesta = $this->request('POST', self::LOGIN_URL . '?operacion=dame_lineasTratamientos', $postData);
+            if ($respuesta === null) {
+                $this->addLog('error', "Error HTTP en página start={$start}.");
+                break;
+            }
+            $json = json_decode($respuesta, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($json)) {
+                $this->addLog('error', "Respuesta no-JSON en página start={$start} (" . strlen($respuesta) . " bytes): " . substr(strip_tags($respuesta), 0, 150));
+                break;
+            }
+            if ($totalRecs === null) {
+                $totalRecs = (int)($json['recordsTotal'] ?? $json['iTotalRecords'] ?? 0);
+                $this->addLog('info', "Total de registros con =1: {$totalRecs}");
+            }
+            $lineasPag = $this->parsearLineasDesdeJson($json);
+            $this->addLog('info', "Página start={$start}: " . count($lineasPag) . ' líneas parseadas');
+            $acumuladas = array_merge($acumuladas, $lineasPag);
+            $start += $pageSize;
+            if ($start >= $totalRecs || count($lineasPag) === 0) break;
+            usleep(100000); // pausa entre páginas
         }
-        $this->addLog('info', 'Respuesta AJAX/1 (' . strlen($respuesta) . ' bytes): ' . substr($respuesta, 0, 200));
-
-        $json = json_decode($respuesta, true);
-        if (json_last_error() === JSON_ERROR_NONE) {
-            return $this->parsearLineasDesdeJson($json);
-        }
-        return $this->parsearLineasPendientes($respuesta);
+        return $acumuladas;
     }
 
     /**
