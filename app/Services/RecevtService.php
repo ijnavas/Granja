@@ -1017,10 +1017,11 @@ class RecevtService
             CURLOPT_SSL_VERIFYPEER => true,
             CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
             CURLOPT_HTTPHEADER     => [
-                'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept: application/json, text/javascript, */*; q=0.01',
                 'Accept-Language: es-ES,es;q=0.9',
                 'Accept-Encoding: identity',
                 'Referer: https://www.recevet.es/index.php',
+                'X-Requested-With: XMLHttpRequest',
             ],
         ]);
 
