@@ -1,4 +1,6 @@
 <?php
+$seccionConfig = 'audit';
+include __DIR__ . '/../config/_submenu.php';
 $fmt = function ($v): string {
     if ($v === null) return '<span style="color:#9ca3af">(vacío)</span>';
     return '<pre style="white-space:pre-wrap;word-break:break-word;background:#f9fafb;border:1px solid #e5e7eb;border-radius:.35rem;padding:.75rem;font-size:.8rem;margin:0">'

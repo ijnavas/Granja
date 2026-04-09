@@ -1,6 +1,8 @@
 <?php
 $filtros = $filtros ?? [];
 $totalPages = (int) ceil(max(1, $total) / $perPage);
+$seccionConfig = 'audit';
+include __DIR__ . '/../config/_submenu.php';
 
 $accionBadge = function (string $a): array {
     return match ($a) {

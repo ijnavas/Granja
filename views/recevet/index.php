@@ -1,3 +1,8 @@
+<?php
+$seccionConfig = 'recevet';
+include __DIR__ . '/../config/_submenu.php';
+?>
+
 <div class="page-header">
     <h2>Recevet — Libro de Tratamientos</h2>
     <a href="https://www.recevet.es" target="_blank" class="btn btn-secondary" style="display:flex;align-items:center;gap:.4rem">

@@ -1,7 +1,8 @@
 <?php
 $seccion = $seccionConfig ?? 'razas';
 ?>
-<div style="display:flex;gap:.5rem;margin-bottom:1.5rem;border-bottom:1px solid #e5e7eb;padding-bottom:1rem">
+<div style="display:flex;gap:.5rem;margin-bottom:1.5rem;border-bottom:1px solid #e5e7eb;padding-bottom:1rem;flex-wrap:wrap">
+    <?php if (es_admin()): ?>
     <a href="<?= base_url('configuracion/razas') ?>"
        class="btn <?= $seccion === 'razas' ? 'btn-primary' : 'btn-secondary' ?>">
         Razas porcinas
@@ -14,11 +15,22 @@ $seccion = $seccionConfig ?? 'razas';
        class="btn <?= $seccion === 'estados' ? 'btn-primary' : 'btn-secondary' ?>">
         Estados animal
     </a>
+    <?php endif; ?>
+    <a href="<?= base_url('recevet') ?>"
+       class="btn <?= $seccion === 'recevet' ? 'btn-primary' : 'btn-secondary' ?>">
+        Recevet
+    </a>
+    <?php if (es_admin()): ?>
+    <a href="<?= base_url('admin/audit-log') ?>"
+       class="btn <?= $seccion === 'audit' ? 'btn-primary' : 'btn-secondary' ?>">
+        Audit log
+    </a>
     <a href="<?= base_url('configuracion/reset') ?>"
        class="btn <?= $seccion === 'reset' ? 'btn-danger' : 'btn-secondary' ?>"
        style="<?= $seccion === 'reset' ? '' : 'color:#dc2626;border-color:#fca5a5' ?>">
         ⚠ Resetear datos
     </a>
+    <?php endif; ?>
     <a href="<?= base_url('perfil') ?>"
        class="btn btn-secondary" style="margin-left:auto">
         Mi perfil
