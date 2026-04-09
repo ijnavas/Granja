@@ -11,6 +11,9 @@
 -- dos veces el mismo día (o se lanza manualmente para backfill), el segundo
 -- INSERT hace UPDATE sin duplicar.
 
+-- Sin FK explícita: evita error 150 por mismatch de tipos (signed/unsigned)
+-- con silos.id. Además, preferimos conservar histórico aunque un silo se
+-- elimine lógicamente (activo=0) en lugar de borrarlo en cascada.
 CREATE TABLE IF NOT EXISTS silo_stock_historico (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     silo_id         INT NOT NULL,
@@ -21,7 +24,5 @@ CREATE TABLE IF NOT EXISTS silo_stock_historico (
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_silo_fecha (silo_id, fecha),
-    KEY idx_fecha (fecha),
-    CONSTRAINT fk_silo_stock_hist_silo FOREIGN KEY (silo_id)
-        REFERENCES silos(id) ON DELETE CASCADE
+    KEY idx_fecha (fecha)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
