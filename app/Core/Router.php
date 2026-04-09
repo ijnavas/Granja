@@ -7,6 +7,14 @@ class Router
 {
     private array $routes = [];
 
+    /**
+     * Rutas POST exentas de validación CSRF. Solo para endpoints que
+     * reciben datos del navegador sin formulario (p.ej. CSP reports).
+     */
+    private const CSRF_EXEMPT_POST = [
+        '/csp-report',
+    ];
+
     public function get(string $path, array $handler): void
     {
         $this->routes['GET'][$path] = $handler;
@@ -35,7 +43,7 @@ class Router
 
         // Ruta exacta
         if (isset($routes[$uri])) {
-            $this->call($routes[$uri]);
+            $this->call($routes[$uri], [], $uri);
             return;
         }
 
@@ -45,7 +53,7 @@ class Router
             $regex = '#^' . $regex . '$#';
             if (preg_match($regex, $uri, $matches)) {
                 $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
-                $this->call($handler, $params);
+                $this->call($handler, $params, $uri);
                 return;
             }
         }
@@ -55,13 +63,15 @@ class Router
         echo '404 - Página no encontrada';
     }
 
-    private function call(array $handler, array $params = []): void
+    private function call(array $handler, array $params = [], string $uri = ''): void
     {
         // Validación CSRF centralizada para todas las peticiones POST.
         // Cada form de la app ya incluye csrf_field(); si algún request
         // llega sin token válido, lo rechazamos aquí antes de tocar el
-        // controlador.
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        // controlador. Las rutas en CSRF_EXEMPT_POST están exentas
+        // (p.ej. el endpoint que recibe reportes CSP del navegador).
+        if ($_SERVER['REQUEST_METHOD'] === 'POST'
+            && !in_array($uri, self::CSRF_EXEMPT_POST, true)) {
             $token = (string)($_POST['csrf_token'] ?? '');
             if (!Session::validateCsrf($token)) {
                 SecurityLog::log('csrf_failed');

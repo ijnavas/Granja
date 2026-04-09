@@ -36,28 +36,56 @@ ini_set('display_startup_errors', $__debug ? '1' : '0');
 
 // ── Headers de seguridad HTTP ────────────────────────────────
 // Se envían en TODA respuesta. CSP permite 'unsafe-inline' porque la
-// app aún tiene mucho JS/CSS inline; refactor a nonces queda pendiente.
+// app aún tiene muchos onclick= y style="" inline; refactor a nonces
+// queda pendiente para cuando migremos handlers a addEventListener.
+//
+// La CSP es context-aware: las páginas que usan mapas (/granjas/*)
+// reciben una política ampliada para permitir Leaflet + OSM + Arcgis
+// + Nominatim. El resto recibe una política más restrictiva.
 if (!headers_sent()) {
     header('X-Frame-Options: DENY');
     header('X-Content-Type-Options: nosniff');
     header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Cross-Origin-Opener-Policy: same-origin');
+    header('Cross-Origin-Resource-Policy: same-origin');
+    header('X-Permitted-Cross-Domain-Policies: none');
     header('Permissions-Policy: geolocation=(self), microphone=(), camera=(), payment=(), usb=()');
     if (($_SERVER['HTTPS'] ?? '') === 'on' || ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https') {
-        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains; preload');
     }
-    header(
-        "Content-Security-Policy: "
-        . "default-src 'self'; "
-        . "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
-        . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
-        . "font-src 'self' https://fonts.gstatic.com data:; "
-        . "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.arcgisonline.com https://server.arcgisonline.com; "
-        . "connect-src 'self' https://nominatim.openstreetmap.org; "
-        . "frame-ancestors 'none'; "
-        . "base-uri 'self'; "
-        . "form-action 'self'; "
-        . "object-src 'none'"
-    );
+
+    // ¿Esta request carga mapas? (solo formularios/ficha de granjas)
+    $__uri      = $_SERVER['REQUEST_URI'] ?? '/';
+    $__needsMap = (bool) preg_match('#/granjas(/|$|\?)#', $__uri);
+
+    // Directivas base (cubren el 95% de las páginas)
+    $csp = [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' https://fonts.gstatic.com data:",
+        "img-src 'self' data: blob:",
+        "connect-src 'self'",
+        "frame-ancestors 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "object-src 'none'",
+        "worker-src 'self' blob:",
+        "manifest-src 'self'",
+        "upgrade-insecure-requests",
+        // Reporta (sin romper) cualquier violación a nuestro endpoint.
+        "report-uri " . base_url('csp-report'),
+    ];
+
+    // Extras solo para páginas con mapa
+    if ($__needsMap) {
+        $csp[1] = "script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com";
+        $csp[2] = "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com";
+        $csp[4] = "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://*.arcgisonline.com";
+        $csp[5] = "connect-src 'self' https://nominatim.openstreetmap.org";
+    }
+
+    header('Content-Security-Policy: ' . implode('; ', $csp));
 }
 
 // Handler global: convierte cualquier excepción no capturada en un 500
@@ -97,6 +125,7 @@ use App\Controllers\AlmacenController;
 use App\Controllers\EscaneoController;
 use App\Controllers\RecevtController;
 use App\Controllers\AuditLogController;
+use App\Controllers\SecurityController;
 
 Session::start();
 
@@ -253,5 +282,8 @@ $router->post('/configuracion/tablas/{id}/eliminar',        [ConfigController::c
 // ── Audit log (solo admin) ───────────────────────────────────
 $router->get('/admin/audit-log',         [AuditLogController::class, 'index']);
 $router->get('/admin/audit-log/{id}',    [AuditLogController::class, 'show']);
+
+// ── Reportes de violaciones CSP (el navegador postea aquí) ──
+$router->post('/csp-report',             [SecurityController::class, 'cspReport']);
 
 $router->dispatch();

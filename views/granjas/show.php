@@ -2,7 +2,11 @@
 $tieneCoords = !empty($granja['latitud']) && !empty($granja['longitud']);
 ?>
 <?php if ($tieneCoords): ?>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+      integrity="sha384-c6Rcwz4e4CITMbu/NBmnNS8yN2sC3cUElMEMfP3vqqKFp7GOYaaBBCqmaWBjmkjb"
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer">
 <?php endif; ?>
 
 <div class="page-header">
@@ -65,7 +69,10 @@ $tieneCoords = !empty($granja['latitud']) && !empty($granja['longitud']);
 </div>
 
 <?php if ($tieneCoords): ?>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+        integrity="sha384-NElt3Op+9NBMCYaef5HxeJmU4Xeard/Lku8ek6hoPTvYkQPh3zLIrJP7KiRocsxO"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
 <script>
 const map = L.map('mini-map', { zoomControl: true, scrollWheelZoom: false })
     .setView([<?= $granja['latitud'] ?>, <?= $granja['longitud'] ?>], 15);
