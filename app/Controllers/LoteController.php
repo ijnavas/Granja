@@ -8,6 +8,7 @@ use App\Models\Nave;
 use App\Models\Granja;
 use App\Models\RazaPorcino;
 use App\Core\Session;
+use App\Core\AuditLog;
 
 class LoteController extends BaseController
 {
@@ -106,7 +107,7 @@ class LoteController extends BaseController
         $naveId   = $this->guardOwnedNave($naveId ? (int)$naveId : null, $uid);
         $granjaId = $this->guardOwnedGranja($granjaId ? (int)$granjaId : null, $uid);
 
-        $this->model->create([
+        $datosNuevo = [
             'nave_id'          => $naveId,
             'granja_id'        => $granjaId,
             'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
@@ -117,9 +118,11 @@ class LoteController extends BaseController
             'fecha_entrada'    => $this->postString('fecha_entrada') ?: date('Y-m-d'),
             'fecha_nacimiento' => $fechaNac,
             'observaciones'    => $this->postString('observaciones'),
-        ]);
+        ];
+        $this->model->create($datosNuevo);
 
-        $loteId = \App\Core\Database::getInstance()->lastInsertId();
+        $loteId = (int)\App\Core\Database::getInstance()->lastInsertId();
+        AuditLog::log('lote', $loteId, 'create', null, $datosNuevo);
 
         // Asignar cuadras si se distribuyó
         $cuadrasIds  = $_POST['cuadras_asig_id']  ?? [];
@@ -213,7 +216,8 @@ class LoteController extends BaseController
         $uid = Session::get('usuario_id');
 
         // El propio lote debe pertenecer al usuario
-        if (!$this->model->find((int)$id, $uid)) {
+        $antes = $this->model->find((int)$id, $uid);
+        if (!$antes) {
             $this->redirect('lotes');
         }
 
@@ -225,7 +229,7 @@ class LoteController extends BaseController
         $naveId   = $this->guardOwnedNave($naveId ? (int)$naveId : null, $uid);
         $granjaId = $this->guardOwnedGranja($granjaId ? (int)$granjaId : null, $uid);
 
-        $this->model->update((int)$id, $uid, [
+        $datosUpdate = [
             'nave_id'          => $naveId,
             'granja_id'        => $granjaId,
             'tipo_animal_id'   => (int)$this->post('tipo_animal_id'),
@@ -236,7 +240,10 @@ class LoteController extends BaseController
             'fecha_entrada'    => date('Y-m-d'),
             'fecha_nacimiento' => $this->postString('fecha_nacimiento') ?: null,
             'observaciones'    => $this->postString('observaciones'),
-        ]);
+        ];
+        $this->model->update((int)$id, $uid, $datosUpdate);
+        $despues = $this->model->find((int)$id, $uid);
+        AuditLog::log('lote', (int)$id, 'update', $antes, $despues);
 
         // Sync cuadras: borrar asignaciones anteriores y crear las nuevas
         $cuadrasIds  = $_POST['cuadras_asig_id']  ?? [];
@@ -268,13 +275,16 @@ class LoteController extends BaseController
         }
         $uid = Session::get('usuario_id');
         // IDOR guard: el lote debe pertenecer al usuario
-        if (!$this->model->find((int)$id, $uid)) {
+        $antes = $this->model->find((int)$id, $uid);
+        if (!$antes) {
             $this->redirect('lotes');
         }
         $cantidad = abs((int)$this->post('cantidad', 0));
         $tipo     = $this->postString('tipo');
         if ($cantidad > 0 && in_array($tipo, ['añadir', 'reducir'])) {
             $this->model->ajustarAnimales((int)$id, $cantidad, $tipo);
+            $despues = $this->model->find((int)$id, $uid);
+            AuditLog::log('lote', (int)$id, 'ajustar', $antes, $despues);
             $accion = $tipo === 'añadir' ? 'añadidos' : 'reducidos';
             Session::flash('success', "{$cantidad} animales {$accion} correctamente.");
         }
@@ -375,8 +385,12 @@ class LoteController extends BaseController
             $this->redirect('lotes');
         }
         $uid = Session::get('usuario_id');
+        $antes = $this->model->find((int)$id, $uid);
         // cerrar() ya filtra por usuario_id en el WHERE; aquí solo redirigimos.
         $this->model->cerrar((int)$id, $uid);
+        if ($antes) {
+            AuditLog::log('lote', (int)$id, 'cerrar', $antes, null);
+        }
         Session::flash('success', 'Lote cerrado y guardado en histórico.');
         $this->redirect('lotes');
     }
@@ -389,8 +403,11 @@ class LoteController extends BaseController
             $this->redirect('lotes');
         }
         try {
-            $ok = $this->model->eliminarCompleto((int)$id, Session::get('usuario_id'));
+            $uid   = Session::get('usuario_id');
+            $antes = $this->model->find((int)$id, $uid);
+            $ok    = $this->model->eliminarCompleto((int)$id, $uid);
             if ($ok) {
+                AuditLog::log('lote', (int)$id, 'delete', $antes, null);
                 Session::flash('success', 'Lote eliminado junto con todos sus movimientos, pesajes y cuadras.');
             } else {
                 Session::flash('error', 'No se encontró el lote o no tienes permisos para eliminarlo.');

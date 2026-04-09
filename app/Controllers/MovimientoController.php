@@ -8,6 +8,7 @@ use App\Models\Lote;
 use App\Models\Nave;
 use App\Models\Cuadra;
 use App\Core\Session;
+use App\Core\AuditLog;
 use PDO;
 
 class MovimientoController extends BaseController
@@ -156,6 +157,7 @@ class MovimientoController extends BaseController
         $cuadrasOrigenGuardar = $data['cuadras_origen'];
         unset($data['cuadras_origen']);
         $movId = $this->model->create($data, $uid);
+        AuditLog::log('movimiento', (int)$movId, 'create', null, $data + ['cuadras_origen' => $cuadrasOrigenGuardar]);
 
         // Guardar cuadras de origen para poder revertir después
         if (!empty($cuadrasOrigenGuardar)) {
@@ -239,6 +241,7 @@ class MovimientoController extends BaseController
         }
 
         $this->model->update((int)$id, $data, $uid);
+        AuditLog::log('movimiento', (int)$id, 'update', $movActual, $data);
         Session::flash('success', 'Movimiento actualizado.');
         $this->redirect('movimientos');
     }
@@ -262,6 +265,7 @@ class MovimientoController extends BaseController
             ->prepare("DELETE FROM movimiento_cuadras WHERE movimiento_id = :id")
             ->execute(['id' => (int)$id]);
         $this->model->delete((int)$id, $uid);
+        AuditLog::log('movimiento', (int)$id, 'delete', $mov, null);
         Session::flash('success', 'Movimiento eliminado y efecto revertido.');
         $this->redirect('movimientos');
     }

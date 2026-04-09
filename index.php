@@ -96,6 +96,7 @@ use App\Controllers\PesajeController;
 use App\Controllers\AlmacenController;
 use App\Controllers\EscaneoController;
 use App\Controllers\RecevtController;
+use App\Controllers\AuditLogController;
 
 Session::start();
 
@@ -248,5 +249,9 @@ $router->post('/configuracion/tablas',                      [ConfigController::c
 $router->get('/configuracion/tablas/{id}/editar',           [ConfigController::class, 'editarTabla']);
 $router->post('/configuracion/tablas/{id}/actualizar',      [ConfigController::class, 'actualizarTabla']);
 $router->post('/configuracion/tablas/{id}/eliminar',        [ConfigController::class, 'eliminarTabla']);
+
+// ── Audit log (solo admin) ───────────────────────────────────
+$router->get('/admin/audit-log',         [AuditLogController::class, 'index']);
+$router->get('/admin/audit-log/{id}',    [AuditLogController::class, 'show']);
 
 $router->dispatch();

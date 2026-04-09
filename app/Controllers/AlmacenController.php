@@ -6,6 +6,7 @@ namespace App\Controllers;
 use App\Models\Silo;
 use App\Models\Usuario;
 use App\Core\Session;
+use App\Core\AuditLog;
 
 class AlmacenController extends BaseController
 {
@@ -104,6 +105,15 @@ class AlmacenController extends BaseController
         }
 
         $this->model->addRecarga((int)$id, $cantidad, $fecha, $proveedor, $obs, $uid, $tipoPienso);
+        $recargaId = (int)\App\Core\Database::getInstance()->lastInsertId();
+        AuditLog::log('recarga', $recargaId, 'create', null, [
+            'silo_id'       => (int)$id,
+            'cantidad_kg'   => $cantidad,
+            'fecha'         => $fecha,
+            'tipo_pienso'   => $tipoPienso,
+            'proveedor'     => $proveedor,
+            'observaciones' => $obs,
+        ]);
         Session::flash('success', number_format($cantidad, 0) . ' kg añadidos al silo.');
         $this->redirect("almacen/{$id}");
     }
@@ -163,14 +173,16 @@ class AlmacenController extends BaseController
             $observaciones = "Albarán: {$albaran}" . ($observaciones ? " · {$observaciones}" : '');
         }
 
-        $this->model->updateRecarga((int)$recargaId, [
+        $datos = [
             'silo_id'      => $nuevoSiloId,
             'fecha'        => $this->postString('fecha') ?: date('Y-m-d'),
             'cantidad_kg'  => $cantidad,
             'tipo_pienso'  => $this->postString('tipo_pienso') ?: null,
             'proveedor'    => $this->postString('proveedor') ?: null,
             'observaciones'=> $observaciones,
-        ], (float)$recarga['cantidad_kg'], (int)$recarga['silo_id']);
+        ];
+        $this->model->updateRecarga((int)$recargaId, $datos, (float)$recarga['cantidad_kg'], (int)$recarga['silo_id']);
+        AuditLog::log('recarga', (int)$recargaId, 'update', $recarga, $datos);
 
         Session::flash('success', 'Recarga actualizada correctamente.');
         $this->redirect('almacen');
@@ -203,6 +215,7 @@ class AlmacenController extends BaseController
         }
 
         $this->model->deleteRecarga((int)$recargaId, (int)$id);
+        AuditLog::log('recarga', (int)$recargaId, 'delete', $recarga, null);
         Session::flash('success', 'Recarga eliminada y stock revertido.');
         $this->redirect("almacen/{$id}");
     }

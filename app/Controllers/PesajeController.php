@@ -6,6 +6,7 @@ namespace App\Controllers;
 use App\Models\Pesaje;
 use App\Models\Lote;
 use App\Core\Session;
+use App\Core\AuditLog;
 
 class PesajeController extends BaseController
 {
@@ -79,7 +80,7 @@ class PesajeController extends BaseController
         $ic      = $this->postString('ic_real')           !== '' ? (float) $this->postString('ic_real')           : null;
         $obs     = $this->postString('observaciones') ?: null;
 
-        $this->model->create([
+        $datos = [
             'lote_id'             => $loteId,
             'fecha'               => $fecha,
             'peso_medio_kg'       => $peso,
@@ -88,7 +89,10 @@ class PesajeController extends BaseController
             'ic_real'             => $ic,
             'observaciones'       => $obs,
             'usuario_id'          => $uid,
-        ]);
+        ];
+        $this->model->create($datos);
+        $pesajeId = (int)\App\Core\Database::getInstance()->lastInsertId();
+        AuditLog::log('pesaje', $pesajeId, 'create', null, $datos);
 
         Session::flash('success', 'Pesaje registrado correctamente.');
         $this->redirect('pesajes');
@@ -120,7 +124,7 @@ class PesajeController extends BaseController
 
         $uid = Session::get('usuario_id');
         // IDOR guard: el pesaje debe ser del usuario
-        $this->ownedPesajeOrAbort((int)$id, $uid);
+        $antes = $this->ownedPesajeOrAbort((int)$id, $uid);
 
         $fecha  = $this->postString('fecha');
         $peso   = (float) $this->postString('peso_medio_kg');
@@ -135,14 +139,16 @@ class PesajeController extends BaseController
         $ic      = $this->postString('ic_real')           !== '' ? (float) $this->postString('ic_real')           : null;
         $obs     = $this->postString('observaciones') ?: null;
 
-        $this->model->update((int)$id, [
+        $datos = [
             'fecha'               => $fecha,
             'peso_medio_kg'       => $peso,
             'num_animales_pesados'=> $num,
             'consumo_pienso_kg'   => $consumo,
             'ic_real'             => $ic,
             'observaciones'       => $obs,
-        ]);
+        ];
+        $this->model->update((int)$id, $datos);
+        AuditLog::log('pesaje', (int)$id, 'update', $antes, $datos);
 
         Session::flash('success', 'Pesaje actualizado.');
         $this->redirect('pesajes');
@@ -156,8 +162,9 @@ class PesajeController extends BaseController
         }
         $uid = Session::get('usuario_id');
         // IDOR guard: el pesaje debe ser del usuario
-        $this->ownedPesajeOrAbort((int)$id, $uid);
+        $antes = $this->ownedPesajeOrAbort((int)$id, $uid);
         $this->model->delete((int)$id);
+        AuditLog::log('pesaje', (int)$id, 'delete', $antes, null);
         Session::flash('success', 'Pesaje eliminado.');
         $this->redirect('pesajes');
     }
