@@ -262,12 +262,120 @@ body {
     color: var(--text); margin-right: .5rem;
 }
 
+/* Evitar overflow horizontal inesperado a nivel global */
+html, body { max-width: 100%; overflow-x: hidden; }
+
+/* Contenedores de tabla: scroll horizontal encapsulado */
+.list-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* Safe-area insets para iPhone con notch/Dynamic Island */
+@supports (padding: env(safe-area-inset-left)) {
+    .topbar {
+        padding-left: calc(1.75rem + env(safe-area-inset-left));
+        padding-right: calc(1.75rem + env(safe-area-inset-right));
+    }
+    .main-content {
+        padding-left: calc(1.75rem + env(safe-area-inset-left));
+        padding-right: calc(1.75rem + env(safe-area-inset-right));
+        padding-bottom: calc(1.75rem + env(safe-area-inset-bottom));
+    }
+}
+
 @media (max-width: 768px) {
     .sidebar { transform: translateX(-100%); transition: transform var(--transition), width var(--transition); }
     .sidebar.mobile-open { transform: translateX(0); width: var(--sidebar-w) !important; }
     .mobile-overlay.visible { display: block; }
     .main-wrap { margin-left: 0 !important; }
     .btn-mobile-menu { display: flex; }
+
+    /* Paddings más compactos */
+    .topbar       { padding: 0 1rem; }
+    .main-content { padding: 1rem; }
+
+    /* Grids 2/3 columnas inline de vistas → 1 columna en móvil.
+       Selectores de atributo para no tener que tocar cada vista. */
+    [style*="grid-template-columns:1fr 1fr"],
+    [style*="grid-template-columns: 1fr 1fr"],
+    [style*="grid-template-columns:1fr 1fr 1fr"],
+    [style*="grid-template-columns: 1fr 1fr 1fr"],
+    [style*="grid-template-columns:repeat(3,1fr)"],
+    [style*="grid-template-columns: repeat(3, 1fr)"],
+    [style*="grid-template-columns: repeat(3,1fr)"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Cabeceras que combinan título + acciones: permitir wrap */
+    .page-header { flex-wrap: wrap; gap: .5rem; }
+    .page-header h2 { font-size: 1.1rem; word-break: break-word; }
+
+    /* Headers de detalle: apilar contenido y acciones */
+    .detail-header,
+    .cuadra-header {
+        grid-template-columns: 1fr;
+        padding: 1.25rem;
+    }
+    .detail-actions { flex-wrap: wrap; }
+    .detail-meta,
+    .cuadra-meta    { gap: 1rem 1.25rem; }
+
+    /* Mini mapa no puede ser fijo */
+    #mini-map { width: 100%; max-width: 100%; }
+
+    /* Formularios: menos padding, botones que quepan */
+    .form-card   { padding: 1.25rem; max-width: 100%; }
+    .form-actions { flex-wrap: wrap; }
+    .form-actions .btn { flex: 1 1 auto; justify-content: center; }
+
+    /* Totales bar: gap más ajustado */
+    .totales-bar { gap: 1rem 1.5rem; padding: 1rem 1.25rem; }
+
+    /* Tablas: permitir scroll horizontal dentro de su contenedor */
+    .list-card  { overflow-x: auto; }
+    .list-table { min-width: 560px; }
+
+    /* KPI: reducir tamaños de valores gigantes */
+    .kpi-value { font-size: 1.5rem; }
+    .kpi-card  { padding: 1rem 1.1rem; }
+
+    /* Lote cards: wrap si hace falta */
+    .lote-card { flex-wrap: wrap; padding: 1rem 1.1rem; }
+
+    /* Topbar más compacta para que quepa user + logout */
+    .topbar-title  { font-size: .9rem; }
+    .user-badge span { display: none; }  /* solo avatar en móvil */
+
+    /* Reset del safe-area con paddings menores en móvil */
+    @supports (padding: env(safe-area-inset-left)) {
+        .topbar {
+            padding-left: calc(1rem + env(safe-area-inset-left));
+            padding-right: calc(1rem + env(safe-area-inset-right));
+        }
+        .main-content {
+            padding-left: calc(1rem + env(safe-area-inset-left));
+            padding-right: calc(1rem + env(safe-area-inset-right));
+            padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+        }
+    }
+}
+
+/* Móviles estrechos: iPhone Pro Max y similares */
+@media (max-width: 480px) {
+    .main-content { padding: .75rem; }
+    .form-card    { padding: 1rem; }
+    .detail-header, .cuadra-header { padding: 1rem; }
+    .page-header h2 { font-size: 1rem; }
+    .btn          { padding: .45rem .85rem; font-size: .82rem; }
+    .btn-sm       { padding: .28rem .55rem; font-size: .75rem; }
+    .kpi-value    { font-size: 1.35rem; }
+    .kpi-card     { padding: .85rem 1rem; }
+
+    @supports (padding: env(safe-area-inset-left)) {
+        .main-content {
+            padding-left: calc(.75rem + env(safe-area-inset-left));
+            padding-right: calc(.75rem + env(safe-area-inset-right));
+            padding-bottom: calc(.75rem + env(safe-area-inset-bottom));
+        }
+    }
 }
 
 /* ============================================================
