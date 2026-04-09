@@ -6,6 +6,8 @@ namespace App\Controllers;
 use App\Models\Usuario;
 use App\Services\RecevtService;
 use App\Core\Session;
+use App\Core\SecurityLog;
+use App\Core\SecurityNotifier;
 
 class PerfilController extends BaseController
 {
@@ -120,6 +122,19 @@ class PerfilController extends BaseController
         // Cambio de contraseña: regenerar sesión y rotar CSRF
         session_regenerate_id(true);
         Session::rotateCsrf();
+
+        SecurityLog::log('password_changed', ['user_id' => $uid]);
+
+        // Notificar al usuario del cambio efectivo. Tomamos el email
+        // directamente de BD (no de sesión) por si cambia en el mismo flujo.
+        $user = $this->model->findById($uid);
+        if (!empty($user['email'])) {
+            SecurityNotifier::passwordChanged(
+                (string)$user['email'],
+                client_ip(),
+                'desde tu perfil'
+            );
+        }
 
         Session::flash('success', 'Contraseña cambiada correctamente.');
         $this->redirect('perfil');

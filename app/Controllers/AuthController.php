@@ -5,9 +5,9 @@ namespace App\Controllers;
 
 use App\Models\Usuario;
 use App\Core\Session;
-use App\Core\Mailer;
 use App\Core\RateLimiter;
 use App\Core\SecurityLog;
+use App\Core\SecurityNotifier;
 
 class AuthController extends BaseController
 {
@@ -86,6 +86,16 @@ class AuthController extends BaseController
                     'email'   => $email,
                     'minutes' => \App\Models\Usuario::LOCKOUT_MINUTES,
                 ]);
+                // Notificar al dueño de la cuenta (si existe). Comprobamos
+                // emailExists para no enviar correo a direcciones inventadas
+                // por un atacante haciendo spray con emails aleatorios.
+                if ($this->usuario->emailExists($email)) {
+                    SecurityNotifier::accountLocked(
+                        $email,
+                        \App\Models\Usuario::LOCKOUT_MINUTES,
+                        $ip
+                    );
+                }
             }
             // Mensaje genérico para no revelar si el email existe
             Session::flash('error', 'Email o contraseña incorrectos.');
@@ -208,7 +218,7 @@ class AuthController extends BaseController
         if ($this->usuario->emailExists($email)) {
             $token    = $this->usuario->createPasswordReset($email);
             $resetUrl = base_url('reset-password/' . $token);
-            $this->sendResetEmail($email, $resetUrl);
+            SecurityNotifier::passwordResetRequested($email, $resetUrl, $ip);
             SecurityLog::log('password_reset_requested', ['email' => $email]);
         } else {
             // Igualar timing de un envío SMTP normal: 300–800 ms
@@ -277,22 +287,15 @@ class AuthController extends BaseController
         $this->usuario->deletePasswordReset($token);
         SecurityLog::log('password_reset_completed', ['user_id' => (int)$user['id']]);
 
+        // Notificar al usuario del cambio efectivo.
+        SecurityNotifier::passwordChanged(
+            (string)$user['email'],
+            $ip,
+            'mediante un enlace de restablecimiento'
+        );
+
         Session::flash('success', '¡Contraseña actualizada! Ya puedes iniciar sesión con tu nueva contraseña.');
         $this->redirect('login');
-    }
-
-    // ── Envío de email ───────────────────────────────────────────
-    private function sendResetEmail(string $to, string $resetUrl): void
-    {
-        $subject = 'Restablecimiento de contraseña';
-        $body    = "Hola,\n\n"
-                 . "Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.\n\n"
-                 . "Haz clic en el siguiente enlace (válido durante 1 hora):\n"
-                 . $resetUrl . "\n\n"
-                 . "Si no solicitaste este cambio, puedes ignorar este mensaje.\n\n"
-                 . "Saludos,\nEl equipo de Granja";
-
-        (new Mailer())->send($to, $subject, $body);
     }
 
     // ── Validación de contraseña ─────────────────────────────────
