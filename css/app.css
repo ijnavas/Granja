@@ -263,7 +263,8 @@ body {
 }
 
 /* Evitar overflow horizontal inesperado a nivel global */
-html, body { max-width: 100%; overflow-x: hidden; }
+html { max-width: 100%; }
+body { max-width: 100%; overflow-x: hidden; }
 
 /* Contenedores de tabla: scroll horizontal encapsulado */
 .list-card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -321,10 +322,41 @@ html, body { max-width: 100%; overflow-x: hidden; }
     /* Mini mapa no puede ser fijo */
     #mini-map { width: 100%; max-width: 100%; }
 
-    /* Formularios: menos padding, botones que quepan */
-    .form-card   { padding: 1.25rem; max-width: 100%; }
+    /* Formularios: menos padding, botones que quepan.
+       !important necesario porque muchas vistas aplican max-width inline. */
+    .form-card   { padding: 1.25rem; max-width: 100% !important; width: 100%; }
     .form-actions { flex-wrap: wrap; }
     .form-actions .btn { flex: 1 1 auto; justify-content: center; }
+
+    /* Interceptar cualquier elemento con max-width fijo inline >400px
+       que pueda desbordar el viewport de móviles. */
+    [style*="max-width:780px"],
+    [style*="max-width:740px"],
+    [style*="max-width:680px"],
+    [style*="max-width:640px"],
+    [style*="max-width:600px"],
+    [style*="max-width:560px"],
+    [style*="max-width:520px"],
+    [style*="max-width:500px"],
+    [style*="max-width:420px"],
+    [style*="max-width:400px"],
+    [style*="max-width: 780px"],
+    [style*="max-width: 740px"],
+    [style*="max-width: 680px"],
+    [style*="max-width: 640px"],
+    [style*="max-width: 600px"],
+    [style*="max-width: 560px"],
+    [style*="max-width: 520px"],
+    [style*="max-width: 500px"],
+    [style*="max-width: 420px"],
+    [style*="max-width: 400px"],
+    [style*="max-width:900px"],
+    [style*="max-width: 900px"] {
+        max-width: 100% !important;
+    }
+
+    /* width fijos inline (form-group con max-width:320/220/160) */
+    .form-group[style*="max-width"] { max-width: 100% !important; }
 
     /* Totales bar: gap más ajustado */
     .totales-bar { gap: 1rem 1.5rem; padding: 1rem 1.25rem; }
