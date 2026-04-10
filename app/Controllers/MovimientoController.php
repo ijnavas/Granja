@@ -8,6 +8,7 @@ use App\Models\Lote;
 use App\Models\Nave;
 use App\Models\Cuadra;
 use App\Core\Session;
+use App\Core\Paginator;
 use App\Core\AuditLog;
 use PDO;
 
@@ -39,9 +40,14 @@ class MovimientoController extends BaseController
             'lote'        => trim($_GET['lote']        ?? ''),
         ]);
 
+        $page       = max(1, (int)($_GET['page'] ?? 1));
+        $total      = $this->model->countByUsuario($uid, $filtros);
+        $paginacion = new Paginator($total, $page, 50);
+
         $this->view('movimientos/index', [
-            'movimientos' => $this->model->allByUsuario($uid, $filtros),
+            'movimientos' => $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset),
             'filtros'     => $filtros,
+            'paginacion'  => $paginacion,
             'pageTitle'   => 'Movimientos',
             'success'     => Session::getFlash('success'),
             'error'       => Session::getFlash('error'),

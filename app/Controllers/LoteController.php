@@ -8,6 +8,7 @@ use App\Models\Nave;
 use App\Models\Granja;
 use App\Models\RazaPorcino;
 use App\Core\Session;
+use App\Core\Paginator;
 use App\Core\AuditLog;
 
 class LoteController extends BaseController
@@ -30,8 +31,26 @@ class LoteController extends BaseController
         auth_required();
         $uid = Session::get('usuario_id');
         $this->model->actualizarEstadoLechonACebo($uid);
-        $lotes = $this->model->allByUsuario($uid);
-        $this->view('lotes/index', ['lotes' => $lotes, 'pageTitle' => 'Lotes']);
+
+        $filtros = array_filter([
+            'estado'    => trim($_GET['estado']    ?? ''),
+            'granja_id' => trim($_GET['granja_id'] ?? ''),
+            'raza_id'   => trim($_GET['raza_id']   ?? ''),
+            'codigo'    => trim($_GET['codigo']    ?? ''),
+        ]);
+
+        $page       = max(1, (int)($_GET['page'] ?? 1));
+        $total      = $this->model->countByUsuario($uid, $filtros);
+        $paginacion = new Paginator($total, $page, 50);
+
+        $this->view('lotes/index', [
+            'lotes'      => $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset),
+            'filtros'    => $filtros,
+            'paginacion' => $paginacion,
+            'granjas'    => $this->granjaModel->selectOptions($uid),
+            'razas'      => $this->razaModel->allParaUsuario($uid),
+            'pageTitle'  => 'Lotes',
+        ]);
     }
 
     public function create(): void

@@ -15,8 +15,59 @@ class Lote
         $this->db = Database::getInstance();
     }
 
-    public function allByUsuario(int $userId): array
+    /**
+     * Construye WHERE + params para filtros de lotes.
+     */
+    private function buildLoteFiltros(int $userId, array $filtros): array
     {
+        $conditions = ['(g.usuario_id = :uid OR g2.usuario_id = :uid2)'];
+        $params     = ['uid' => $userId, 'uid2' => $userId];
+
+        if (!empty($filtros['estado'])) {
+            $conditions[] = 'l.estado = :estado';
+            $params['estado'] = $filtros['estado'];
+        }
+        if (!empty($filtros['granja_id'])) {
+            $conditions[] = 'COALESCE(g.id, g2.id) = :granja_id';
+            $params['granja_id'] = (int) $filtros['granja_id'];
+        }
+        if (!empty($filtros['raza_id'])) {
+            $conditions[] = 'l.raza_id = :raza_id';
+            $params['raza_id'] = (int) $filtros['raza_id'];
+        }
+        if (!empty($filtros['codigo'])) {
+            $conditions[] = 'l.codigo LIKE :codigo';
+            $params['codigo'] = '%' . $filtros['codigo'] . '%';
+        }
+
+        return [implode(' AND ', $conditions), $params];
+    }
+
+    public function countByUsuario(int $userId, array $filtros = []): int
+    {
+        [$where, $params] = $this->buildLoteFiltros($userId, $filtros);
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*)
+            FROM lotes l
+            JOIN tipos_animal ta ON l.tipo_animal_id = ta.id
+            LEFT JOIN naves n   ON l.nave_id    = n.id
+            LEFT JOIN granjas g ON n.granja_id  = g.id
+            LEFT JOIN granjas g2 ON l.granja_id = g2.id
+            WHERE {$where}
+        ");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function allByUsuario(int $userId, array $filtros = [], ?int $limit = null, int $offset = 0): array
+    {
+        [$where, $params] = $this->buildLoteFiltros($userId, $filtros);
+
+        $limitSql = '';
+        if ($limit !== null) {
+            $limitSql = 'LIMIT :lim OFFSET :off';
+        }
+
         $stmt = $this->db->prepare("
             SELECT l.*,
                    ta.nombre  AS tipo_animal_nombre,
@@ -52,10 +103,16 @@ class Lote
             LEFT JOIN tablas_crecimiento_lineas tcl_p
                 ON tcl_p.tabla_id = tc.id
                 AND tcl_p.semana  = CEIL(DATEDIFF(ult_p.fecha, l.fecha_nacimiento) / 7)
-            WHERE (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+            WHERE {$where}
             ORDER BY l.estado, l.fecha_nacimiento ASC
+            {$limitSql}
         ");
-        $stmt->execute(['uid' => $userId, 'uid2' => $userId]);
+        foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+        if ($limit !== null) {
+            $stmt->bindValue('lim', $limit, PDO::PARAM_INT);
+            $stmt->bindValue('off', $offset, PDO::PARAM_INT);
+        }
+        $stmt->execute();
         return $stmt->fetchAll();
     }
 

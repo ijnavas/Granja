@@ -15,8 +15,56 @@ class Pesaje
         $this->db = Database::getInstance();
     }
 
-    public function allByUsuario(int $userId): array
+    /**
+     * Construye cláusula WHERE + params para filtros de pesajes.
+     */
+    private function buildPesajeFiltros(int $userId, array $filtros): array
     {
+        $conditions = ['g.usuario_id = :uid'];
+        $params     = ['uid' => $userId];
+
+        if (!empty($filtros['fecha_desde'])) {
+            $conditions[] = 'p.fecha >= :fecha_desde';
+            $params['fecha_desde'] = $filtros['fecha_desde'];
+        }
+        if (!empty($filtros['fecha_hasta'])) {
+            $conditions[] = 'p.fecha <= :fecha_hasta';
+            $params['fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        if (!empty($filtros['lote'])) {
+            $conditions[] = 'l.codigo LIKE :lote';
+            $params['lote'] = '%' . $filtros['lote'] . '%';
+        }
+        if (!empty($filtros['granja_id'])) {
+            $conditions[] = 'g.id = :granja_id';
+            $params['granja_id'] = (int) $filtros['granja_id'];
+        }
+
+        return [implode(' AND ', $conditions), $params];
+    }
+
+    public function countByUsuario(int $userId, array $filtros = []): int
+    {
+        [$where, $params] = $this->buildPesajeFiltros($userId, $filtros);
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*) FROM pesajes p
+            JOIN lotes l   ON p.lote_id = l.id
+            JOIN granjas g ON l.granja_id = g.id
+            WHERE {$where}
+        ");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function allByUsuario(int $userId, array $filtros = [], ?int $limit = null, int $offset = 0): array
+    {
+        [$where, $params] = $this->buildPesajeFiltros($userId, $filtros);
+
+        $limitSql = '';
+        if ($limit !== null) {
+            $limitSql = 'LIMIT :lim OFFSET :off';
+        }
+
         $stmt = $this->db->prepare("
             SELECT p.*,
                    l.codigo          AS lote_codigo,
@@ -40,10 +88,16 @@ class Pesaje
             LEFT JOIN tablas_crecimiento_lineas tcl_h
                 ON tcl_h.tabla_id = tc.id
                 AND tcl_h.semana  = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
-            WHERE g.usuario_id = :uid
+            WHERE {$where}
             ORDER BY p.fecha DESC, p.id DESC
+            {$limitSql}
         ");
-        $stmt->execute(['uid' => $userId]);
+        foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+        if ($limit !== null) {
+            $stmt->bindValue('lim', $limit, PDO::PARAM_INT);
+            $stmt->bindValue('off', $offset, PDO::PARAM_INT);
+        }
+        $stmt->execute();
         return $stmt->fetchAll();
     }
 

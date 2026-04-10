@@ -69,11 +69,9 @@ $hayFiltros = !empty(array_filter($filtros));
         <?php endif; ?>
     </div>
 
-    <?php if ($hayFiltros): ?>
     <div style="align-self:flex-end;font-size:.8rem;color:#6b7280;margin-left:auto">
-        <?= count($movimientos) ?> resultado<?= count($movimientos) !== 1 ? 's' : '' ?>
+        <?= number_format($paginacion->total) ?> resultado<?= $paginacion->total !== 1 ? 's' : '' ?>
     </div>
-    <?php endif; ?>
 </form>
 
 <div class="list-card">
@@ -147,5 +145,7 @@ $hayFiltros = !empty(array_filter($filtros));
             <?php endforeach; ?>
         </tbody>
     </table>
+
+    <?php include __DIR__ . '/../partials/pagination.php'; ?>
 <?php endif; ?>
 </div>

@@ -430,10 +430,13 @@ class Silo
         return $stmt->fetchAll();
     }
 
-    public function allRecargasUsuario(int $userId, array $filtros = []): array
+    /**
+     * Construye WHERE + params para filtros de recargas.
+     */
+    private function buildRecargaFiltros(int $userId, array $filtros): array
     {
         $conditions = ['g.usuario_id = :uid'];
-        $params = ['uid' => $userId];
+        $params     = ['uid' => $userId];
 
         if (!empty($filtros['fecha_desde'])) {
             $conditions[] = 'r.fecha >= :fecha_desde';
@@ -452,7 +455,29 @@ class Silo
             $params['tipo_pienso'] = '%' . $filtros['tipo_pienso'] . '%';
         }
 
-        $where = implode(' AND ', $conditions);
+        return [implode(' AND ', $conditions), $params];
+    }
+
+    public function countRecargasUsuario(int $userId, array $filtros = []): int
+    {
+        [$where, $params] = $this->buildRecargaFiltros($userId, $filtros);
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*)
+            FROM silo_recargas r
+            JOIN silos s   ON r.silo_id = s.id
+            JOIN granjas g ON s.granja_id = g.id
+            WHERE {$where}
+        ");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function allRecargasUsuario(int $userId, array $filtros = [], ?int $limit = null, int $offset = 0): array
+    {
+        [$where, $params] = $this->buildRecargaFiltros($userId, $filtros);
+
+        $limitSql = $limit !== null ? 'LIMIT :lim OFFSET :off' : 'LIMIT 500';
+
         $stmt = $this->db->prepare("
             SELECT r.*, s.nombre AS silo_nombre, g.nombre AS granja_nombre,
                    u.nombre AS usuario_nombre
@@ -462,9 +487,13 @@ class Silo
             JOIN usuarios u ON r.usuario_id = u.id
             WHERE {$where}
             ORDER BY r.fecha DESC, r.id DESC
-            LIMIT 500
+            {$limitSql}
         ");
         foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+        if ($limit !== null) {
+            $stmt->bindValue('lim', $limit, PDO::PARAM_INT);
+            $stmt->bindValue('off', $offset, PDO::PARAM_INT);
+        }
         $stmt->execute();
         return $stmt->fetchAll();
     }

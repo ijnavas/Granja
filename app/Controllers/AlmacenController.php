@@ -6,6 +6,7 @@ namespace App\Controllers;
 use App\Models\Silo;
 use App\Models\Usuario;
 use App\Core\Session;
+use App\Core\Paginator;
 use App\Core\AuditLog;
 
 class AlmacenController extends BaseController
@@ -29,13 +30,18 @@ class AlmacenController extends BaseController
             'tipo_pienso' => trim($_GET['tipo_pienso'] ?? ''),
         ]);
 
+        $page       = max(1, (int)($_GET['page'] ?? 1));
+        $total      = $this->model->countRecargasUsuario($uid, $filtros);
+        $paginacion = new Paginator($total, $page, 50);
+
         $this->view('almacen/index', [
-            'silos'    => $this->model->allByUsuario($uid),
-            'recargas' => $this->model->allRecargasUsuario($uid, $filtros),
-            'filtros'  => $filtros,
-            'pageTitle' => 'Almacén de pienso',
-            'success'  => Session::getFlash('success'),
-            'error'    => Session::getFlash('error'),
+            'silos'      => $this->model->allByUsuario($uid),
+            'recargas'   => $this->model->allRecargasUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset),
+            'filtros'    => $filtros,
+            'paginacion' => $paginacion,
+            'pageTitle'  => 'Almacén de pienso',
+            'success'    => Session::getFlash('success'),
+            'error'      => Session::getFlash('error'),
         ]);
     }
 

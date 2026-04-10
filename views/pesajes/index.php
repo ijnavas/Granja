@@ -1,3 +1,8 @@
+<?php
+$filtros    = $filtros ?? [];
+$hayFiltros = !empty(array_filter($filtros));
+?>
+
 <div class="page-header">
     <h2>Pesajes</h2>
     <a href="<?= base_url('pesajes/crear') ?>" class="btn btn-primary">+ Nuevo pesaje</a>
@@ -10,9 +15,58 @@
     <div class="alert-flash alert-error"><?= e($error) ?></div>
 <?php endif; ?>
 
+<!-- Filtros -->
+<form method="GET" action="<?= base_url('pesajes') ?>"
+      style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:flex-end;margin-bottom:1rem;padding:.75rem 1rem;background:#f9fafb;border:1px solid #e5e7eb;border-radius:.5rem">
+
+    <div style="display:flex;flex-direction:column;gap:.2rem">
+        <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Desde</label>
+        <input type="date" name="fecha_desde" value="<?= e($filtros['fecha_desde'] ?? '') ?>"
+               style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem">
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:.2rem">
+        <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Hasta</label>
+        <input type="date" name="fecha_hasta" value="<?= e($filtros['fecha_hasta'] ?? '') ?>"
+               style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem">
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:.2rem">
+        <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Lote</label>
+        <input type="text" name="lote" value="<?= e($filtros['lote'] ?? '') ?>"
+               placeholder="Codigo..."
+               style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem;min-width:120px">
+    </div>
+
+    <?php if (!empty($granjas) && count($granjas) > 1): ?>
+    <div style="display:flex;flex-direction:column;gap:.2rem">
+        <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Granja</label>
+        <select name="granja_id" style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem;min-width:130px">
+            <option value="">Todas</option>
+            <?php foreach ($granjas as $g): ?>
+            <option value="<?= $g['id'] ?>" <?= ($filtros['granja_id'] ?? '') == $g['id'] ? 'selected' : '' ?>><?= e($g['nombre']) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <?php endif; ?>
+
+    <div style="display:flex;gap:.4rem;align-self:flex-end">
+        <button type="submit" class="btn btn-primary btn-sm">Filtrar</button>
+        <?php if ($hayFiltros): ?>
+        <a href="<?= base_url('pesajes') ?>" class="btn btn-secondary btn-sm">Limpiar</a>
+        <?php endif; ?>
+    </div>
+
+    <?php if ($hayFiltros): ?>
+    <div style="align-self:flex-end;font-size:.8rem;color:#6b7280;margin-left:auto">
+        <?= number_format($paginacion->total) ?> resultado<?= $paginacion->total !== 1 ? 's' : '' ?>
+    </div>
+    <?php endif; ?>
+</form>
+
 <div class="list-card">
 <?php if (empty($pesajes)): ?>
-    <div class="empty-state">No hay pesajes registrados. <a href="<?= base_url('pesajes/crear') ?>">Registra el primero</a>.</div>
+    <div class="empty-state">No hay pesajes<?= $hayFiltros ? ' con esos filtros' : ' registrados' ?>. <a href="<?= base_url('pesajes/crear') ?>">Registra el primero</a>.</div>
 <?php else: ?>
     <table class="list-table">
         <thead>
@@ -22,7 +76,7 @@
                 <th style="text-align:center">Sem.</th>
                 <th style="text-align:right">Animales</th>
                 <th style="text-align:right">Peso real<br>(pesaje)</th>
-                <th style="text-align:right">Peso tabla<br>(ese día)</th>
+                <th style="text-align:right">Peso tabla<br>(ese dia)</th>
                 <th style="text-align:right">Peso real<br>proyectado hoy</th>
                 <th style="text-align:right">Peso tabla<br>hoy</th>
                 <th style="text-align:right">IC real</th>
@@ -83,5 +137,7 @@
             <?php endforeach; ?>
         </tbody>
     </table>
+
+    <?php include __DIR__ . '/../partials/pagination.php'; ?>
 <?php endif; ?>
 </div>

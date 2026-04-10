@@ -5,7 +5,9 @@ namespace App\Controllers;
 
 use App\Models\Pesaje;
 use App\Models\Lote;
+use App\Models\Granja;
 use App\Core\Session;
+use App\Core\Paginator;
 use App\Core\AuditLog;
 
 class PesajeController extends BaseController
@@ -23,11 +25,26 @@ class PesajeController extends BaseController
     {
         auth_required();
         $uid = Session::get('usuario_id');
+
+        $filtros = array_filter([
+            'fecha_desde' => trim($_GET['fecha_desde'] ?? ''),
+            'fecha_hasta' => trim($_GET['fecha_hasta'] ?? ''),
+            'lote'        => trim($_GET['lote']        ?? ''),
+            'granja_id'   => trim($_GET['granja_id']   ?? ''),
+        ]);
+
+        $page       = max(1, (int)($_GET['page'] ?? 1));
+        $total      = $this->model->countByUsuario($uid, $filtros);
+        $paginacion = new Paginator($total, $page, 50);
+
         $this->view('pesajes/index', [
-            'pesajes'   => $this->model->allByUsuario($uid),
-            'pageTitle' => 'Pesajes',
-            'success'   => Session::getFlash('success'),
-            'error'     => Session::getFlash('error'),
+            'pesajes'    => $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset),
+            'filtros'    => $filtros,
+            'paginacion' => $paginacion,
+            'granjas'    => (new Granja())->selectOptions($uid),
+            'pageTitle'  => 'Pesajes',
+            'success'    => Session::getFlash('success'),
+            'error'      => Session::getFlash('error'),
         ]);
     }
 

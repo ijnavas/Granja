@@ -15,8 +15,10 @@ class Movimiento
         $this->db = Database::getInstance();
     }
 
-    // ── Listado ──────────────────────────────────────────────────
-    public function allByUsuario(int $userId, array $filtros = []): array
+    /**
+     * Construye WHERE + params para filtros de movimientos.
+     */
+    private function buildMovFiltros(int $userId, array $filtros): array
     {
         $conditions = ['(g.usuario_id = :uid OR gn.usuario_id = :uid2)'];
         $params = ['uid' => $userId, 'uid2' => $userId];
@@ -39,8 +41,32 @@ class Movimiento
             $params['lote2'] = '%' . $filtros['lote'] . '%';
         }
 
-        $where = implode(' AND ', $conditions);
-        $limit = empty($filtros) ? 200 : 1000;
+        return [implode(' AND ', $conditions), $params];
+    }
+
+    // ── Listado ──────────────────────────────────────────────────
+    public function countByUsuario(int $userId, array $filtros = []): int
+    {
+        [$where, $params] = $this->buildMovFiltros($userId, $filtros);
+        $stmt = $this->db->prepare("
+            SELECT COUNT(*)
+            FROM movimientos m
+            JOIN lotes lo ON m.lote_origen_id = lo.id
+            LEFT JOIN lotes ld ON m.lote_destino_id = ld.id
+            LEFT JOIN granjas g  ON lo.granja_id = g.id
+            LEFT JOIN naves  nlo ON lo.nave_id = nlo.id
+            LEFT JOIN granjas gn ON nlo.granja_id = gn.id
+            WHERE {$where}
+        ");
+        $stmt->execute($params);
+        return (int) $stmt->fetchColumn();
+    }
+
+    public function allByUsuario(int $userId, array $filtros = [], ?int $limit = null, int $offset = 0): array
+    {
+        [$where, $params] = $this->buildMovFiltros($userId, $filtros);
+
+        $limitSql = $limit !== null ? 'LIMIT :lim OFFSET :off' : 'LIMIT 500';
 
         $stmt = $this->db->prepare("
             SELECT m.*,
@@ -64,13 +90,16 @@ class Movimiento
             JOIN usuarios u ON m.usuario_id = u.id
             WHERE {$where}
             ORDER BY m.fecha DESC, m.created_at DESC
-            LIMIT :lim
+            {$limitSql}
         ");
 
         foreach ($params as $k => $v) {
             $stmt->bindValue($k, $v);
         }
-        $stmt->bindValue('lim', $limit, PDO::PARAM_INT);
+        if ($limit !== null) {
+            $stmt->bindValue('lim', $limit, PDO::PARAM_INT);
+            $stmt->bindValue('off', $offset, PDO::PARAM_INT);
+        }
         $stmt->execute();
         return $stmt->fetchAll();
     }
