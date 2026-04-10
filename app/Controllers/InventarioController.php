@@ -137,20 +137,13 @@ class InventarioController extends BaseController
 
         $lineas   = $this->model->lineas((int)$id);
         $esCuadra = ($inv['tipo'] ?? 'cuadra') === 'cuadra';
-        $filename = 'inventario_' . $inv['fecha'] . '.csv';
-
-        header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Pragma: no-cache');
-
-        $out = fopen('php://output', 'w');
-        fputs($out, "\xEF\xBB\xBF"); // BOM UTF-8 para Excel
+        $N        = \App\Core\CsvExport::class;
 
         $cabeceras = ['Granja', 'Nave'];
         if ($esCuadra) $cabeceras[] = 'Cuadra';
-        array_push($cabeceras, 'Lote', 'Estado', 'Semana', 'Animales', 'Peso/ud (kg)', 'Peso total (kg)', 'Coste/ud (€)', 'Valor total (€)');
-        fputcsv($out, $cabeceras, ';');
+        array_push($cabeceras, 'Lote', 'Estado', 'Semana', 'Animales', 'Peso/ud (kg)', 'Peso total (kg)', 'Coste/ud (EUR)', 'Valor total (EUR)');
 
+        $rows = [];
         foreach ($lineas as $l) {
             $fila = [$l['granja_nombre'] ?? '', $l['nave_nombre'] ?? ''];
             if ($esCuadra) $fila[] = $l['cuadra_nombre'] ?? '';
@@ -158,14 +151,14 @@ class InventarioController extends BaseController
             $fila[] = $l['estado_animal'] ?? '';
             $fila[] = $l['semana_tabla'] ? 'S' . $l['semana_tabla'] : '';
             $fila[] = $l['num_animales'];
-            $fila[] = $l['peso_kg']         ? number_format((float)$l['peso_kg'], 3, ',', '')         : '';
-            $fila[] = $l['peso_total_kg']   ? number_format((float)$l['peso_total_kg'], 1, ',', '')   : '';
-            $fila[] = $l['coste_eur']       ? number_format((float)$l['coste_eur'], 2, ',', '')       : '';
-            $fila[] = $l['valor_total_eur'] ? number_format((float)$l['valor_total_eur'], 2, ',', '') : '';
-            fputcsv($out, $fila, ';');
+            $fila[] = $l['peso_kg']         ? $N::num((float)$l['peso_kg'], 3) : '';
+            $fila[] = $l['peso_total_kg']   ? $N::num((float)$l['peso_total_kg'], 1) : '';
+            $fila[] = $l['coste_eur']       ? $N::num((float)$l['coste_eur']) : '';
+            $fila[] = $l['valor_total_eur'] ? $N::num((float)$l['valor_total_eur']) : '';
+            $rows[] = $fila;
         }
-        fclose($out);
-        exit;
+
+        $N::download('inventario_' . $inv['fecha'] . '.csv', $cabeceras, $rows);
     }
 
     // ── Enviar por email ──────────────────────────────────────────

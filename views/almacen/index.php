@@ -71,6 +71,8 @@ $hayFiltros = !empty(array_filter($filtros));
 <!-- ── Histórico de recargas ─────────────────────────────────── -->
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
     <h3 style="margin:0;font-size:1rem;font-weight:700">Histórico de recargas</h3>
+    <a href="<?= base_url('almacen/export') . ($hayFiltros ? '?' . http_build_query($filtros) : '') ?>"
+       class="btn btn-secondary btn-sm" title="Descargar CSV">CSV</a>
 </div>
 
 <!-- Filtros -->

@@ -54,6 +54,57 @@ class MovimientoController extends BaseController
         ]);
     }
 
+    public function export(): void
+    {
+        auth_required();
+        $uid = Session::get('usuario_id');
+
+        $filtros = array_filter([
+            'fecha_desde' => trim($_GET['fecha_desde'] ?? ''),
+            'fecha_hasta' => trim($_GET['fecha_hasta'] ?? ''),
+            'tipo'        => trim($_GET['tipo']        ?? ''),
+            'lote'        => trim($_GET['lote']        ?? ''),
+        ]);
+
+        $movimientos = $this->model->allByUsuario($uid, $filtros);
+
+        $etiquetas = [
+            'traslado_cuadra'    => 'Traslado cuadra',
+            'entrada_cebo'       => 'Entrada cebo',
+            'entrada_reposicion' => 'Reposicion',
+            'entrada_madres'     => 'Entrada madres',
+            'venta'              => 'Venta',
+            'baja'               => 'Baja',
+        ];
+
+        $rows = [];
+        foreach ($movimientos as $m) {
+            $rows[] = [
+                date('d/m/Y', strtotime($m['fecha'])),
+                $etiquetas[$m['tipo']] ?? $m['tipo'],
+                $m['lote_origen_codigo'],
+                $m['lote_destino_codigo'] ?? '',
+                $m['num_animales'],
+                $m['nave_origen_nombre'] ?? '',
+                $m['cuadra_origen_nombre'] ?? '',
+                $m['nave_destino_nombre'] ?? '',
+                $m['cuadra_destino_nombre'] ?? '',
+                $m['peso_canal_kg'] ? \App\Core\CsvExport::num((float)$m['peso_canal_kg']) : '',
+                $m['precio_eur'] ? \App\Core\CsvExport::num((float)$m['precio_eur']) : '',
+                $m['tipo_venta'] ?? '',
+                $m['motivo_baja'] ?? '',
+                $m['usuario_nombre'],
+                $m['observaciones'] ?? '',
+            ];
+        }
+
+        \App\Core\CsvExport::download(
+            'movimientos_' . date('Y-m-d') . '.csv',
+            ['Fecha', 'Tipo', 'Lote origen', 'Lote destino', 'Animales', 'Nave origen', 'Cuadra origen', 'Nave destino', 'Cuadra destino', 'Peso canal (kg)', 'Precio (EUR)', 'Tipo venta', 'Motivo baja', 'Usuario', 'Observaciones'],
+            $rows
+        );
+    }
+
     // ── Crear ────────────────────────────────────────────────────
     public function create(): void
     {

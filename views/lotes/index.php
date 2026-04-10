@@ -7,6 +7,8 @@ $hayFiltros = !empty(array_filter($filtros));
 <div class="page-header">
     <h2>Lotes</h2>
     <div style="display:flex;gap:.75rem;align-items:center">
+        <a href="<?= base_url('lotes/export') . ($hayFiltros ? '?' . http_build_query($filtros) : '') ?>"
+           class="btn btn-secondary btn-sm" title="Descargar CSV">CSV</a>
         <a href="<?= base_url('lotes/historico') ?>" class="btn btn-secondary">Historico</a>
         <a href="<?= base_url('lotes/crear') ?>" class="btn btn-primary">+ Nuevo lote</a>
     </div>

@@ -53,6 +53,46 @@ class LoteController extends BaseController
         ]);
     }
 
+    public function export(): void
+    {
+        auth_required();
+        $uid = Session::get('usuario_id');
+
+        $filtros = array_filter([
+            'estado'    => trim($_GET['estado']    ?? ''),
+            'granja_id' => trim($_GET['granja_id'] ?? ''),
+            'raza_id'   => trim($_GET['raza_id']   ?? ''),
+            'codigo'    => trim($_GET['codigo']    ?? ''),
+        ]);
+
+        $lotes = $this->model->allByUsuario($uid, $filtros);
+        $N     = \App\Core\CsvExport::class;
+
+        $rows = [];
+        foreach ($lotes as $l) {
+            $rows[] = [
+                $l['codigo'],
+                $l['granja_nombre'] ?? '',
+                $l['nave_nombre'] ?? '',
+                $l['raza_nombre'] ?? '',
+                $l['num_animales'],
+                $l['semana_actual'] ?? '',
+                $l['peso_tabla'] ? $N::num((float)$l['peso_tabla'], 3) : '',
+                $l['peso_real_proyectado'] ? $N::num((float)$l['peso_real_proyectado'], 3) : '',
+                $l['coste_tabla'] ? $N::num((float)$l['coste_tabla']) : '',
+                $l['estado'],
+                $l['fecha_entrada'] ?? '',
+                $l['fecha_nacimiento'] ?? '',
+            ];
+        }
+
+        $N::download(
+            'lotes_' . date('Y-m-d') . '.csv',
+            ['Codigo', 'Granja', 'Nave', 'Raza', 'Animales', 'Semana', 'Peso tabla (kg)', 'Peso real (kg)', 'Coste/animal (EUR)', 'Estado', 'Fecha entrada', 'Fecha nacimiento'],
+            $rows
+        );
+    }
+
     public function create(): void
     {
         auth_required();

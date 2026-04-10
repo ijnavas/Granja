@@ -13,7 +13,9 @@ $hayFiltros = !empty(array_filter($filtros));
 
 <div class="page-header">
     <h2>Movimientos</h2>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
+        <a href="<?= base_url('movimientos/export') . ($hayFiltros ? '?' . http_build_query($filtros) : '') ?>"
+           class="btn btn-secondary btn-sm" title="Descargar CSV">CSV</a>
         <?php foreach ($etiquetas as $tipo => $et): ?>
         <a href="<?= base_url('movimientos/crear?tipo=' . $tipo) ?>" class="btn btn-secondary btn-sm">
             + <?= $et['label'] ?>

@@ -183,8 +183,10 @@ $router->get('/almacen/recargas/{rid}/editar',        [AlmacenController::class,
 $router->post('/almacen/recargas/{rid}/actualizar',   [AlmacenController::class, 'updateRecarga']);
 $router->post('/almacen/{id}/recarga/{rid}/eliminar', [AlmacenController::class, 'deleteRecarga']);
 $router->post('/almacen/{id}/pedido',                 [AlmacenController::class, 'pedido']);
+$router->get('/almacen/export',                       [AlmacenController::class, 'export']);
 
 // Lotes
+$router->get('/lotes/export',               [LoteController::class, 'export']);
 $router->get('/lotes',                      [LoteController::class, 'index']);
 $router->get('/lotes/crear',                [LoteController::class, 'create']);
 $router->post('/lotes',                     [LoteController::class, 'store']);
@@ -212,6 +214,7 @@ $router->post('/cuadras/{id}/asignar',          [CuadraController::class, 'asign
 $router->post('/cuadras/{id}/retirar',          [CuadraController::class, 'retirarLote']);
 
 // Movimientos
+$router->get('/movimientos/export',                  [MovimientoController::class, 'export']);
 $router->get('/movimientos',                        [MovimientoController::class, 'index']);
 $router->get('/movimientos/crear',                  [MovimientoController::class, 'create']);
 $router->post('/movimientos',                       [MovimientoController::class, 'store']);
@@ -239,6 +242,7 @@ $router->post('/inventarios/{id}/email',            [InventarioController::class
 $router->post('/inventarios/{id}/eliminar',         [InventarioController::class, 'delete']);
 
 // Pesajes
+$router->get('/pesajes/export',                              [PesajeController::class, 'export']);
 $router->get('/pesajes',                                    [PesajeController::class, 'index']);
 $router->get('/pesajes/crear',                              [PesajeController::class, 'create']);
 $router->post('/pesajes',                                   [PesajeController::class, 'store']);

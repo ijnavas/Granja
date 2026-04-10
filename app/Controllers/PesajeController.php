@@ -48,6 +48,45 @@ class PesajeController extends BaseController
         ]);
     }
 
+    public function export(): void
+    {
+        auth_required();
+        $uid = Session::get('usuario_id');
+
+        $filtros = array_filter([
+            'fecha_desde' => trim($_GET['fecha_desde'] ?? ''),
+            'fecha_hasta' => trim($_GET['fecha_hasta'] ?? ''),
+            'lote'        => trim($_GET['lote']        ?? ''),
+            'granja_id'   => trim($_GET['granja_id']   ?? ''),
+        ]);
+
+        $pesajes = $this->model->allByUsuario($uid, $filtros);
+        $N       = \App\Core\CsvExport::class;
+
+        $rows = [];
+        foreach ($pesajes as $p) {
+            $rows[] = [
+                date('d/m/Y', strtotime($p['fecha'])),
+                $p['lote_codigo'],
+                $p['nave_nombre'] ?? '',
+                $p['granja_nombre'] ?? '',
+                $p['semana_pesaje'] ? 'S' . $p['semana_pesaje'] : '',
+                $p['num_animales_pesados'],
+                $N::num((float)$p['peso_medio_kg'], 3),
+                $p['peso_tabla_pesaje'] ? $N::num((float)$p['peso_tabla_pesaje'], 3) : '',
+                $p['peso_proyectado_hoy'] ? $N::num((float)$p['peso_proyectado_hoy'], 3) : '',
+                $p['peso_tabla_hoy'] ? $N::num((float)$p['peso_tabla_hoy'], 3) : '',
+                $p['ic_real'] ? $N::num((float)$p['ic_real'], 3) : '',
+            ];
+        }
+
+        $N::download(
+            'pesajes_' . date('Y-m-d') . '.csv',
+            ['Fecha', 'Lote', 'Nave', 'Granja', 'Semana', 'Animales', 'Peso real (kg)', 'Peso tabla pesaje (kg)', 'Peso proyectado hoy (kg)', 'Peso tabla hoy (kg)', 'IC real'],
+            $rows
+        );
+    }
+
     public function create(): void
     {
         auth_required();

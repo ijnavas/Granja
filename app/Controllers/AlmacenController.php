@@ -45,6 +45,42 @@ class AlmacenController extends BaseController
         ]);
     }
 
+    public function export(): void
+    {
+        auth_required();
+        $uid = Session::get('usuario_id');
+
+        $filtros = array_filter([
+            'fecha_desde' => trim($_GET['fecha_desde'] ?? ''),
+            'fecha_hasta' => trim($_GET['fecha_hasta'] ?? ''),
+            'silo_id'     => trim($_GET['silo_id']     ?? ''),
+            'tipo_pienso' => trim($_GET['tipo_pienso'] ?? ''),
+        ]);
+
+        $recargas = $this->model->allRecargasUsuario($uid, $filtros);
+        $N        = \App\Core\CsvExport::class;
+
+        $rows = [];
+        foreach ($recargas as $r) {
+            $rows[] = [
+                date('d/m/Y', strtotime($r['fecha'])),
+                $r['silo_nombre'],
+                $r['granja_nombre'],
+                $r['tipo_pienso'] ?? '',
+                $N::num((float)$r['cantidad_kg'], 0),
+                $r['proveedor'] ?? '',
+                $r['albaran'] ?? ($r['observaciones'] ?? ''),
+                $r['usuario_nombre'],
+            ];
+        }
+
+        $N::download(
+            'recargas_' . date('Y-m-d') . '.csv',
+            ['Fecha', 'Silo', 'Granja', 'Tipo pienso', 'Cantidad (kg)', 'Proveedor', 'Albaran / Observaciones', 'Usuario'],
+            $rows
+        );
+    }
+
     public function show(string $id): void
     {
         auth_required();

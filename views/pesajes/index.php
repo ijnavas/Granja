@@ -5,7 +5,11 @@ $hayFiltros = !empty(array_filter($filtros));
 
 <div class="page-header">
     <h2>Pesajes</h2>
-    <a href="<?= base_url('pesajes/crear') ?>" class="btn btn-primary">+ Nuevo pesaje</a>
+    <div style="display:flex;gap:.75rem;align-items:center">
+        <a href="<?= base_url('pesajes/export') . ($hayFiltros ? '?' . http_build_query($filtros) : '') ?>"
+           class="btn btn-secondary btn-sm" title="Descargar CSV">CSV</a>
+        <a href="<?= base_url('pesajes/crear') ?>" class="btn btn-primary">+ Nuevo pesaje</a>
+    </div>
 </div>
 
 <?php if (!empty($success)): ?>
