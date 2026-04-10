@@ -195,55 +195,50 @@ class InventarioController extends BaseController
         $totalAnimales = array_sum(array_column($lineas, 'num_animales'));
         $totalValor    = array_sum(array_column($lineas, 'valor_total_eur'));
 
-        $thStyle = 'padding:6px 10px;background:#1e3a5f;color:#fff;font-size:11px;text-transform:uppercase;letter-spacing:.04em;';
-        $tdStyle = 'padding:5px 10px;font-size:12px;border-bottom:1px solid #e5e7eb;';
+        $T = \App\Core\EmailTemplate::class;
 
-        $cabTh = "<th style='{$thStyle}text-align:left'>Granja</th>
-                  <th style='{$thStyle}text-align:left'>Nave" . ($esCuadra ? " · Cuadra" : "") . "</th>
-                  <th style='{$thStyle}text-align:left'>Lote</th>
-                  <th style='{$thStyle}text-align:left'>Estado</th>
-                  <th style='{$thStyle}text-align:center'>Sem.</th>
-                  <th style='{$thStyle}text-align:right'>Animales</th>
-                  <th style='{$thStyle}text-align:right'>Peso total (kg)</th>
-                  <th style='{$thStyle}text-align:right'>Valor total (€)</th>";
+        $subtitulo = count($lineas) . ' lineas &middot; '
+            . number_format($totalAnimales) . ' animales &middot; '
+            . ($totalValor ? number_format($totalValor, 2) . ' EUR' : 'sin valor');
 
-        $filas = '';
-        foreach ($lineas as $i => $l) {
-            $bg  = $i % 2 === 0 ? '#fff' : '#f9fafb';
+        $bodyHtml = $T::title("Inventario {$fecha}{$nombre}", $subtitulo);
+
+        // Tabla de lineas
+        $headers_t = ['Granja', 'Nave' . ($esCuadra ? ' / Cuadra' : ''), 'Lote', 'Estado', 'Sem.', 'Animales', 'Peso (kg)', 'Valor (EUR)'];
+        $aligns    = ['left', 'left', 'left', 'left', 'center', 'right', 'right', 'right'];
+        $rows      = [];
+        foreach ($lineas as $l) {
             $ubi = $l['nave_nombre'] ?? '—';
             if ($esCuadra && $l['cuadra_nombre']) $ubi .= ' · ' . $l['cuadra_nombre'];
-            $filas .= "<tr style='background:{$bg}'>
-                <td style='{$tdStyle}'>" . htmlspecialchars($l['granja_nombre'] ?? '') . "</td>
-                <td style='{$tdStyle}color:#6b7280'>" . htmlspecialchars($ubi) . "</td>
-                <td style='{$tdStyle}font-family:monospace;font-weight:600;color:#1d4ed8'>" . htmlspecialchars($l['lote_codigo']) . "</td>
-                <td style='{$tdStyle}'>" . htmlspecialchars($l['estado_animal'] ?? '') . "</td>
-                <td style='{$tdStyle}text-align:center;color:#9ca3af'>" . ($l['semana_tabla'] ? 'S' . $l['semana_tabla'] : '—') . "</td>
-                <td style='{$tdStyle}text-align:right;font-weight:600'>" . number_format((int)$l['num_animales']) . "</td>
-                <td style='{$tdStyle}text-align:right'>" . ($l['peso_total_kg'] ? number_format((float)$l['peso_total_kg'], 1) . ' kg' : '—') . "</td>
-                <td style='{$tdStyle}text-align:right;font-weight:600;color:#166534'>" . ($l['valor_total_eur'] ? number_format((float)$l['valor_total_eur'], 2) . ' €' : '—') . "</td>
-            </tr>";
+            $rows[] = [
+                e($l['granja_nombre'] ?? ''),
+                '<span style="color:#6b7280">' . e($ubi) . '</span>',
+                '<span style="font-family:monospace;font-weight:600;color:#1d4ed8">' . e($l['lote_codigo']) . '</span>',
+                e($l['estado_animal'] ?? ''),
+                $l['semana_tabla'] ? 'S' . $l['semana_tabla'] : '—',
+                '<strong>' . number_format((int)$l['num_animales']) . '</strong>',
+                $l['peso_total_kg'] ? number_format((float)$l['peso_total_kg'], 1) : '—',
+                $l['valor_total_eur']
+                    ? '<strong style="color:#166534">' . number_format((float)$l['valor_total_eur'], 2) . '</strong>'
+                    : '—',
+            ];
+        }
+        $bodyHtml .= $T::table($headers_t, $rows, $aligns);
+
+        $html    = $T::build($bodyHtml, 'blue');
+        $subject = "Inventario {$fecha}{$nombre}";
+
+        try {
+            $ok = (new \App\Core\Mailer())->send($to, $subject, $html, true);
+        } catch (\Throwable $e) {
+            error_log("[InventarioController] email error: " . $e->getMessage());
+            $ok = false;
         }
 
-        $html = "<!DOCTYPE html><html><body style='font-family:Arial,sans-serif;color:#111'>
-            <h2 style='color:#1e3a5f'>Inventario {$fecha}{$nombre}</h2>
-            <p style='color:#6b7280;font-size:13px'>" . count($lineas) . " líneas &nbsp;·&nbsp; " . number_format($totalAnimales) . " animales &nbsp;·&nbsp; " . ($totalValor ? number_format($totalValor, 2) . " €" : "sin valor") . "</p>
-            <table style='border-collapse:collapse;width:100%'>
-                <thead><tr>{$cabTh}</tr></thead>
-                <tbody>{$filas}</tbody>
-            </table>
-            <p style='font-size:11px;color:#9ca3af;margin-top:24px'>Generado por BALTAE · granja.baltae.com</p>
-        </body></html>";
-
-        $subject = "Inventario {$fecha}{$nombre}";
-        $headers = "From: BALTAE <no-reply@baltae.com>\r\n"
-                 . "Reply-To: no-reply@baltae.com\r\n"
-                 . "Content-Type: text/html; charset=UTF-8\r\n"
-                 . "MIME-Version: 1.0\r\n";
-
-        if (mail($to, $subject, $html, $headers)) {
+        if ($ok) {
             Session::flash('success', "Inventario enviado a {$to}.");
         } else {
-            Session::flash('error', 'Error al enviar el email. Comprueba la configuración del servidor.');
+            Session::flash('error', 'Error al enviar el email. Comprueba la configuracion del servidor.');
         }
         $this->redirect("inventarios/{$id}");
     }

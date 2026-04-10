@@ -24,7 +24,7 @@ class Mailer
         $this->from   = $m['from_email'];
     }
 
-    public function send(string $to, string $subject, string $body): bool
+    public function send(string $to, string $subject, string $body, bool $html = false): bool
     {
         $prefix = $this->secure === 'ssl' ? 'ssl://' : '';
         $errno  = 0;
@@ -84,11 +84,13 @@ class Mailer
 
         $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
 
+        $contentType = $html ? 'text/html' : 'text/plain';
+
         $message  = "From: {$this->from}\r\n";
         $message .= "To: {$to}\r\n";
         $message .= "Subject: {$encodedSubject}\r\n";
         $message .= "MIME-Version: 1.0\r\n";
-        $message .= "Content-Type: text/plain; charset=UTF-8\r\n";
+        $message .= "Content-Type: {$contentType}; charset=UTF-8\r\n";
         $message .= "Content-Transfer-Encoding: base64\r\n";
         $message .= "\r\n";
         $message .= chunk_split(base64_encode($body));

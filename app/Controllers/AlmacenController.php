@@ -252,47 +252,49 @@ class AlmacenController extends BaseController
 
         $asunto = "Pedido pienso — Silo {$silo['nombre']} ({$silo['granja_nombre']})";
 
-        $filasLotes = '';
+        $T = \App\Core\EmailTemplate::class;
+
+        $bodyHtml = $T::title('Pedido de pienso', date('d/m/Y H:i') . 'h');
+
+        $stockAlerta = (float)$silo['stock_actual_kg'] <= (float)$silo['stock_minimo_kg'];
+        $bodyHtml .= $T::dataTable([
+            ['label' => 'Silo',                    'value' => e($silo['nombre']),                                  'bold' => true],
+            ['label' => 'Granja',                   'value' => e($silo['granja_nombre'])],
+            ['label' => 'Stock actual',             'value' => number_format((float)$silo['stock_actual_kg'], 0) . ' kg', 'bold' => true, 'color' => $stockAlerta ? '#dc2626' : null],
+            ['label' => 'Stock minimo',             'value' => number_format((float)$silo['stock_minimo_kg'], 0) . ' kg'],
+            ['label' => 'Consumo estimado',         'value' => number_format((float)$proy['consumo_diario_kg'], 0) . ' kg/dia'],
+            ['label' => 'Fecha estimada minimo',    'value' => $fechaMinStr,                                        'bold' => true, 'color' => '#dc2626'],
+            ['label' => 'Cantidad sugerida',        'value' => number_format($cantidadSug, 0) . ' kg',             'bold' => true, 'color' => '#1e3a5f', 'size' => '16px'],
+        ]);
+
+        // Tabla de lotes
+        $lotesRows = [];
         foreach ($proy['lotes'] as $l) {
-            $filasLotes .= "<tr style='border-bottom:1px solid #e5e7eb'>
-                <td style='padding:5px 10px'>" . htmlspecialchars($l['codigo'] ?? '') . "</td>
-                <td style='padding:5px 10px'>" . htmlspecialchars($l['nave_nombre'] ?? '') . "</td>
-                <td style='padding:5px 10px;text-align:center'>S" . ($l['semana_actual'] ?? '?') . "</td>
-                <td style='padding:5px 10px;text-align:right'>" . number_format((int)$l['num_animales']) . "</td>
-                <td style='padding:5px 10px;text-align:right'>" . number_format((float)($l['consumo_diario_kg'] ?? 0), 2) . " kg/día</td>
-            </tr>";
+            $lotesRows[] = [
+                '<span style="font-family:monospace;font-weight:600">' . e($l['codigo'] ?? '') . '</span>',
+                e($l['nave_nombre'] ?? ''),
+                'S' . ($l['semana_actual'] ?? '?'),
+                number_format((int)$l['num_animales']),
+                number_format((float)($l['consumo_diario_kg'] ?? 0), 2) . ' kg/dia',
+            ];
+        }
+        $bodyHtml .= $T::sectionTitle('Lotes en consumo');
+        $bodyHtml .= $T::table(
+            ['Lote', 'Nave', 'Sem.', 'Animales', 'Consumo'],
+            $lotesRows,
+            ['left', 'left', 'center', 'right', 'right']
+        );
+
+        $html = $T::build($bodyHtml, 'blue');
+
+        try {
+            $ok = (new \App\Core\Mailer())->send($emailDest, $asunto, $html, true);
+        } catch (\Throwable $e) {
+            error_log("[AlmacenController] email pedido error: " . $e->getMessage());
+            $ok = false;
         }
 
-        $html = "<!DOCTYPE html><html><body style='font-family:Arial,sans-serif;color:#111'>
-            <h2 style='color:#1e3a5f'>Pedido de pienso</h2>
-            <table style='border-collapse:collapse;margin-bottom:1.5rem'>
-                <tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Silo:</td><td style='font-weight:600'>" . htmlspecialchars($silo['nombre']) . "</td></tr>
-                <tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Granja:</td><td>" . htmlspecialchars($silo['granja_nombre']) . "</td></tr>
-                <tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Stock actual:</td><td style='font-weight:600'>" . number_format((float)$silo['stock_actual_kg'], 0) . " kg</td></tr>
-                <tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Stock mínimo:</td><td>" . number_format((float)$silo['stock_minimo_kg'], 0) . " kg</td></tr>
-                <tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Consumo estimado:</td><td>" . number_format((float)$proy['consumo_diario_kg'], 0) . " kg/día</td></tr>
-                <tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Fecha estimada mínimo:</td><td style='color:#dc2626;font-weight:600'>{$fechaMinStr}</td></tr>
-                <tr><td style='padding:4px 12px 4px 0;color:#6b7280'>Cantidad sugerida:</td><td style='font-weight:700;color:#1e3a5f'>" . number_format($cantidadSug, 0) . " kg</td></tr>
-            </table>
-            <h3 style='color:#374151;font-size:14px'>Lotes en consumo</h3>
-            <table style='border-collapse:collapse;width:100%;font-size:12px'>
-                <thead><tr style='background:#1e3a5f;color:#fff'>
-                    <th style='padding:6px 10px;text-align:left'>Lote</th>
-                    <th style='padding:6px 10px;text-align:left'>Nave</th>
-                    <th style='padding:6px 10px;text-align:center'>Sem.</th>
-                    <th style='padding:6px 10px;text-align:right'>Animales</th>
-                    <th style='padding:6px 10px;text-align:right'>Consumo</th>
-                </tr></thead>
-                <tbody>{$filasLotes}</tbody>
-            </table>
-            <p style='font-size:11px;color:#9ca3af;margin-top:24px'>Generado por BALTAE · granja.baltae.com</p>
-        </body></html>";
-
-        $headers = "From: BALTAE <no-reply@baltae.com>\r\n"
-                 . "Content-Type: text/html; charset=UTF-8\r\n"
-                 . "MIME-Version: 1.0\r\n";
-
-        if (mail($emailDest, $asunto, $html, $headers)) {
+        if ($ok) {
             if ($this->postString('guardar_email') === '1') {
                 (new Usuario())->updateEmailPedidos($uid, $emailDest);
             }
