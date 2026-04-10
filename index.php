@@ -172,6 +172,8 @@ $router->post('/silos',                     [SiloController::class, 'store']);
 $router->get('/silos/{id}',                 [SiloController::class, 'show']);
 $router->get('/silos/{id}/editar',          [SiloController::class, 'edit']);
 $router->post('/silos/{id}/actualizar',     [SiloController::class, 'update']);
+$router->post('/silos/{id}/tarar',           [SiloController::class, 'tarar']);
+$router->post('/silos/{id}/calibraciones/{cid}/eliminar', [SiloController::class, 'deleteCalibracion']);
 $router->post('/silos/{id}/eliminar',       [SiloController::class, 'delete']);
 // Almacén (operativa de pienso)
 $router->get('/almacen',                              [AlmacenController::class, 'index']);

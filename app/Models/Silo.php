@@ -122,6 +122,17 @@ class Silo
         $rStmt->execute(['sid' => $siloId]);
         $recargas = $rStmt->fetchAll();
 
+        // Cargar todas las calibraciones manuales (taras). Cada una es un
+        // evento 'set' dentro del timeline.
+        $cStmt = $this->db->prepare("
+            SELECT fecha, stock_kg
+            FROM silo_calibraciones
+            WHERE silo_id = :sid
+            ORDER BY fecha ASC, id ASC
+        ");
+        $cStmt->execute(['sid' => $siloId]);
+        $calibraciones = $cStmt->fetchAll();
+
         // Construir timeline unificado.
         // Orden de desempate (misma fecha): las recargas ('add') se aplican ANTES
         // que la calibración ('set'). Así si un usuario recarga y luego calibra
@@ -141,6 +152,14 @@ class Silo
                 'tipo'  => 'set',
                 'kg'    => (float)$s['stock_actual_kg'],
                 'ord'   => 1,
+            ];
+        }
+        foreach ($calibraciones as $c) {
+            $events[] = [
+                'fecha' => (string)$c['fecha'],
+                'tipo'  => 'set',
+                'kg'    => (float)$c['stock_kg'],
+                'ord'   => 2, // las taras explícitas mandan sobre la calibración legacy del mismo día
             ];
         }
 
@@ -300,26 +319,31 @@ class Silo
 
     public function update(int $id, int $userId, array $data, array $naveIds): bool
     {
-        // Editar el silo: si el usuario introduce stock_actual_kg > 0, equivale
-        // a una CALIBRACIÓN manual HOY (sobrescribe el estado en el replay).
-        // Si lo deja en 0, asumimos que no quiere calibrar y limpiamos la
-        // calibración (stock_base_fecha = NULL) para no bloquear recargas.
-        $tieneCalibracion = ((float)($data['stock_actual_kg'] ?? 0)) > 0;
-        $fechaSql = $tieneCalibracion ? 'CURDATE()' : 'NULL';
+        // Con la nueva tabla silo_calibraciones, la edición del silo ya NO
+        // toca stock_base_fecha: las calibraciones (taras) se hacen desde el
+        // botón dedicado. Aquí solo actualizamos nombre, capacidad, mínimo,
+        // descripción, y conservamos stock_actual_kg / stock_base_fecha tal
+        // cual estaban para no interferir con el timeline.
+        //
+        // Solo si es un silo NUEVO (create) se escribe stock_base_fecha.
         $stmt = $this->db->prepare("
             UPDATE silos s
             JOIN granjas g ON s.granja_id = g.id
             SET s.nombre = :nombre,
                 s.capacidad_kg = :capacidad_kg,
-                s.stock_actual_kg = :stock_actual_kg,
                 s.stock_minimo_kg = :stock_minimo_kg,
-                s.stock_base_fecha = {$fechaSql},
                 s.descripcion = :descripcion
             WHERE s.id = :id AND g.usuario_id = :usuario_id
         ");
-        $data['id'] = $id;
-        $data['usuario_id'] = $userId;
-        $ok = $stmt->execute($data);
+        $params = [
+            'nombre'          => $data['nombre'],
+            'capacidad_kg'    => $data['capacidad_kg'],
+            'stock_minimo_kg' => $data['stock_minimo_kg'],
+            'descripcion'     => $data['descripcion'],
+            'id'              => $id,
+            'usuario_id'      => $userId,
+        ];
+        $ok = $stmt->execute($params);
         $this->syncNaves($id, $naveIds);
         return $ok;
     }
@@ -333,6 +357,62 @@ class Silo
             WHERE s.id = :id AND g.usuario_id = :uid
         ");
         return $stmt->execute(['id' => $id, 'uid' => $userId]);
+    }
+
+    // ── Calibraciones (taras) ────────────────────────────────────
+
+    /**
+     * Registra una calibración manual (tara) del silo. Se guarda como un
+     * evento 'set' en el timeline de replay: a partir de esa fecha, el stock
+     * queda fijado al valor indicado y los días siguientes se calculan
+     * restando consumo + sumando recargas posteriores.
+     *
+     * Devuelve el ID de la calibración insertada.
+     */
+    public function addCalibracion(int $siloId, string $fecha, float $stockKg, ?string $motivo, int $userId): int
+    {
+        $stmt = $this->db->prepare("
+            INSERT INTO silo_calibraciones (silo_id, fecha, stock_kg, motivo, usuario_id)
+            VALUES (:silo_id, :fecha, :stock_kg, :motivo, :usuario_id)
+        ");
+        $stmt->execute([
+            'silo_id'    => $siloId,
+            'fecha'      => $fecha,
+            'stock_kg'   => $stockKg,
+            'motivo'     => $motivo,
+            'usuario_id' => $userId,
+        ]);
+        return (int) $this->db->lastInsertId();
+    }
+
+    /**
+     * Histórico de calibraciones de un silo, más reciente primero.
+     * Incluye nombre del usuario que la hizo.
+     */
+    public function calibraciones(int $siloId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT c.*, u.nombre AS usuario_nombre
+            FROM silo_calibraciones c
+            LEFT JOIN usuarios u ON c.usuario_id = u.id
+            WHERE c.silo_id = :sid
+            ORDER BY c.fecha DESC, c.id DESC
+        ");
+        $stmt->execute(['sid' => $siloId]);
+        return $stmt->fetchAll();
+    }
+
+    public function findCalibracion(int $calibId): ?array
+    {
+        $stmt = $this->db->prepare("SELECT * FROM silo_calibraciones WHERE id = :id");
+        $stmt->execute(['id' => $calibId]);
+        return $stmt->fetch() ?: null;
+    }
+
+    public function deleteCalibracion(int $calibId, int $siloId): void
+    {
+        $this->db->prepare("DELETE FROM silo_calibraciones WHERE id = :id AND silo_id = :sid")
+            ->execute(['id' => $calibId, 'sid' => $siloId]);
     }
 
     // ── Recargas ─────────────────────────────────────────────────

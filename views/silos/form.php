@@ -44,7 +44,14 @@ $action    = $esEdicion ? base_url("silos/{$silo['id']}/actualizar") : base_url(
                 </div>
                 <div class="form-group">
                     <label>Stock actual (kg)</label>
-                    <input type="number" name="stock_actual_kg" step="0.01" min="0" value="<?= e($silo['stock_actual_kg'] ?? 0) ?>">
+                    <?php if ($esEdicion): ?>
+                        <input type="text" value="<?= number_format((float)($silo['stock_actual_kg'] ?? 0), 0) ?> kg" readonly
+                               style="background:#f3f4f6;color:#6b7280;cursor:not-allowed">
+                        <span class="form-hint">Para ajustar el stock, usa «Tarar silo» en la ficha del silo.</span>
+                    <?php else: ?>
+                        <input type="number" name="stock_actual_kg" step="0.01" min="0" value="<?= e($silo['stock_actual_kg'] ?? 0) ?>">
+                        <span class="form-hint">Stock inicial (calibración de partida)</span>
+                    <?php endif; ?>
                 </div>
                 <div class="form-group">
                     <label>Stock mínimo (kg)</label>

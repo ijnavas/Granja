@@ -37,10 +37,12 @@ class SiloController extends BaseController
         if (!$silo) $this->redirect('silos');
 
         $this->view('silos/show', [
-            'silo'      => $silo,
-            'navesAsig' => $this->model->navesAsignadas((int)$id),
-            'pageTitle' => e($silo['nombre']),
-            'success'   => Session::getFlash('success'),
+            'silo'           => $silo,
+            'navesAsig'      => $this->model->navesAsignadas((int)$id),
+            'calibraciones'  => $this->model->calibraciones((int)$id),
+            'pageTitle'      => e($silo['nombre']),
+            'success'        => Session::getFlash('success'),
+            'error'          => Session::getFlash('error'),
         ]);
     }
 
@@ -143,7 +145,6 @@ class SiloController extends BaseController
         $datos = [
             'nombre'          => $this->postString('nombre'),
             'capacidad_kg'    => (float)$this->post('capacidad_kg', 0),
-            'stock_actual_kg' => (float)$this->post('stock_actual_kg', 0),
             'stock_minimo_kg' => (float)$this->post('stock_minimo_kg', 0),
             'descripcion'     => $this->postString('descripcion'),
         ];
@@ -154,6 +155,66 @@ class SiloController extends BaseController
         Session::flash('success', 'Silo actualizado.');
         $this->redirect('silos');
     }
+
+    // ── Tara (calibración manual) ────────────────────────────────
+
+    public function tarar(string $id): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect("silos/{$id}");
+        }
+
+        $uid  = Session::get('usuario_id');
+        $silo = $this->model->find((int)$id, $uid);
+        if (!$silo) $this->redirect('silos');
+
+        $stockKg = (float)$this->post('stock_kg', 0);
+        $motivo  = $this->postString('motivo');
+        $fecha   = $this->postString('fecha') ?: date('Y-m-d');
+
+        if ($stockKg < 0) {
+            Session::flash('error', 'El stock no puede ser negativo.');
+            $this->redirect("silos/{$id}");
+        }
+
+        $calibId = $this->model->addCalibracion((int)$id, $fecha, $stockKg, $motivo, $uid);
+
+        AuditLog::log('silo_calibracion', $calibId, 'create', null, [
+            'silo_id'  => (int)$id,
+            'fecha'    => $fecha,
+            'stock_kg' => $stockKg,
+            'motivo'   => $motivo,
+        ]);
+
+        Session::flash('success', 'Silo tarado correctamente a ' . number_format($stockKg, 0) . ' kg.');
+        $this->redirect("silos/{$id}");
+    }
+
+    public function deleteCalibracion(string $id, string $cid): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect("silos/{$id}");
+        }
+
+        $uid  = Session::get('usuario_id');
+        $silo = $this->model->find((int)$id, $uid);
+        if (!$silo) $this->redirect('silos');
+
+        $antes = $this->model->findCalibracion((int)$cid);
+        $this->model->deleteCalibracion((int)$cid, (int)$id);
+
+        if ($antes) {
+            AuditLog::log('silo_calibracion', (int)$cid, 'delete', $antes, null);
+        }
+
+        Session::flash('success', 'Calibración eliminada.');
+        $this->redirect("silos/{$id}");
+    }
+
+    // ── Eliminación ──────────────────────────────────────────────
 
     public function delete(string $id): void
     {
