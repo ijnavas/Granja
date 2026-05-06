@@ -89,15 +89,17 @@
                         <span style="color:#d1d5db;font-size:.82rem">Vacía</span>
                     <?php endif; ?>
                 </td>
-                <td>
+                <td onclick="event.stopPropagation()">
                     <div class="actions">
                         <a href="<?= base_url("cuadras/{$c['id']}") ?>" class="btn btn-secondary btn-sm">Ver</a>
                         <a href="<?= base_url("cuadras/{$c['id']}/editar") ?>" class="btn btn-secondary btn-sm">Editar</a>
+                        <?php if (es_director()): ?>
                         <form method="POST" action="<?= base_url("cuadras/{$c['id']}/eliminar") ?>"
-                              onsubmit="return confirm('¿Eliminar esta cuadra?')">
+                              onsubmit="return confirm('¿Eliminar la cuadra \'<?= e($c['nombre']) ?>\'? Si tiene lotes asignados, las asignaciones se conservan.')">
                             <?= csrf_field() ?>
                             <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
                         </form>
+                        <?php endif; ?>
                     </div>
                 </td>
             </tr>
