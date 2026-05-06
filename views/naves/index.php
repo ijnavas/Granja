@@ -78,6 +78,13 @@
                     <div class="actions">
                         <a href="<?= base_url("naves/{$n['id']}") ?>" class="btn btn-secondary btn-sm">Ver</a>
                         <a href="<?= base_url("naves/{$n['id']}/editar") ?>" class="btn btn-secondary btn-sm">Editar</a>
+                        <?php if (es_director()): ?>
+                        <form method="POST" action="<?= base_url("naves/{$n['id']}/eliminar") ?>"
+                              onsubmit="return confirm('¿Eliminar la nave \'<?= e($n['nombre']) ?>\'? Sus cuadras y lotes asociados se conservarán.')">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                        </form>
+                        <?php endif; ?>
                     </div>
                 </td>
             </tr>
