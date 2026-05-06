@@ -4,12 +4,51 @@ $action    = $esEdicion
     ? base_url("movimientos/{$movimiento['id']}/actualizar")
     : base_url('movimientos');
 
-$tipoActual = $tipo ?? $movimiento['tipo'] ?? 'traslado_cuadra';
+$tipoActual = $tipo ?? $movimiento['tipo'] ?? '';
 
-// Tipos cargados desde DB (incluye los del sistema y los personalizados)
-$tipoMap = [];
+// Fallback de tipos "legacy" para que los movimientos creados con los
+// 6 tipos originales (que el usuario ya borró) sigan siendo editables.
+// No aparecen en el selector de creación, pero sí se reconocen para
+// mostrar su nombre/categoría en edición.
+$LEGACY_TIPOS = [
+    'traslado_cuadra'    => ['codigo'=>'traslado_cuadra',    'nombre'=>'Traslado cuadra (legado)',     'categoria'=>'traslado',    'color'=>'#1d4ed8', 'activo'=>0, 'es_legacy'=>1],
+    'entrada_cebo'       => ['codigo'=>'entrada_cebo',       'nombre'=>'Entrada cebo (legado)',        'categoria'=>'transicion',  'color'=>'#92400e', 'activo'=>0, 'es_legacy'=>1],
+    'entrada_reposicion' => ['codigo'=>'entrada_reposicion', 'nombre'=>'Entrada reposición (legado)',  'categoria'=>'re_creacion', 'color'=>'#6b21a8', 'activo'=>0, 'es_legacy'=>1],
+    'entrada_madres'     => ['codigo'=>'entrada_madres',     'nombre'=>'Entrada madres (legado)',      'categoria'=>'re_consumo',  'color'=>'#9d174d', 'activo'=>0, 'es_legacy'=>1],
+    'venta'              => ['codigo'=>'venta',              'nombre'=>'Venta (legado)',               'categoria'=>'venta',       'color'=>'#065f46', 'activo'=>0, 'es_legacy'=>1],
+    'baja'               => ['codigo'=>'baja',               'nombre'=>'Baja (legado)',                'categoria'=>'baja',        'color'=>'#991b1b', 'activo'=>0, 'es_legacy'=>1],
+];
+
+// Tipos cargados desde DB. Los activos van al selector; añadimos los
+// legacy al lookup para que el form los entienda al editar.
+$tipoMap = $LEGACY_TIPOS;
 foreach (($tipos ?? []) as $t) {
     $tipoMap[$t['codigo']] = $t;
+}
+
+// Agrupar tipos activos por "grupo" visible (Entradas/Salidas/Bajas/Traslados)
+$gruposVisibles = [
+    'entradas'  => ['titulo' => 'Entradas',  'cats' => ['entrada','transicion','re_creacion','re_consumo'], 'color' => '#15803d', 'tipos' => []],
+    'salidas'   => ['titulo' => 'Salidas',   'cats' => ['salida','venta'],                                  'color' => '#b45309', 'tipos' => []],
+    'bajas'     => ['titulo' => 'Bajas',     'cats' => ['baja'],                                            'color' => '#dc2626', 'tipos' => []],
+    'traslados' => ['titulo' => 'Traslados', 'cats' => ['traslado'],                                        'color' => '#1d4ed8', 'tipos' => []],
+];
+foreach (($tipos ?? []) as $t) {
+    if ((int)($t['activo'] ?? 0) !== 1) continue;
+    foreach ($gruposVisibles as $gk => &$g) {
+        if (in_array($t['categoria'], $g['cats'], true)) {
+            $g['tipos'][] = $t;
+            break;
+        }
+    }
+    unset($g);
+}
+
+// Si no hay tipo seleccionado pero hay grupos con tipos, usar el primero del primer grupo no vacío
+if (!$tipoActual) {
+    foreach ($gruposVisibles as $g) {
+        if (!empty($g['tipos'])) { $tipoActual = $g['tipos'][0]['codigo']; break; }
+    }
 }
 
 // Categoría del tipo actual (para decidir qué fields renderizar)
@@ -40,17 +79,44 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
     <input type="hidden" name="confirmar_inventarios" id="confirmarInv" value="">
 
     <?php if (!$esEdicion): ?>
-    <!-- Selector de tipo -->
+    <!-- Selector de tipo agrupado por categoría -->
     <div class="form-section-title">Tipo de movimiento</div>
-    <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.25rem">
-        <?php foreach ($tipos as $t): ?>
-        <a href="<?= base_url('movimientos/crear?tipo=' . $t['codigo']) ?>"
-           class="btn <?= $tipoActual === $t['codigo'] ? 'btn-primary' : 'btn-secondary' ?> btn-sm"
-           style="<?= $t['color'] && $tipoActual !== $t['codigo'] ? 'border-color:' . e($t['color']) . ';color:' . e($t['color']) : '' ?>">
-            <?= e($t['nombre']) ?>
-        </a>
+    <?php
+    // Detectar si hay algún tipo en cualquier grupo
+    $hayTipos = false;
+    foreach ($gruposVisibles as $g) if (!empty($g['tipos'])) { $hayTipos = true; break; }
+    ?>
+    <?php if (!$hayTipos): ?>
+        <div class="alert-flash alert-error" style="margin-bottom:1rem">
+            No hay tipos de movimiento creados.
+            <a href="<?= base_url('configuracion/movimientos') ?>"><strong>Crea uno en Configuración → Movimientos</strong></a>.
+        </div>
+    <?php else: ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.6rem;margin-bottom:1.25rem">
+        <?php foreach ($gruposVisibles as $gk => $g):
+            if (empty($g['tipos'])) continue;
+            $abierto = false;
+            foreach ($g['tipos'] as $t) if ($t['codigo'] === $tipoActual) { $abierto = true; break; }
+        ?>
+            <details <?= $abierto ? 'open' : '' ?>
+                     style="border:2px solid <?= e($g['color']) ?>33;border-radius:8px;background:<?= e($g['color']) ?>0d;overflow:hidden">
+                <summary style="cursor:pointer;list-style:none;padding:.6rem .9rem;font-weight:700;color:<?= e($g['color']) ?>;display:flex;justify-content:space-between;align-items:center;user-select:none">
+                    <span><?= e($g['titulo']) ?></span>
+                    <span style="font-size:.72rem;background:#fff;color:<?= e($g['color']) ?>;padding:.1rem .5rem;border-radius:99px;border:1px solid <?= e($g['color']) ?>33"><?= count($g['tipos']) ?></span>
+                </summary>
+                <div style="display:flex;flex-direction:column;gap:.3rem;padding:.5rem .6rem .7rem">
+                    <?php foreach ($g['tipos'] as $t): ?>
+                    <a href="<?= base_url('movimientos/crear?tipo=' . $t['codigo']) ?>"
+                       class="btn <?= $tipoActual === $t['codigo'] ? 'btn-primary' : 'btn-secondary' ?> btn-sm"
+                       style="text-align:left">
+                        <?= e($t['nombre']) ?>
+                    </a>
+                    <?php endforeach; ?>
+                </div>
+            </details>
         <?php endforeach; ?>
-    </div>
+        </div>
+    <?php endif; ?>
     <?php endif; ?>
 
     <?php if ($esEdicion): ?>
@@ -291,17 +357,27 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
     </div>
 
     <?php if ($categoriaActual === 'baja'): ?>
+    <?php $motivoActual = $movimiento['motivo_baja'] ?? ''; ?>
     <div class="form-grid form-grid-2">
         <div class="form-group">
             <label>Motivo *</label>
             <select name="motivo_baja" required>
                 <option value="">— Selecciona —</option>
-                <option value="enfermedad"     <?= ($movimiento['motivo_baja'] ?? '') === 'enfermedad' ? 'selected' : '' ?>>Enfermedad</option>
-                <option value="sacrificio"     <?= ($movimiento['motivo_baja'] ?? '') === 'sacrificio' ? 'selected' : '' ?>>Sacrificio</option>
-                <option value="canibalismo"    <?= ($movimiento['motivo_baja'] ?? '') === 'canibalismo' ? 'selected' : '' ?>>Canibalismo</option>
-                <option value="aplastamiento"  <?= ($movimiento['motivo_baja'] ?? '') === 'aplastamiento' ? 'selected' : '' ?>>Aplastamiento</option>
-                <option value="otro"           <?= ($movimiento['motivo_baja'] ?? '') === 'otro' ? 'selected' : '' ?>>Otro</option>
+                <?php foreach (($motivos ?? []) as $mot): ?>
+                <option value="<?= e($mot['codigo']) ?>" <?= $motivoActual === $mot['codigo'] ? 'selected' : '' ?>>
+                    <?= e($mot['nombre']) ?>
+                </option>
+                <?php endforeach; ?>
+                <?php
+                // Si el motivo guardado no existe en la BD (p.ej. fue borrado),
+                // mostrarlo igualmente para no perder el dato.
+                $codigosBd = array_column($motivos ?? [], 'codigo');
+                if ($motivoActual && !in_array($motivoActual, $codigosBd, true)):
+                ?>
+                <option value="<?= e($motivoActual) ?>" selected><?= e(ucfirst($motivoActual)) ?> (legado)</option>
+                <?php endif; ?>
             </select>
+            <span class="form-hint">Edita los motivos en <a href="<?= base_url('configuracion/general') ?>">Configuración → Avisos</a></span>
         </div>
         <div class="form-group">
             <label>Peso real medio (kg/animal)</label>

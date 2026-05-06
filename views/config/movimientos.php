@@ -39,7 +39,6 @@ $categorias = [
                 <th>Código</th>
                 <th>Categoría</th>
                 <th style="text-align:center">Estado</th>
-                <th>Origen</th>
                 <th></th>
             </tr>
         </thead>
@@ -66,22 +65,13 @@ $categorias = [
                     <?php endif; ?>
                 </td>
                 <td>
-                    <?php if ((int)$t['es_sistema'] === 1): ?>
-                        <span class="badge badge-activo">Sistema</span>
-                    <?php else: ?>
-                        <span class="badge" style="background:#e0f2fe;color:#0369a1">Personalizado</span>
-                    <?php endif; ?>
-                </td>
-                <td>
                     <div class="actions">
                         <a href="<?= base_url("configuracion/movimientos/{$t['id']}/editar") ?>" class="btn btn-secondary btn-sm">Editar</a>
-                        <?php if ((int)$t['es_sistema'] === 0): ?>
                         <form method="POST" action="<?= base_url("configuracion/movimientos/{$t['id']}/eliminar") ?>"
                               onsubmit="return confirm('¿Eliminar este tipo? Los movimientos antiguos conservarán su código pero no podrá usarse para nuevos registros.')">
                             <?= csrf_field() ?>
                             <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
                         </form>
-                        <?php endif; ?>
                     </div>
                 </td>
             </tr>

@@ -18,8 +18,10 @@ include __DIR__ . '/_submenu.php';
             <li>Todas las <strong>asignaciones de animales a cuadras</strong></li>
             <li>Todos los <strong>movimientos</strong> y su historial</li>
             <li>Todos los <strong>pesajes</strong></li>
+            <li>Todos los <strong>inventarios</strong> generados (incluidas líneas y silos)</li>
+            <li>Todos los <strong>silos</strong> y sus <strong>recargas / calibraciones / histórico de stock</strong></li>
         </ul>
-        <p style="color:#7c2d12;margin:0"><strong>Se conservarán:</strong> granjas, naves, cuadras, silos, razas, tablas de crecimiento, usuarios y configuración.</p>
+        <p style="color:#7c2d12;margin:0"><strong>Se conservarán:</strong> granjas, naves, cuadras, razas, tablas de crecimiento, tipos de movimiento, motivos de baja, usuarios y configuración.</p>
     </div>
 
     <div class="form-card">

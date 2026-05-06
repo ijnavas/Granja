@@ -32,16 +32,9 @@ CREATE TABLE IF NOT EXISTS tipos_movimiento (
     KEY idx_activo_orden (activo, orden)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Seed: 6 tipos de sistema (los originales, no se pueden borrar)
-INSERT IGNORE INTO tipos_movimiento (codigo, nombre, categoria, es_sistema, activo, orden, color) VALUES
-    ('traslado_cuadra',    'Traslado cuadra',     'traslado',    1, 1, 10, '#1d4ed8'),
-    ('entrada_cebo',       'Entrada a cebo',      'transicion',  1, 1, 20, '#92400e'),
-    ('entrada_reposicion', 'Entrada a reposición','re_creacion', 1, 1, 30, '#6b21a8'),
-    ('entrada_madres',     'Entrada a madres',    're_consumo',  1, 1, 40, '#9d174d'),
-    ('venta',              'Venta',               'venta',       1, 1, 50, '#065f46'),
-    ('baja',               'Baja',                'baja',        1, 1, 60, '#991b1b');
-
--- Seed: tipos extra solicitados (editables/borrables por el usuario)
+-- Seed: tipos por defecto (todos editables/borrables por el usuario).
+-- Para tipos personalizados con lógica de traslado, transición, etc.,
+-- el usuario puede crear los suyos desde Configuración → Movimientos.
 INSERT IGNORE INTO tipos_movimiento (codigo, nombre, categoria, es_sistema, activo, orden, color) VALUES
     ('salida_madres',      'Salida de madres',    'salida', 0, 1, 110, '#b45309'),
     ('venta_transicion',   'Venta transición',    'venta',  0, 1, 120, '#0e7490'),

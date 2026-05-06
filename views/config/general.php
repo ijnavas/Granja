@@ -44,3 +44,89 @@
         </div>
     </form>
 </div>
+
+<!-- ────────────────────────────────────────────────────────────── -->
+<!-- Motivos de baja                                                 -->
+<!-- ────────────────────────────────────────────────────────────── -->
+<div style="font-size:.875rem;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.04em;margin:2rem 0 .75rem">
+    Motivos de baja
+</div>
+
+<div class="list-card" style="margin-bottom:1rem;max-width:680px">
+    <table class="list-table">
+        <thead>
+            <tr>
+                <th style="width:50px">Orden</th>
+                <th>Nombre</th>
+                <th>Código</th>
+                <th style="text-align:center">Estado</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php foreach (($motivos ?? []) as $m): ?>
+            <tr>
+                <td style="color:#9ca3af"><?= (int)$m['orden'] ?></td>
+                <td><strong><?= e($m['nombre']) ?></strong></td>
+                <td>
+                    <span style="font-family:monospace;font-size:.85rem;background:#f3f4f6;padding:.15rem .5rem;border-radius:4px">
+                        <?= e($m['codigo']) ?>
+                    </span>
+                </td>
+                <td style="text-align:center">
+                    <?php if ((int)$m['activo'] === 1): ?>
+                        <span class="badge badge-activo">Activo</span>
+                    <?php else: ?>
+                        <span class="badge" style="background:#fee2e2;color:#991b1b">Inactivo</span>
+                    <?php endif; ?>
+                </td>
+                <td>
+                    <div class="actions">
+                        <form method="POST" action="<?= base_url("configuracion/motivos/{$m['id']}/actualizar") ?>" style="display:flex;gap:.4rem;align-items:center">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="codigo" value="<?= e($m['codigo']) ?>">
+                            <input type="hidden" name="nombre" value="<?= e($m['nombre']) ?>">
+                            <input type="hidden" name="orden"  value="<?= (int)$m['orden'] ?>">
+                            <?php if ((int)$m['activo'] === 1): ?>
+                                <button type="submit" class="btn btn-secondary btn-sm" title="Desactivar">Desactivar</button>
+                            <?php else: ?>
+                                <button type="submit" name="activo" value="1" class="btn btn-secondary btn-sm">Activar</button>
+                            <?php endif; ?>
+                        </form>
+                        <form method="POST" action="<?= base_url("configuracion/motivos/{$m['id']}/eliminar") ?>"
+                              onsubmit="return confirm('¿Eliminar este motivo? Las bajas que ya lo usan conservarán el código.')">
+                            <?= csrf_field() ?>
+                            <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            <?php endforeach; ?>
+        </tbody>
+    </table>
+</div>
+
+<div class="form-card" style="max-width:680px">
+    <form method="POST" action="<?= base_url('configuracion/motivos') ?>">
+        <?= csrf_field() ?>
+        <div class="form-grid form-grid-3">
+            <div class="form-group">
+                <label>Nombre *</label>
+                <input type="text" name="nombre" required placeholder="Aplastamiento">
+            </div>
+            <div class="form-group">
+                <label>Código *</label>
+                <input type="text" name="codigo" required placeholder="aplastamiento"
+                       pattern="[a-z0-9_]+" style="font-family:monospace;text-transform:lowercase"
+                       oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'_')">
+            </div>
+            <div class="form-group">
+                <label>Orden</label>
+                <input type="number" name="orden" value="100" min="0">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Añadir motivo</button>
+        </div>
+    </form>
+</div>

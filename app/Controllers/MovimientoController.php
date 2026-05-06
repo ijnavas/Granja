@@ -8,6 +8,7 @@ use App\Models\Lote;
 use App\Models\Nave;
 use App\Models\Cuadra;
 use App\Models\TipoMovimiento;
+use App\Models\MotivoBaja;
 use App\Models\ConfiguracionGranja;
 use App\Core\Session;
 use App\Core\Paginator;
@@ -21,6 +22,7 @@ class MovimientoController extends BaseController
     private Nave                $naveModel;
     private Cuadra              $cuadraModel;
     private TipoMovimiento      $tipoMovModel;
+    private MotivoBaja          $motivoModel;
     private ConfiguracionGranja $configModel;
 
     public function __construct()
@@ -30,6 +32,7 @@ class MovimientoController extends BaseController
         $this->naveModel    = new Nave();
         $this->cuadraModel  = new Cuadra();
         $this->tipoMovModel = new TipoMovimiento();
+        $this->motivoModel  = new MotivoBaja();
         $this->configModel  = new ConfiguracionGranja();
     }
 
@@ -145,6 +148,7 @@ class MovimientoController extends BaseController
             'naves'          => $this->naveModel->allByUsuario($uid),
             'estados'        => $this->model->estadosAnimal(),
             'tipos'          => $this->tipoMovModel->all(true),
+            'motivos'        => $this->motivoModel->all(true),
             'config'         => $this->configModel->get($uid),
             'pageTitle'      => 'Nuevo movimiento',
             'error'          => Session::getFlash('error'),
@@ -252,6 +256,7 @@ class MovimientoController extends BaseController
             'naves'      => $this->naveModel->allByUsuario($uid),
             'estados'    => $this->model->estadosAnimal(),
             'tipos'      => $this->tipoMovModel->all(true),
+            'motivos'    => $this->motivoModel->all(true),
             'config'     => $this->configModel->get($uid),
             'historial'  => $this->model->historial((int)$id),
             'pageTitle'  => 'Editar movimiento',

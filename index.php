@@ -271,6 +271,9 @@ $router->post('/recevet/sincronizar',                       [RecevtController::c
 $router->get('/configuracion',                              [ConfigController::class, 'index']);
 $router->get('/configuracion/general',                       [ConfigController::class, 'general']);
 $router->post('/configuracion/general',                      [ConfigController::class, 'actualizarGeneral']);
+$router->post('/configuracion/motivos',                      [ConfigController::class, 'crearMotivo']);
+$router->post('/configuracion/motivos/{id}/actualizar',      [ConfigController::class, 'actualizarMotivo']);
+$router->post('/configuracion/motivos/{id}/eliminar',        [ConfigController::class, 'eliminarMotivo']);
 $router->get('/configuracion/movimientos',                   [ConfigController::class, 'tiposMovimiento']);
 $router->post('/configuracion/movimientos',                  [ConfigController::class, 'crearTipoMovimiento']);
 $router->get('/configuracion/movimientos/{id}/editar',       [ConfigController::class, 'editarTipoMovimiento']);

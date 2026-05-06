@@ -66,25 +66,6 @@ class TipoMovimiento
 
     public function update(int $id, array $data): void
     {
-        // Sistema: no se puede cambiar codigo ni categoria
-        $existente = $this->find($id);
-        if (!$existente) return;
-
-        if ((int)$existente['es_sistema'] === 1) {
-            $stmt = $this->db->prepare("
-                UPDATE tipos_movimiento SET nombre = :nombre, activo = :activo, orden = :orden, color = :color
-                WHERE id = :id
-            ");
-            $stmt->execute([
-                'id'     => $id,
-                'nombre' => $data['nombre'],
-                'activo' => !empty($data['activo']) ? 1 : 0,
-                'orden'  => (int)($data['orden'] ?? 0),
-                'color'  => $data['color'] ?? null,
-            ]);
-            return;
-        }
-
         $stmt = $this->db->prepare("
             UPDATE tipos_movimiento SET
                 codigo = :codigo, nombre = :nombre, categoria = :categoria,
@@ -104,9 +85,7 @@ class TipoMovimiento
 
     public function delete(int $id): bool
     {
-        $existente = $this->find($id);
-        if (!$existente || (int)$existente['es_sistema'] === 1) return false;
-        $stmt = $this->db->prepare("DELETE FROM tipos_movimiento WHERE id = :id AND es_sistema = 0");
+        $stmt = $this->db->prepare("DELETE FROM tipos_movimiento WHERE id = :id");
         return $stmt->execute(['id' => $id]);
     }
 }

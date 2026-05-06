@@ -7,6 +7,7 @@ use App\Models\RazaPorcino;
 use App\Models\TablaCrecimiento;
 use App\Models\EstadoAnimal;
 use App\Models\TipoMovimiento;
+use App\Models\MotivoBaja;
 use App\Models\ConfiguracionGranja;
 use App\Core\Session;
 
@@ -16,6 +17,7 @@ class ConfigController extends BaseController
     private TablaCrecimiento    $tablaModel;
     private EstadoAnimal        $estadoModel;
     private TipoMovimiento      $tipoMovModel;
+    private MotivoBaja          $motivoModel;
     private ConfiguracionGranja $configModel;
 
     public function __construct()
@@ -24,6 +26,7 @@ class ConfigController extends BaseController
         $this->tablaModel   = new TablaCrecimiento();
         $this->estadoModel  = new EstadoAnimal();
         $this->tipoMovModel = new TipoMovimiento();
+        $this->motivoModel  = new MotivoBaja();
         $this->configModel  = new ConfiguracionGranja();
     }
 
@@ -333,19 +336,37 @@ class ConfigController extends BaseController
 
         $db = \App\Core\Database::getInstance();
 
-        // Borrar en orden para respetar claves foráneas
+        // Borrar en orden para respetar claves foráneas: hijos antes que padres.
+        // Movimientos / lotes / cuadras (datos animales)
         $db->exec('DELETE FROM movimientos_historial');
         $db->exec('DELETE FROM movimientos');
+        $db->exec('DELETE FROM movimiento_cuadras');
         $db->exec('DELETE FROM pesajes');
         $db->exec('DELETE FROM cuadra_lote');
         $db->exec('DELETE FROM lotes');
 
-        // Reiniciar auto_increment
-        foreach (['movimientos_historial', 'movimientos', 'pesajes', 'cuadra_lote', 'lotes'] as $tabla) {
-            $db->exec("ALTER TABLE {$tabla} AUTO_INCREMENT = 1");
+        // Inventarios (lineas y silos cascadean en algunos sitios; por seguridad, manuales)
+        $db->exec('DELETE FROM inventario_lineas');
+        $db->exec('DELETE FROM inventario_silos');
+        $db->exec('DELETE FROM inventarios');
+
+        // Silos: recargas, calibraciones, histórico de stock y los silos en sí
+        foreach (['silo_recargas', 'silo_calibraciones', 'silo_stock_historico', 'silos'] as $t) {
+            try { $db->exec("DELETE FROM {$t}"); } catch (\Throwable $e) { /* tabla puede no existir */ }
         }
 
-        Session::flash('success', 'Todos los datos operativos han sido eliminados correctamente.');
+        // Reiniciar auto_increment de todas las tablas vaciadas
+        $tablas = [
+            'movimientos_historial', 'movimientos', 'movimiento_cuadras',
+            'pesajes', 'cuadra_lote', 'lotes',
+            'inventario_lineas', 'inventario_silos', 'inventarios',
+            'silo_recargas', 'silo_calibraciones', 'silo_stock_historico', 'silos',
+        ];
+        foreach ($tablas as $tabla) {
+            try { $db->exec("ALTER TABLE {$tabla} AUTO_INCREMENT = 1"); } catch (\Throwable $e) { /* ignore */ }
+        }
+
+        Session::flash('success', 'Todos los datos operativos (lotes, movimientos, inventarios, silos y recargas) han sido eliminados correctamente.');
         $this->redirect('configuracion/reset');
     }
 
@@ -463,10 +484,69 @@ class ConfigController extends BaseController
         $uid = Session::get('usuario_id');
         $this->view('config/general', [
             'config'    => $this->configModel->get($uid),
+            'motivos'   => $this->motivoModel->all(false),
             'pageTitle' => 'Configuración — Avisos',
             'success'   => Session::getFlash('success'),
             'error'     => Session::getFlash('error'),
         ]);
+    }
+
+    // ── Motivos de baja (subsección de Avisos) ──────────────────
+    public function crearMotivo(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('configuracion/general');
+        }
+        $codigo = strtolower(trim(preg_replace('/[^a-z0-9_]/i', '_', $this->postString('codigo'))));
+        $nombre = capitalizar($this->postString('nombre'));
+        if (strlen($codigo) < 2 || strlen($nombre) < 2) {
+            Session::flash('error', 'Código y nombre son obligatorios.');
+            $this->redirect('configuracion/general');
+        }
+        if ($this->motivoModel->findByCodigo($codigo)) {
+            Session::flash('error', "Ya existe un motivo con código \"{$codigo}\".");
+            $this->redirect('configuracion/general');
+        }
+        $this->motivoModel->create($codigo, $nombre, (int)$this->post('orden'), true);
+        Session::flash('success', "Motivo \"{$nombre}\" creado.");
+        $this->redirect('configuracion/general');
+    }
+
+    public function actualizarMotivo(string $id): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('configuracion/general');
+        }
+        $codigo = strtolower(trim(preg_replace('/[^a-z0-9_]/i', '_', $this->postString('codigo'))));
+        $nombre = capitalizar($this->postString('nombre'));
+        if (strlen($nombre) < 2) {
+            Session::flash('error', 'El nombre es obligatorio.');
+            $this->redirect('configuracion/general');
+        }
+        $this->motivoModel->update(
+            (int)$id,
+            $codigo,
+            $nombre,
+            (int)$this->post('orden'),
+            $this->post('activo') !== null
+        );
+        Session::flash('success', 'Motivo actualizado.');
+        $this->redirect('configuracion/general');
+    }
+
+    public function eliminarMotivo(string $id): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('configuracion/general');
+        }
+        $this->motivoModel->delete((int)$id);
+        Session::flash('success', 'Motivo eliminado.');
+        $this->redirect('configuracion/general');
     }
 
     public function actualizarGeneral(): void

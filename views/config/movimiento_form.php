@@ -20,7 +20,6 @@ $categorias = [
     're_creacion' => 'Creación lote RE',
     're_consumo'  => 'Consumo lote RE',
 ];
-$esSistema = (int)$tipo['es_sistema'] === 1;
 ?>
 
 <div class="form-card" style="max-width:680px">
@@ -33,25 +32,20 @@ $esSistema = (int)$tipo['es_sistema'] === 1;
                     <input type="text" name="nombre" required value="<?= e($tipo['nombre']) ?>">
                 </div>
                 <div class="form-group">
-                    <label>Código <?= $esSistema ? '(no editable en tipos de sistema)' : '' ?></label>
+                    <label>Código</label>
                     <input type="text" name="codigo" required
                            value="<?= e($tipo['codigo']) ?>"
-                           <?= $esSistema ? 'readonly style="background:#f3f4f6;font-family:monospace"' : 'pattern="[a-z0-9_]+" style="font-family:monospace"' ?>
+                           pattern="[a-z0-9_]+" style="font-family:monospace"
                            oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'_')">
                 </div>
             </div>
             <div class="form-group">
-                <label>Categoría <?= $esSistema ? '(no editable en tipos de sistema)' : '' ?></label>
-                <?php if ($esSistema): ?>
-                    <input type="text" readonly value="<?= e($categorias[$tipo['categoria']] ?? $tipo['categoria']) ?>" style="background:#f3f4f6">
-                    <input type="hidden" name="categoria" value="<?= e($tipo['categoria']) ?>">
-                <?php else: ?>
-                    <select name="categoria" required>
-                        <?php foreach ($categorias as $code => $label): ?>
-                        <option value="<?= e($code) ?>" <?= $tipo['categoria'] === $code ? 'selected' : '' ?>><?= e($label) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                <?php endif; ?>
+                <label>Categoría</label>
+                <select name="categoria" required>
+                    <?php foreach ($categorias as $code => $label): ?>
+                    <option value="<?= e($code) ?>" <?= $tipo['categoria'] === $code ? 'selected' : '' ?>><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
             </div>
             <div class="form-grid form-grid-3">
                 <div class="form-group">
