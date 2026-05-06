@@ -197,6 +197,27 @@ class LoteController extends BaseController
             }
         }
 
+        // Si se introdujo peso de entrada, registrar un pesaje automático en
+        // la fecha de entrada. Esto ANCLA la proyección de peso real del
+        // lote desde el primer momento — sin esto, hasta que el usuario no
+        // crease manualmente un pesaje, las proyecciones mostraban solo la
+        // tabla aunque el peso real fuera distinto.
+        $pesoEntradaTotal = (float)$datosNuevo['peso_entrada_kg'];
+        $numAnim          = (int)$datosNuevo['num_animales'];
+        if ($pesoEntradaTotal > 0 && $numAnim > 0) {
+            (new \App\Models\Pesaje())->create([
+                'lote_id'              => $loteId,
+                'cuadra_id'            => null,
+                'fecha'                => $datosNuevo['fecha_entrada'],
+                'peso_medio_kg'        => round($pesoEntradaTotal / $numAnim, 3),
+                'num_animales_pesados' => $numAnim,
+                'consumo_pienso_kg'    => null,
+                'ic_real'              => null,
+                'observaciones'        => 'Pesaje automático al alta del lote',
+                'usuario_id'           => $uid,
+            ]);
+        }
+
         Session::flash('success', "Lote <strong>{$codigo}</strong> creado correctamente.");
         $this->redirect('lotes');
     }
