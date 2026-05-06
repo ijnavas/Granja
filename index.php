@@ -118,6 +118,7 @@ use App\Controllers\CuadraController;
 
 use App\Controllers\MovimientoController;
 use App\Controllers\InventarioController;
+use App\Controllers\InformeController;
 use App\Controllers\ConfigController;
 use App\Controllers\PerfilController;
 use App\Controllers\PesajeController;
@@ -243,6 +244,9 @@ $router->get('/inventarios/{id}',                   [InventarioController::class
 $router->get('/inventarios/{id}/excel',             [InventarioController::class, 'excel']);
 $router->post('/inventarios/{id}/email',            [InventarioController::class, 'email']);
 $router->post('/inventarios/{id}/eliminar',         [InventarioController::class, 'delete']);
+
+// Informes
+$router->get('/informes',                                   [InformeController::class, 'index']);
 
 // Pesajes
 $router->get('/pesajes/export',                              [PesajeController::class, 'export']);

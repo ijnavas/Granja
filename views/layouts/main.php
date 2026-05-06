@@ -101,6 +101,12 @@
             <span class="nav-tooltip">Escanear cuaderno</span>
         </a>
 
+        <a href="<?= base_url('informes') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/informes') ? 'active' : '' ?>">
+            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+            <span class="nav-label">Informes</span>
+            <span class="nav-tooltip">Informes y gráficos</span>
+        </a>
+
         <div class="nav-section-label">Sistema</div>
         <?php $cfgHref = es_admin() ? 'configuracion/razas' : 'configuracion/general'; ?>
         <a href="<?= base_url($cfgHref) ?>" class="nav-item <?= (str_contains($_SERVER['REQUEST_URI'], '/configuracion') || str_contains($_SERVER['REQUEST_URI'], '/recevet') || str_contains($_SERVER['REQUEST_URI'], '/admin/audit-log')) ? 'active' : '' ?>">
