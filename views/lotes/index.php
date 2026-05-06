@@ -112,6 +112,16 @@ $hayFiltros = !empty(array_filter($filtros));
                     <?php if ($l['raza_nombre']): ?>
                         <div style="font-size:.75rem;color:#9ca3af"><?= e($l['raza_nombre']) ?></div>
                     <?php endif; ?>
+                    <?php $tags = $tagsByLote[$l['id']] ?? []; ?>
+                    <?php if (!empty($tags)): ?>
+                    <div style="display:flex;flex-wrap:wrap;gap:.2rem;margin-top:.25rem">
+                        <?php foreach ($tags as $t): ?>
+                        <span style="background:<?= e($t['color']) ?>22;color:<?= e($t['color']) ?>;font-size:.68rem;font-weight:600;padding:.05rem .4rem;border-radius:99px;border:1px solid <?= e($t['color']) ?>44">
+                            <?= e($t['nombre']) ?>
+                        </span>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
                 </td>
                 <td>
                     <?php if ($l['nave_nombre']): ?>
@@ -164,6 +174,7 @@ $hayFiltros = !empty(array_filter($filtros));
                 <td><span class="badge badge-<?= e($l['estado']) ?>"><?= e($l['estado']) ?></span></td>
                 <td onclick="event.stopPropagation()">
                     <div class="actions">
+                        <a href="<?= base_url("lotes/{$l['id']}/trazabilidad") ?>" class="btn btn-secondary btn-sm">Trazabilidad</a>
                         <a href="<?= base_url("lotes/{$l['id']}/editar") ?>" class="btn btn-secondary btn-sm">Editar</a>
                         <a href="<?= base_url("pesajes/crear?lote_id={$l['id']}") ?>" class="btn btn-secondary btn-sm">Pesar</a>
                         <?php if ($l['estado'] === 'activo'): ?>

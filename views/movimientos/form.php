@@ -502,6 +502,15 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
         </div>
     </div>
 
+    <!-- Etiquetas -->
+    <div class="form-group" style="margin-top:1rem">
+        <label>Etiquetas</label>
+        <?php $tagsMov = implode(', ', array_column($etiquetasMov ?? [], 'nombre')); ?>
+        <input type="text" name="etiquetas" value="<?= e($tagsMov) ?>"
+               placeholder="Separadas por comas: urgente, revisar, exterior...">
+        <span class="form-hint">Las que escribas reemplazan a las anteriores.</span>
+    </div>
+
     <!-- Observaciones -->
     <div class="form-group" style="margin-top:1rem">
         <label>Observaciones</label>

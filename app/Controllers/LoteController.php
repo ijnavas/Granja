@@ -7,6 +7,7 @@ use App\Models\Lote;
 use App\Models\Nave;
 use App\Models\Granja;
 use App\Models\RazaPorcino;
+use App\Models\Etiqueta;
 use App\Core\Session;
 use App\Core\Paginator;
 use App\Core\AuditLog;
@@ -43,8 +44,12 @@ class LoteController extends BaseController
         $total      = $this->model->countByUsuario($uid, $filtros);
         $paginacion = new Paginator($total, $page, 50);
 
+        $lotes = $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset);
+        $tagsByLote = (new Etiqueta())->indexedByLoteIds(array_column($lotes, 'id'));
+
         $this->view('lotes/index', [
-            'lotes'      => $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset),
+            'lotes'      => $lotes,
+            'tagsByLote' => $tagsByLote,
             'filtros'    => $filtros,
             'paginacion' => $paginacion,
             'granjas'    => $this->granjaModel->selectOptions($uid),
@@ -224,6 +229,13 @@ class LoteController extends BaseController
             ]);
         }
 
+        // Sincronizar etiquetas (input "tag1, tag2")
+        $tagInput = $this->postString('etiquetas');
+        if ($tagInput !== '') {
+            $tags = Etiqueta::parseInput($tagInput);
+            (new Etiqueta())->syncForLote($loteId, $uid, $tags);
+        }
+
         // Si estamos en modo destete, registrar también el movimiento del
         // sistema "destete" para que aparezca en el listado de movimientos
         // y en los informes como alta del lote.
@@ -296,6 +308,8 @@ class LoteController extends BaseController
         $stmtMov->execute(['id' => (int)$id, 'id2' => (int)$id]);
         $historialMovimientos = $stmtMov->fetchAll();
 
+        $etiquetasLote = (new Etiqueta())->forLote((int)$id);
+
         $this->view('lotes/form', [
             'lote'                 => $lote,
             'naves'                => $this->naveModel->selectOptions($uid),
@@ -307,6 +321,7 @@ class LoteController extends BaseController
             'cuadrasAsig'          => $cuadrasAsig,
             'cuadrasDelLote'       => $cuadrasDelLote,
             'historialMovimientos' => $historialMovimientos,
+            'etiquetasLote'        => $etiquetasLote,
             'pageTitle'            => 'Editar lote ' . $lote['codigo'],
             'codigoAuto'           => $lote['codigo'],
             'error'                => Session::getFlash('error'),
@@ -352,6 +367,11 @@ class LoteController extends BaseController
         $this->model->update((int)$id, $uid, $datosUpdate);
         $despues = $this->model->find((int)$id, $uid);
         AuditLog::log('lote', (int)$id, 'update', $antes, $despues);
+
+        // Sincronizar etiquetas
+        $tagInput = $this->postString('etiquetas');
+        $tags     = Etiqueta::parseInput($tagInput);
+        (new Etiqueta())->syncForLote((int)$id, $uid, $tags);
 
         // Sync cuadras: borrar asignaciones anteriores y crear las nuevas
         $cuadrasIds  = $_POST['cuadras_asig_id']  ?? [];
@@ -531,6 +551,168 @@ class LoteController extends BaseController
         auth_required();
         $lotes = $this->model->allCerradosByUsuario(Session::get('usuario_id'));
         $this->view('lotes/historico', ['lotes' => $lotes, 'pageTitle' => 'Histórico de lotes']);
+    }
+
+    /**
+     * Trazabilidad completa de un lote: línea de tiempo cronológica con
+     * todos los eventos relevantes (alta, pesajes, movimientos, traslados,
+     * cuadras, cierre) y KPIs si está cerrado.
+     */
+    public function trazabilidad(string $id): void
+    {
+        auth_required();
+        $uid  = (int) Session::get('usuario_id');
+        $lote = $this->model->find((int)$id, $uid);
+        if (!$lote) $this->redirect('lotes');
+
+        $db = \App\Core\Database::getInstance();
+
+        // Enriquecer con raza_nombre (find() no la incluye)
+        if (!empty($lote['raza_id'])) {
+            $stmtR = $db->prepare("SELECT nombre FROM razas_porcino WHERE id = :id");
+            $stmtR->execute(['id' => (int)$lote['raza_id']]);
+            $lote['raza_nombre'] = $stmtR->fetchColumn() ?: null;
+        }
+
+        // Pesajes
+        $stmt = $db->prepare("
+            SELECT id, fecha, peso_medio_kg, num_animales_pesados, observaciones
+            FROM pesajes WHERE lote_id = :id ORDER BY fecha, id
+        ");
+        $stmt->execute(['id' => (int)$id]);
+        $pesajes = $stmt->fetchAll();
+
+        // Movimientos donde aparece como origen o destino
+        $stmt = $db->prepare("
+            SELECT m.*,
+                   tm.nombre  AS tipo_nombre,
+                   tm.categoria AS tipo_categoria,
+                   tm.color   AS tipo_color,
+                   lo.codigo  AS lote_origen_codigo,
+                   ld.codigo  AS lote_destino_codigo,
+                   co.nombre  AS cuadra_origen_nombre,
+                   cd.nombre  AS cuadra_destino_nombre,
+                   no.nombre  AS nave_origen_nombre,
+                   nd.nombre  AS nave_destino_nombre,
+                   u.nombre   AS usuario_nombre
+            FROM movimientos m
+            LEFT JOIN tipos_movimiento tm ON tm.codigo COLLATE utf8mb4_general_ci = m.tipo
+            LEFT JOIN lotes lo ON m.lote_origen_id  = lo.id
+            LEFT JOIN lotes ld ON m.lote_destino_id = ld.id
+            LEFT JOIN cuadras co ON m.cuadra_origen_id  = co.id
+            LEFT JOIN cuadras cd ON m.cuadra_destino_id = cd.id
+            LEFT JOIN naves no   ON co.nave_id = no.id
+            LEFT JOIN naves nd   ON cd.nave_id = nd.id
+            LEFT JOIN usuarios u ON m.usuario_id = u.id
+            WHERE m.lote_origen_id = :id OR m.lote_destino_id = :id2
+            ORDER BY m.fecha, m.id
+        ");
+        $stmt->execute(['id' => (int)$id, 'id2' => (int)$id]);
+        $movimientos = $stmt->fetchAll();
+
+        // Cuadras actuales del lote
+        $cuadraModel    = new \App\Models\Cuadra();
+        $cuadrasActuales = $cuadraModel->cuadrasDelLote((int)$id);
+
+        // Etiquetas del lote
+        $etiquetasLote = (new Etiqueta())->forLote((int)$id);
+
+        // Construir timeline unificada
+        $eventos = [];
+        // Alta del lote
+        if ($lote['fecha_entrada'] ?? $lote['fecha_nacimiento'] ?? null) {
+            $eventos[] = [
+                'fecha'  => $lote['fecha_entrada'] ?? $lote['fecha_nacimiento'],
+                'tipo'   => 'alta',
+                'titulo' => 'Alta del lote',
+                'detalle'=> [
+                    'Animales: ' . number_format((int)$lote['num_animales_entrada']),
+                    $lote['peso_entrada_kg'] ? 'Peso entrada: ' . number_format((float)$lote['peso_entrada_kg'], 2) . ' kg' : null,
+                    $lote['raza_nombre'] ? 'Raza: ' . $lote['raza_nombre'] : null,
+                ],
+            ];
+        }
+        foreach ($pesajes as $p) {
+            $eventos[] = [
+                'fecha'   => $p['fecha'],
+                'tipo'    => 'pesaje',
+                'titulo'  => 'Pesaje',
+                'detalle' => [
+                    number_format((float)$p['peso_medio_kg'], 3) . ' kg/animal',
+                    $p['num_animales_pesados'] ? 'Sobre ' . (int)$p['num_animales_pesados'] . ' animales' : null,
+                    $p['observaciones'] ?? null,
+                ],
+            ];
+        }
+        foreach ($movimientos as $m) {
+            $detalle = [];
+            $detalle[] = number_format((int)$m['num_animales']) . ' animales';
+            if ($m['cuadra_origen_nombre']) {
+                $detalle[] = 'Origen: ' . trim(($m['nave_origen_nombre'] ?? '') . ' · ' . $m['cuadra_origen_nombre']);
+            }
+            if ($m['cuadra_destino_nombre']) {
+                $detalle[] = 'Destino: ' . trim(($m['nave_destino_nombre'] ?? '') . ' · ' . $m['cuadra_destino_nombre']);
+            }
+            if ($m['lote_destino_codigo'] && $m['lote_destino_codigo'] !== $m['lote_origen_codigo']) {
+                $detalle[] = 'Lote destino: ' . $m['lote_destino_codigo'];
+            }
+            if ($m['precio_eur'])    $detalle[] = number_format((float)$m['precio_eur'], 2) . ' €';
+            if ($m['peso_canal_kg']) $detalle[] = 'Peso canal: ' . number_format((float)$m['peso_canal_kg'], 1) . ' kg';
+            if ($m['motivo_baja'])   $detalle[] = 'Motivo: ' . $m['motivo_baja'];
+
+            $eventos[] = [
+                'fecha'   => $m['fecha'],
+                'tipo'    => 'movimiento',
+                'titulo'  => $m['tipo_nombre'] ?: $m['tipo'],
+                'color'   => $m['tipo_color'] ?: '#6b7280',
+                'detalle' => array_filter($detalle),
+                'usuario' => $m['usuario_nombre'] ?? '',
+                'mov_id'  => (int)$m['id'],
+            ];
+        }
+        // Cierre
+        if ($lote['estado'] === 'cerrado' && !empty($lote['fecha_cierre'])) {
+            $eventos[] = [
+                'fecha'   => $lote['fecha_cierre'],
+                'tipo'    => 'cierre',
+                'titulo'  => 'Cierre del lote',
+                'detalle' => ['Estado: cerrado'],
+            ];
+        }
+        // Ordenar cronológico
+        usort($eventos, fn($a, $b) => strcmp((string)$a['fecha'], (string)$b['fecha']));
+
+        // KPIs (si hay datos)
+        $totalBajas  = 0; $totalVentas = 0; $totalKgVend = 0.0; $totalEur = 0.0;
+        foreach ($movimientos as $m) {
+            $cat = $m['tipo_categoria'] ?? '';
+            if ($cat === 'baja')  $totalBajas  += (int)$m['num_animales'];
+            if ($cat === 'venta') {
+                $totalVentas += (int)$m['num_animales'];
+                $totalKgVend += (float)$m['peso_canal_kg'];
+                $totalEur    += (float)$m['precio_eur'];
+            }
+        }
+        $diasEnGranja = null;
+        if ($lote['fecha_entrada']) {
+            $fin = $lote['estado'] === 'cerrado' && !empty($lote['fecha_cierre']) ? $lote['fecha_cierre'] : date('Y-m-d');
+            $diasEnGranja = (int) round((strtotime($fin) - strtotime($lote['fecha_entrada'])) / 86400);
+        }
+
+        $this->view('lotes/trazabilidad', [
+            'pageTitle'      => 'Trazabilidad · ' . $lote['codigo'],
+            'lote'           => $lote,
+            'eventos'        => $eventos,
+            'cuadrasActuales'=> $cuadrasActuales,
+            'etiquetasLote'  => $etiquetasLote,
+            'kpis'           => [
+                'total_bajas'    => $totalBajas,
+                'total_ventas'   => $totalVentas,
+                'total_kg_vend'  => $totalKgVend,
+                'total_eur'      => $totalEur,
+                'dias_en_granja' => $diasEnGranja,
+            ],
+        ]);
     }
 
     public function historicoShow(string $id): void

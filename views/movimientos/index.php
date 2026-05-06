@@ -118,7 +118,19 @@ $hayFiltros = !empty(array_filter($filtros));
                         <?= $et['label'] ?>
                     </span>
                 </td>
-                <td><span style="font-family:monospace;font-weight:600"><?= e($m['lote_origen_codigo']) ?></span></td>
+                <td>
+                    <span style="font-family:monospace;font-weight:600"><?= e($m['lote_origen_codigo']) ?></span>
+                    <?php $tagsM = $tagsByMov[$m['id']] ?? []; ?>
+                    <?php if (!empty($tagsM)): ?>
+                    <div style="display:flex;flex-wrap:wrap;gap:.2rem;margin-top:.2rem">
+                        <?php foreach ($tagsM as $t): ?>
+                        <span style="background:<?= e($t['color']) ?>22;color:<?= e($t['color']) ?>;font-size:.66rem;font-weight:600;padding:.05rem .35rem;border-radius:99px;border:1px solid <?= e($t['color']) ?>44">
+                            <?= e($t['nombre']) ?>
+                        </span>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endif; ?>
+                </td>
                 <td>
                     <?php if ($m['lote_destino_codigo']): ?>
                         <span style="font-family:monospace"><?= e($m['lote_destino_codigo']) ?></span>

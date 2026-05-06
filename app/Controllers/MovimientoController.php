@@ -10,6 +10,7 @@ use App\Models\Cuadra;
 use App\Models\TipoMovimiento;
 use App\Models\MotivoBaja;
 use App\Models\ConfiguracionGranja;
+use App\Models\Etiqueta;
 use App\Core\Session;
 use App\Core\Paginator;
 use App\Core\AuditLog;
@@ -53,8 +54,12 @@ class MovimientoController extends BaseController
         $total      = $this->model->countByUsuario($uid, $filtros);
         $paginacion = new Paginator($total, $page, 50);
 
+        $movimientos = $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset);
+        $tagsByMov   = (new Etiqueta())->indexedByMovimientoIds(array_column($movimientos, 'id'));
+
         $this->view('movimientos/index', [
-            'movimientos' => $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset),
+            'movimientos' => $movimientos,
+            'tagsByMov'   => $tagsByMov,
             'filtros'     => $filtros,
             'paginacion'  => $paginacion,
             'tipos'       => $this->tipoMovModel->all(false),
@@ -238,6 +243,12 @@ class MovimientoController extends BaseController
         $movId = $this->model->create($data, $uid);
         AuditLog::log('movimiento', (int)$movId, 'create', null, $data + ['cuadras_origen' => $cuadrasOrigenGuardar]);
 
+        // Sincronizar etiquetas
+        $tagInput = $this->postString('etiquetas');
+        if ($tagInput !== '') {
+            (new Etiqueta())->syncForMovimiento((int)$movId, $uid, Etiqueta::parseInput($tagInput));
+        }
+
         // Guardar cuadras de origen para poder revertir después
         if (!empty($cuadrasOrigenGuardar)) {
             $db = \App\Core\Database::getInstance();
@@ -258,17 +269,18 @@ class MovimientoController extends BaseController
         $mov = $this->ownedMovimientoOrAbort((int)$id, $uid);
 
         $this->view('movimientos/form', [
-            'movimiento' => $mov,
-            'tipo'       => $mov['tipo'],
-            'lotes'      => $this->loteModel->allByUsuario($uid),
-            'naves'      => $this->naveModel->allByUsuario($uid),
-            'estados'    => $this->model->estadosAnimal(),
-            'tipos'      => $this->tipoMovModel->all(true),
-            'motivos'    => $this->motivoModel->all(true),
-            'config'     => $this->configModel->get($uid),
-            'historial'  => $this->model->historial((int)$id),
-            'pageTitle'  => 'Editar movimiento',
-            'error'      => Session::getFlash('error'),
+            'movimiento'      => $mov,
+            'tipo'            => $mov['tipo'],
+            'lotes'           => $this->loteModel->allByUsuario($uid),
+            'naves'           => $this->naveModel->allByUsuario($uid),
+            'estados'         => $this->model->estadosAnimal(),
+            'tipos'           => $this->tipoMovModel->all(true),
+            'motivos'         => $this->motivoModel->all(true),
+            'config'          => $this->configModel->get($uid),
+            'historial'       => $this->model->historial((int)$id),
+            'etiquetasMov'    => (new Etiqueta())->forMovimiento((int)$id),
+            'pageTitle'       => 'Editar movimiento',
+            'error'           => Session::getFlash('error'),
         ]);
     }
 
@@ -343,6 +355,11 @@ class MovimientoController extends BaseController
 
         $this->model->update((int)$id, $data, $uid);
         AuditLog::log('movimiento', (int)$id, 'update', $movActual, $data);
+
+        // Sincronizar etiquetas
+        $tagInput = $this->postString('etiquetas');
+        (new Etiqueta())->syncForMovimiento((int)$id, $uid, Etiqueta::parseInput($tagInput));
+
         Session::flash('success', 'Movimiento actualizado.');
         $this->redirect('movimientos');
     }

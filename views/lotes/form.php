@@ -246,6 +246,14 @@ $tipoLabels = [
             <div id="cuadrasHidden"></div>
 
             <div class="form-group" style="margin-top:1rem">
+                <label>Etiquetas</label>
+                <?php $tagsActuales = implode(', ', array_column($etiquetasLote ?? [], 'nombre')); ?>
+                <input type="text" name="etiquetas" value="<?= e($tagsActuales) ?>"
+                       placeholder="Separadas por comas: cebo, comprado, exterior...">
+                <span class="form-hint">Las nuevas se crean al guardar. Las que escribas reemplazan a las anteriores.</span>
+            </div>
+
+            <div class="form-group" style="margin-top:1rem">
                 <label>Observaciones</label>
                 <textarea name="observaciones"><?= e($lote['observaciones'] ?? '') ?></textarea>
             </div>
