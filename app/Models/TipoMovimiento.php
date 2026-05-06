@@ -85,7 +85,10 @@ class TipoMovimiento
 
     public function delete(int $id): bool
     {
-        $stmt = $this->db->prepare("DELETE FROM tipos_movimiento WHERE id = :id");
-        return $stmt->execute(['id' => $id]);
+        // Tipos de sistema (es_sistema=1) no son borrables: actualmente solo
+        // 'destete'. Bloqueamos el DELETE en la propia query como defensa.
+        $stmt = $this->db->prepare("DELETE FROM tipos_movimiento WHERE id = :id AND es_sistema = 0");
+        $stmt->execute(['id' => $id]);
+        return $stmt->rowCount() > 0;
     }
 }

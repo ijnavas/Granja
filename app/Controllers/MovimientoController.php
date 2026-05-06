@@ -120,7 +120,14 @@ class MovimientoController extends BaseController
     {
         auth_required();
         $uid  = Session::get('usuario_id');
-        $tipo = $_GET['tipo'] ?? 'traslado_cuadra';
+        $tipo = $_GET['tipo'] ?? '';
+
+        // Atajo: el "destete" es una alta de lote — el formulario es el de
+        // nuevo lote, así que redirigimos. El controller de lote registra
+        // automáticamente el movimiento al guardar cuando ?modo=destete.
+        if ($tipo === 'destete') {
+            $this->redirect('lotes/crear?modo=destete');
+        }
 
         // Recuperar datos anteriores si hubo error de validación
         $old = $_SESSION['_old_input'] ?? null;
@@ -684,15 +691,17 @@ class MovimientoController extends BaseController
         if (in_array($tipo, $sistema, true)) return $tipo;
         $cat = $this->tipoMovModel->categoriaDe($tipo);
         return match ($cat) {
-            'venta'       => 'venta',
-            'baja'        => 'baja',
-            'salida'      => 'baja',     // resta animales sin motivo
-            'entrada'     => 'entrada',  // suma animales al lote existente
-            'traslado'    => 'traslado_cuadra',
-            'transicion'  => 'entrada_cebo',
-            're_creacion' => 'entrada_reposicion',
-            're_consumo'  => 'entrada_madres',
-            default       => 'baja',     // fallback seguro: tratar como salida
+            'venta'         => 'venta',
+            'baja'          => 'baja',
+            'salida'        => 'baja',     // resta animales sin motivo
+            'entrada'       => 'entrada',  // suma animales al lote existente
+            'traslado'      => 'traslado_cuadra',
+            'traslado_lote' => 'traslado_lote',
+            'transicion'    => 'entrada_cebo',
+            're_creacion'   => 'entrada_reposicion',
+            're_consumo'    => 'entrada_madres',
+            'destete'       => 'destete',
+            default         => 'baja',     // fallback seguro: tratar como salida
         };
     }
 
@@ -830,6 +839,35 @@ class MovimientoController extends BaseController
                     $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0")
                        ->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
                 }
+                break;
+
+            case 'traslado_lote':
+                // Devolver animales al lote origen y quitarlos del destino
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                if ($mov['lote_destino_id']) {
+                    $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
+                       ->execute(['n' => $cantidad, 'id' => $mov['lote_destino_id']]);
+                }
+                if ($mov['cuadra_origen_id']) {
+                    $stmt = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id = :cid AND lote_id = :lid LIMIT 1");
+                    $stmt->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                    $clId = $stmt->fetchColumn();
+                    if ($clId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE id = :id")
+                           ->execute(['n' => $cantidad, 'id' => $clId]);
+                    } else {
+                        $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid, :lid, :n, CURDATE())")
+                           ->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id'], 'n' => $cantidad]);
+                    }
+                }
+                break;
+
+            case 'destete':
+                // El destete creó un lote nuevo. Revertir el destete = no
+                // tocar el lote (el usuario debería borrar el lote a mano si
+                // quiere deshacer realmente). Solo el registro del movimiento
+                // se elimina, el lote permanece intacto.
                 break;
         }
     }
@@ -1045,6 +1083,55 @@ class MovimientoController extends BaseController
                            ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id'], 'n' => $cantidad]);
                     }
                 }
+                break;
+
+            case 'traslado_lote':
+                // Mueve animales de un lote a otro. Se descuentan del origen
+                // (lote y opcionalmente cuadra) y se suman al destino sin
+                // forzar asignación de cuadra (el usuario lo hará después).
+                if (empty($data['lote_destino_id'])) throw new \Exception('Selecciona un lote destino.');
+                if ((int)$data['lote_destino_id'] === (int)$data['lote_origen_id']) {
+                    throw new \Exception('El lote destino debe ser distinto del origen.');
+                }
+                $loteDestino = $this->loteModel->find((int)$data['lote_destino_id'], $uid);
+                if (!$loteDestino) throw new \Exception('Lote destino no válido.');
+                if ($cantidad > $loteOrigen['num_animales']) {
+                    throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote origen.");
+                }
+                // Descontar del lote origen
+                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                // Si se indicó cuadra origen, descontar también de cuadra_lote
+                if (!empty($data['cuadra_origen_id'])) {
+                    $stmtChk = $db->prepare("SELECT COALESCE(num_animales,0) FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1 LIMIT 1");
+                    $stmtChk->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $enCuadra = (int)$stmtChk->fetchColumn();
+                    if ($cantidad > $enCuadra) {
+                        throw new \Exception("Solo hay {$enCuadra} animales del lote en esa cuadra.");
+                    }
+                    $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n) WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1")
+                       ->execute(['n' => $cantidad, 'cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0")
+                       ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                }
+                // Si el origen queda en 0, marcar como cerrado
+                $rest = $db->prepare("SELECT num_animales FROM lotes WHERE id = :id");
+                $rest->execute(['id' => $data['lote_origen_id']]);
+                if ((int)$rest->fetchColumn() <= 0) {
+                    $db->prepare("UPDATE lotes SET estado='cerrado', fecha_cierre=CURDATE() WHERE id=:id")
+                       ->execute(['id' => $data['lote_origen_id']]);
+                }
+                // Sumar al lote destino (sin tocar cuadra_lote — queda libre
+                // para que el usuario lo asigne manualmente con un traslado
+                // de cuadra si lo necesita).
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_destino_id']]);
+                break;
+
+            case 'destete':
+                // El movimiento de destete se crea automáticamente al guardar
+                // un lote desde /lotes/crear?modo=destete. No aplica efectos
+                // adicionales (el lote ya quedó creado con sus animales).
                 break;
         }
     }

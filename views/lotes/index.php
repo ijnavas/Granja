@@ -10,7 +10,7 @@ $hayFiltros = !empty(array_filter($filtros));
         <a href="<?= base_url('lotes/export') . ($hayFiltros ? '?' . http_build_query($filtros) : '') ?>"
            class="btn btn-secondary btn-sm" title="Descargar CSV">CSV</a>
         <a href="<?= base_url('lotes/historico') ?>" class="btn btn-secondary">Historico</a>
-        <a href="<?= base_url('lotes/crear') ?>" class="btn btn-primary">+ Nuevo lote</a>
+        <a href="<?= base_url('lotes/crear?modo=destete') ?>" class="btn btn-primary">+ Destete (alta de lote)</a>
     </div>
 </div>
 
@@ -76,7 +76,7 @@ $hayFiltros = !empty(array_filter($filtros));
 
 <div class="list-card">
 <?php if (empty($lotes)): ?>
-    <div class="empty-state">No hay lotes<?= $hayFiltros ? ' con esos filtros' : '' ?>. <a href="<?= base_url('lotes/crear') ?>">Crea el primero</a>.</div>
+    <div class="empty-state">No hay lotes<?= $hayFiltros ? ' con esos filtros' : '' ?>. <a href="<?= base_url('lotes/crear?modo=destete') ?>">Da de alta el primero (destete)</a>.</div>
 <?php else: ?>
     <table class="list-table">
         <thead>

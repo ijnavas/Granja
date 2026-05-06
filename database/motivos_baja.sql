@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS motivos_baja (
     orden       INT UNSIGNED NOT NULL DEFAULT 0,
     created_at  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_activo_orden (activo, orden)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Seed con los motivos que ya se usaban en la app
 INSERT IGNORE INTO motivos_baja (codigo, nombre, activo, orden) VALUES

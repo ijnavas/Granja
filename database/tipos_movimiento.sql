@@ -23,14 +23,14 @@ CREATE TABLE IF NOT EXISTS tipos_movimiento (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     codigo          VARCHAR(40)  NOT NULL UNIQUE,
     nombre          VARCHAR(100) NOT NULL,
-    categoria       ENUM('traslado','salida','entrada','venta','baja','transicion','re_creacion','re_consumo') NOT NULL,
+    categoria       ENUM('traslado','traslado_lote','salida','entrada','venta','baja','transicion','re_creacion','re_consumo','destete') NOT NULL,
     es_sistema      TINYINT(1)   NOT NULL DEFAULT 0,
     activo          TINYINT(1)   NOT NULL DEFAULT 1,
     orden           INT UNSIGNED NOT NULL DEFAULT 0,
     color           VARCHAR(7)   NULL,
     created_at      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_activo_orden (activo, orden)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- Seed: tipos por defecto (todos editables/borrables por el usuario).
 -- Para tipos personalizados con lógica de traslado, transición, etc.,

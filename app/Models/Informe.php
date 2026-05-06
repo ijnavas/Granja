@@ -178,7 +178,7 @@ class Informe
             LEFT JOIN granjas gn ON nlo.granja_id   = gn.id
             LEFT JOIN cuadras co ON m.cuadra_origen_id = co.id
             LEFT JOIN naves no   ON co.nave_id      = no.id
-            LEFT JOIN tipos_movimiento tm ON tm.codigo = m.tipo
+            LEFT JOIN tipos_movimiento tm ON tm.codigo COLLATE utf8mb4_general_ci = m.tipo
             WHERE {$whereSql}
             GROUP BY {$dimExpr}
             ORDER BY {$orderBy}

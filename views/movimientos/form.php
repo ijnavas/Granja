@@ -28,10 +28,10 @@ foreach (($tipos ?? []) as $t) {
 
 // Agrupar tipos activos por "grupo" visible (Entradas/Salidas/Bajas/Traslados)
 $gruposVisibles = [
-    'entradas'  => ['titulo' => 'Entradas',  'cats' => ['entrada','transicion','re_creacion','re_consumo'], 'color' => '#15803d', 'tipos' => []],
-    'salidas'   => ['titulo' => 'Salidas',   'cats' => ['salida','venta'],                                  'color' => '#b45309', 'tipos' => []],
-    'bajas'     => ['titulo' => 'Bajas',     'cats' => ['baja'],                                            'color' => '#dc2626', 'tipos' => []],
-    'traslados' => ['titulo' => 'Traslados', 'cats' => ['traslado'],                                        'color' => '#1d4ed8', 'tipos' => []],
+    'entradas'  => ['titulo' => 'Entradas',  'cats' => ['entrada','transicion','re_creacion','re_consumo','destete'], 'color' => '#15803d', 'tipos' => []],
+    'salidas'   => ['titulo' => 'Salidas',   'cats' => ['salida','venta'],                                            'color' => '#b45309', 'tipos' => []],
+    'bajas'     => ['titulo' => 'Bajas',     'cats' => ['baja'],                                                      'color' => '#dc2626', 'tipos' => []],
+    'traslados' => ['titulo' => 'Traslados', 'cats' => ['traslado','traslado_lote'],                                  'color' => '#1d4ed8', 'tipos' => []],
 ];
 foreach (($tipos ?? []) as $t) {
     if ((int)($t['activo'] ?? 0) !== 1) continue;
@@ -193,6 +193,58 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
                 <option value="">— Cuadra —</option>
             </select>
         </div>
+    </div>
+
+    <?php elseif ($categoriaActual === 'traslado_lote'): ?>
+    <!-- TRASLADO ENTRE LOTES -->
+    <div class="form-section-title">Origen</div>
+    <div class="form-grid form-grid-2">
+        <div class="form-group">
+            <label>Lote origen *</label>
+            <select id="loteOrigen" name="lote_origen_id" required onchange="cargarCuadrasParaLoteOrigen(this.value); rellenarLoteDestino(this.value); actualizarPesoEstimado()">
+                <option value="">— Selecciona —</option>
+                <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
+                <option value="<?= $l['id'] ?>"
+                        <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
+                    <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?> (<?= number_format($l['num_animales']) ?> animales)
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Cuadra origen (opcional)</label>
+            <select id="cuadraOrigen" name="cuadra_origen_id">
+                <option value="">— Cualquiera del lote —</option>
+            </select>
+            <span class="form-hint">Si no eliges, descuenta del lote sin tocar cuadras</span>
+        </div>
+    </div>
+    <div class="form-section-title">Destino</div>
+    <div class="form-group">
+        <label>Lote destino *</label>
+        <select id="loteDestino" name="lote_destino_id" required>
+            <option value="">— Selecciona —</option>
+            <?php foreach ($lotes as $l): ?>
+            <option value="<?= $l['id'] ?>"
+                    data-origen="<?= (int)$l['id'] ?>"
+                    <?= ($movimiento['lote_destino_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
+                <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?> (<?= number_format($l['num_animales']) ?> animales)
+            </option>
+            <?php endforeach; ?>
+        </select>
+        <span class="form-hint">Los animales se moverán al lote destino sin asignación de cuadra</span>
+    </div>
+
+    <?php elseif ($categoriaActual === 'destete'): ?>
+    <!-- DESTETE: en realidad se redirige antes; este branch solo se ve si llegan editando un destete -->
+    <div class="form-section-title">Destete</div>
+    <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:1rem;margin-bottom:1rem">
+        <p style="margin:0 0 .5rem;color:#166534">
+            El destete crea un nuevo lote. Para registrar uno nuevo, usa el formulario de creación de lote en modo destete:
+        </p>
+        <a href="<?= base_url('lotes/crear?modo=destete') ?>" class="btn btn-primary btn-sm">
+            Abrir formulario de destete
+        </a>
     </div>
 
     <?php elseif ($categoriaActual === 'transicion'): ?>
@@ -641,6 +693,29 @@ async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = n
     });
     if (!valorSeleccionado && data.length === 1) sel.value = data[0].id;
     actualizarPesoEstimado();
+}
+
+// ── Traslado entre lotes ─────────────────────────────────────
+async function cargarCuadrasParaLoteOrigen(loteId) {
+    const sel = document.getElementById('cuadraOrigen');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— Cualquiera del lote —</option>';
+    if (!loteId) return;
+    const res  = await fetch(`${BASE_URL}movimientos/cuadras-lote?lote_id=${loteId}`);
+    const data = await res.json();
+    data.forEach(c => {
+        sel.innerHTML += `<option value="${c.id}">${c.nombre} · ${c.nave_nombre} (${c.num_animales} animales)</option>`;
+    });
+}
+
+function rellenarLoteDestino(origenId) {
+    const sel = document.getElementById('loteDestino');
+    if (!sel) return;
+    Array.from(sel.options).forEach(opt => {
+        if (!opt.value) return; // mantener placeholder
+        opt.disabled = (opt.value === origenId);
+    });
+    if (sel.value === origenId) sel.value = '';
 }
 
 // ── Bajas/salida: nave → lote ────────────────────────────────

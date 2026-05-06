@@ -37,6 +37,12 @@ $tipoLabels = [
 <div class="form-card">
     <form method="POST" action="<?= $action ?>" id="formLote">
         <?= csrf_field() ?>
+        <?php if (!empty($modoDestete)): ?>
+        <input type="hidden" name="modo" value="destete">
+        <div class="alert-flash" style="background:#f0fdf4;color:#166534;border:1.5px solid #bbf7d0;margin-bottom:1rem">
+            <strong>Modo destete activo:</strong> al guardar se creará el lote y se registrará un movimiento de destete vinculado.
+        </div>
+        <?php endif; ?>
 
         <div class="form-grid">
             <div class="form-section-title">Identificación</div>

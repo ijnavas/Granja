@@ -110,6 +110,11 @@ class LoteController extends BaseController
             }
         }
 
+        // Modo destete: misma pantalla, distinto título y bandera para que
+        // el store cree también un movimiento de tipo "destete".
+        $modo = $_GET['modo'] ?? '';
+        $title = $modo === 'destete' ? 'Destete (alta de lote)' : 'Nuevo lote';
+
         $this->view('lotes/form', [
             'lote'                 => null,
             'naves'                => $this->naveModel->selectOptions($uid),
@@ -121,8 +126,9 @@ class LoteController extends BaseController
             'cuadrasAsig'          => [],
             'cuadrasDelLote'       => [],
             'historialMovimientos' => [],
-            'pageTitle'            => 'Nuevo lote',
+            'pageTitle'            => $title,
             'codigoAuto'           => '',
+            'modoDestete'          => $modo === 'destete',
             'error'                => Session::getFlash('error'),
         ]);
     }
@@ -216,6 +222,28 @@ class LoteController extends BaseController
                 'observaciones'        => 'Pesaje automático al alta del lote',
                 'usuario_id'           => $uid,
             ]);
+        }
+
+        // Si estamos en modo destete, registrar también el movimiento del
+        // sistema "destete" para que aparezca en el listado de movimientos
+        // y en los informes como alta del lote.
+        if (($_POST['modo'] ?? $_GET['modo'] ?? '') === 'destete') {
+            (new \App\Models\Movimiento())->create([
+                'tipo'              => 'destete',
+                'fecha'             => $datosNuevo['fecha_entrada'],
+                'lote_origen_id'    => $loteId,
+                'lote_destino_id'   => null,
+                'cuadra_origen_id'  => null,
+                'cuadra_destino_id' => null,
+                'num_animales'      => $numAnim,
+                'peso_canal_kg'     => null,
+                'peso_real_kg'      => null,
+                'precio_eur'        => null,
+                'tipo_venta'        => null,
+                'motivo_baja'       => null,
+                'observaciones'     => 'Destete: alta del lote',
+                'albaran_archivo'   => null,
+            ], $uid);
         }
 
         Session::flash('success', "Lote <strong>{$codigo}</strong> creado correctamente.");
