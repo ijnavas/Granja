@@ -92,7 +92,7 @@
         </a>
 
         <div class="nav-section-label">Sistema</div>
-        <?php $cfgHref = es_admin() ? 'configuracion/razas' : 'recevet'; ?>
+        <?php $cfgHref = es_admin() ? 'configuracion/razas' : 'configuracion/general'; ?>
         <a href="<?= base_url($cfgHref) ?>" class="nav-item <?= (str_contains($_SERVER['REQUEST_URI'], '/configuracion') || str_contains($_SERVER['REQUEST_URI'], '/recevet') || str_contains($_SERVER['REQUEST_URI'], '/admin/audit-log')) ? 'active' : '' ?>">
             <span class="nav-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
             <span class="nav-label">Configuración</span>
@@ -162,6 +162,46 @@
         sidebar.classList.add('collapsed');
         mainWrap.classList.add('collapsed');
     }
+
+    // ── Indicador de semana ISO en cada input type=date ────────────
+    // En cualquier formulario, cada <input type="date"> recibe junto a sí
+    // un pequeño badge "Sem. NN" con el número de semana ISO de la fecha
+    // seleccionada. Se actualiza en vivo con cada cambio.
+    function getISOWeek(d) {
+        const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+        return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+    }
+    function actualizarBadgeSemana(input) {
+        let badge = input.nextElementSibling;
+        if (!badge || !badge.classList?.contains('semana-badge')) {
+            badge = document.createElement('span');
+            badge.className = 'semana-badge';
+            badge.style.cssText = 'display:inline-block;margin-left:.4rem;font-size:.7rem;font-weight:600;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;padding:.1rem .4rem;border-radius:99px;vertical-align:middle';
+            input.parentNode.insertBefore(badge, input.nextSibling);
+        }
+        if (input.value) {
+            const semana = getISOWeek(new Date(input.value));
+            badge.textContent = 'Sem. ' + semana;
+            badge.style.display = '';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+    function inicializarSemanaInputs(scope) {
+        const inputs = (scope || document).querySelectorAll('input[type="date"]');
+        inputs.forEach(inp => {
+            if (inp.dataset.semanaInit === '1') return;
+            inp.dataset.semanaInit = '1';
+            actualizarBadgeSemana(inp);
+            inp.addEventListener('change', () => actualizarBadgeSemana(inp));
+            inp.addEventListener('input',  () => actualizarBadgeSemana(inp));
+        });
+    }
+    document.addEventListener('DOMContentLoaded', () => inicializarSemanaInputs());
+    // Re-inicializar tras inyecciones dinámicas (cards de cuadras, etc.)
+    new MutationObserver(() => inicializarSemanaInputs()).observe(document.body, { childList: true, subtree: true });
 </script>
 </body>
 </html>

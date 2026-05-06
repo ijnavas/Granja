@@ -183,7 +183,7 @@ $totalKgSilos = array_sum(array_column($lineas_silos ?? [], 'stock_kg'));
     <?php if (empty($lineas)): ?>
         <div class="empty-state">Sin líneas registradas.</div>
     <?php else: ?>
-    <table class="list-table">
+    <table class="list-table" id="tablaInventario">
         <thead>
             <tr>
                 <th>Granja</th>
@@ -193,9 +193,20 @@ $totalKgSilos = array_sum(array_column($lineas_silos ?? [], 'stock_kg'));
                 <th style="text-align:center">Semana</th>
                 <th style="text-align:right">Animales</th>
                 <th style="text-align:right">Peso/ud (kg)</th>
+                <th style="text-align:right">Peso real (kg/ud)</th>
                 <th style="text-align:right">Peso total (kg)</th>
                 <th style="text-align:right">Valor/ud (€)</th>
                 <th style="text-align:right">Valor total (€)</th>
+            </tr>
+            <!-- Filtros por columna -->
+            <tr class="filtros-fila" style="background:#fafafa">
+                <?php for ($i = 0; $i < 11; $i++): ?>
+                <th style="padding:.3rem .5rem">
+                    <input type="text" oninput="filtrarTabla()" data-col="<?= $i ?>"
+                           placeholder="Filtrar"
+                           style="width:100%;padding:.2rem .35rem;border:1px solid #d1d5db;border-radius:.25rem;font-size:.75rem;font-weight:400">
+                </th>
+                <?php endfor; ?>
             </tr>
         </thead>
         <tbody>
@@ -234,6 +245,7 @@ $totalKgSilos = array_sum(array_column($lineas_silos ?? [], 'stock_kg'));
                 </td>
                 <td style="text-align:right;font-weight:600"><?= number_format($l['num_animales']) ?></td>
                 <td style="text-align:right"><?= $l['peso_kg']         ? number_format((float)$l['peso_kg'], 3)         : '—' ?></td>
+                <td style="text-align:right;color:#1d4ed8;font-weight:500"><?= !empty($l['peso_real_kg']) ? number_format((float)$l['peso_real_kg'], 3) : '<span style="color:#d1d5db">—</span>' ?></td>
                 <td style="text-align:right"><?= $l['peso_total_kg']   ? number_format((float)$l['peso_total_kg'], 1)   : '—' ?></td>
                 <td style="text-align:right"><?= $l['coste_eur']       ? number_format((float)$l['coste_eur'], 2)       : '—' ?></td>
                 <td style="text-align:right;font-weight:600;color:#166534"><?= $l['valor_total_eur'] ? number_format((float)$l['valor_total_eur'], 2) : '—' ?></td>
@@ -245,6 +257,7 @@ $totalKgSilos = array_sum(array_column($lineas_silos ?? [], 'stock_kg'));
                 <td colspan="5" style="padding:.6rem .75rem;font-size:.82rem;color:#374151">TOTAL</td>
                 <td style="text-align:right;padding:.6rem .75rem"><?= number_format($totalAnimales) ?></td>
                 <td></td>
+                <td></td>
                 <td style="text-align:right;padding:.6rem .75rem"><?= $totalPeso   ? number_format($totalPeso, 1)   : '—' ?></td>
                 <td></td>
                 <td style="text-align:right;padding:.6rem .75rem;color:#166534"><?= $totalValor ? number_format($totalValor, 2) . ' €' : '—' ?></td>
@@ -253,6 +266,30 @@ $totalKgSilos = array_sum(array_column($lineas_silos ?? [], 'stock_kg'));
     </table>
     <?php endif; ?>
 </div>
+
+<script>
+function filtrarTabla() {
+    const filtros = Array.from(document.querySelectorAll('#tablaInventario .filtros-fila input'))
+        .map(i => (i.value || '').trim().toLowerCase());
+    const tbody = document.querySelector('#tablaInventario tbody');
+    if (!tbody) return;
+    let visibles = 0;
+    tbody.querySelectorAll('tr').forEach(tr => {
+        // Saltar filas separadoras (cabecera de granja con colspan)
+        const tds = tr.querySelectorAll('td');
+        if (tds.length === 1 && tds[0].hasAttribute('colspan')) return;
+        let show = true;
+        tds.forEach((td, idx) => {
+            const f = filtros[idx];
+            if (!f) return;
+            const txt = (td.textContent || '').trim().toLowerCase();
+            if (!txt.includes(f)) show = false;
+        });
+        tr.style.display = show ? '' : 'none';
+        if (show) visibles++;
+    });
+}
+</script>
 <?php endif; ?>
 
 <!-- Modal email -->

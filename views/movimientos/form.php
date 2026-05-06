@@ -6,16 +6,21 @@ $action    = $esEdicion
 
 $tipoActual = $tipo ?? $movimiento['tipo'] ?? 'traslado_cuadra';
 
-$tipoLabels = [
-    'traslado_cuadra'    => 'Traslado de cuadra',
-    'entrada_cebo'       => 'Entrada a cebo',
-    'entrada_reposicion' => 'Entrada a reposición',
-    'entrada_madres'     => 'Entrada a madres',
-    'venta'              => 'Venta',
-    'baja'               => 'Baja',
-];
+// Tipos cargados desde DB (incluye los del sistema y los personalizados)
+$tipoMap = [];
+foreach (($tipos ?? []) as $t) {
+    $tipoMap[$t['codigo']] = $t;
+}
 
-// Filtrar lotes según tipo
+// Categoría del tipo actual (para decidir qué fields renderizar)
+$categoriaActual = $tipoMap[$tipoActual]['categoria'] ?? 'salida';
+$nombreActual    = $tipoMap[$tipoActual]['nombre'] ?? ucfirst(str_replace('_', ' ', $tipoActual));
+
+// Umbrales de aviso (configurables en Configuración → Avisos)
+$diasAvisoFecha = (int)($config['dias_advertencia_movimiento'] ?? 7);
+$pctAvisoPeso   = (int)($config['pct_desviacion_peso_tabla']   ?? 15);
+
+// Filtrar lotes según tipo (solo para tipos que necesitan filtros especiales)
 $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo']), 'RE'));
 ?>
 
@@ -28,318 +33,331 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
     <div class="alert-flash alert-error"><?= e($error) ?></div>
 <?php endif; ?>
 
-<div class="form-card" style="max-width:740px">
-<form method="POST" action="<?= $action ?>">
+<div class="form-card" style="max-width:780px">
+<form method="POST" action="<?= $action ?>" id="frmMov">
     <?= csrf_field() ?>
-    <input type="hidden" name="tipo" value="<?= e($tipoActual) ?>">
+    <input type="hidden" name="tipo" id="tipoHidden" value="<?= e($tipoActual) ?>">
+    <input type="hidden" name="confirmar_inventarios" id="confirmarInv" value="">
 
-    <?php if ($esEdicion): ?>
-
-    <!-- ══ MODO EDICIÓN: solo fecha y cantidad editables ══ -->
-
-    <!-- Hidden inputs: conservar todos los valores originales -->
-    <input type="hidden" name="lote_origen_id"    value="<?= (int)$movimiento['lote_origen_id'] ?>">
-    <input type="hidden" name="lote_destino_id"   value="<?= (int)($movimiento['lote_destino_id'] ?? 0) ?: '' ?>">
-    <input type="hidden" name="cuadra_origen_id"  value="<?= (int)($movimiento['cuadra_origen_id'] ?? 0) ?: '' ?>">
-    <input type="hidden" name="cuadra_destino_id" value="<?= (int)($movimiento['cuadra_destino_id'] ?? 0) ?: '' ?>">
-    <input type="hidden" name="peso_canal_kg"     value="<?= e($movimiento['peso_canal_kg'] ?? '') ?>">
-    <input type="hidden" name="precio_eur"        value="<?= e($movimiento['precio_eur'] ?? '') ?>">
-    <input type="hidden" name="tipo_venta"        value="<?= e($movimiento['tipo_venta'] ?? '') ?>">
-    <input type="hidden" name="observaciones"     value="<?= e($movimiento['observaciones'] ?? '') ?>">
-
-    <!-- Info de solo lectura -->
-    <div class="form-section-title">Movimiento</div>
-    <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem;display:grid;grid-template-columns:1fr 1fr;gap:.75rem 2rem">
-        <div>
-            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Tipo</div>
-            <div style="font-weight:600"><?= e($tipoLabels[$tipoActual] ?? $tipoActual) ?></div>
-        </div>
-        <div>
-            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Lote origen</div>
-            <div style="font-family:monospace;font-weight:700;color:#1d4ed8"><?= e($movimiento['lote_origen_codigo'] ?? '—') ?></div>
-        </div>
-        <?php if ($movimiento['cuadra_origen_nombre']): ?>
-        <div>
-            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Cuadra origen</div>
-            <div><?= e($movimiento['cuadra_origen_nombre']) ?></div>
-        </div>
-        <?php endif; ?>
-        <?php if ($movimiento['cuadra_destino_nombre']): ?>
-        <div>
-            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Cuadra destino</div>
-            <div><?= e($movimiento['cuadra_destino_nombre']) ?></div>
-        </div>
-        <?php endif; ?>
-        <?php if ($movimiento['lote_destino_codigo'] && $movimiento['lote_destino_codigo'] !== $movimiento['lote_origen_codigo']): ?>
-        <div>
-            <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.2rem">Lote destino</div>
-            <div style="font-family:monospace;font-weight:700;color:#1d4ed8"><?= e($movimiento['lote_destino_codigo']) ?></div>
-        </div>
-        <?php endif; ?>
-    </div>
-
-    <!-- Campos editables -->
-    <div class="form-grid form-grid-2">
-        <div class="form-group">
-            <label>Fecha *</label>
-            <input type="date" name="fecha" required value="<?= e($movimiento['fecha']) ?>">
-        </div>
-        <div class="form-group">
-            <label>Cantidad de animales *</label>
-            <input type="number" name="num_animales" min="1" required value="<?= e($movimiento['num_animales']) ?>">
-        </div>
-    </div>
-
-    <?php else: ?>
-
-    <!-- ══ MODO CREACIÓN ══ -->
-
+    <?php if (!$esEdicion): ?>
     <!-- Selector de tipo -->
     <div class="form-section-title">Tipo de movimiento</div>
     <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:1.25rem">
-        <?php foreach ($tipoLabels as $t => $label): ?>
-        <a href="<?= base_url('movimientos/crear?tipo=' . $t) ?>"
-           class="btn <?= $tipoActual === $t ? 'btn-primary' : 'btn-secondary' ?> btn-sm">
-            <?= $label ?>
+        <?php foreach ($tipos as $t): ?>
+        <a href="<?= base_url('movimientos/crear?tipo=' . $t['codigo']) ?>"
+           class="btn <?= $tipoActual === $t['codigo'] ? 'btn-primary' : 'btn-secondary' ?> btn-sm"
+           style="<?= $t['color'] && $tipoActual !== $t['codigo'] ? 'border-color:' . e($t['color']) . ';color:' . e($t['color']) : '' ?>">
+            <?= e($t['nombre']) ?>
         </a>
         <?php endforeach; ?>
     </div>
+    <?php endif; ?>
 
-    <div class="form-grid">
-
-        <div class="form-grid form-grid-2">
-            <div class="form-group">
-                <label>Fecha *</label>
-                <input type="date" name="fecha" required value="<?= e(date('Y-m-d')) ?>">
-            </div>
-            <div class="form-group">
-                <label>Cantidad de animales *</label>
-                <input type="number" name="num_animales" min="1" required placeholder="Nº de animales">
-            </div>
+    <?php if ($esEdicion): ?>
+    <!-- ── EDICIÓN: tipo y datos básicos editables ── -->
+    <?php $colorActual = $tipoMap[$tipoActual]['color'] ?? null; ?>
+    <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:.75rem 1rem;margin-bottom:1.25rem;display:flex;align-items:center;gap:.75rem">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af">Tipo</div>
+        <div style="font-weight:700;color:<?= $colorActual ? e($colorActual) : '#374151' ?>">
+            <?= e($nombreActual) ?>
         </div>
+    </div>
+    <?php endif; ?>
 
-        <!-- TRASLADO DE CUADRA -->
-        <?php if ($tipoActual === 'traslado_cuadra'): ?>
-        <div class="form-section-title">Origen</div>
-        <div class="form-grid form-grid-3">
-            <div class="form-group">
-                <label>Nave origen</label>
-                <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
-                    <option value="">— Nave —</option>
-                    <?php foreach ($naves as $n): ?>
-                        <option value="<?= $n['id'] ?>"><?= e($n['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Cuadra origen</label>
-                <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
-                    <option value="">— Cuadra —</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Lote</label>
-                <select id="loteOrigen" name="lote_origen_id" required>
-                    <option value="">— Lote —</option>
-                </select>
-            </div>
-        </div>
-        <div class="form-section-title">Destino</div>
-        <div class="form-grid form-grid-2">
-            <div class="form-group">
-                <label>Nave destino</label>
-                <select id="naveDestino" onchange="cargarCuadras(this.value, 'cuadraDestino', null)">
-                    <option value="">— Nave —</option>
-                    <?php foreach ($naves as $n): ?>
-                        <option value="<?= $n['id'] ?>"><?= e($n['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Cuadra destino</label>
-                <select id="cuadraDestino" name="cuadra_destino_id">
-                    <option value="">— Cuadra —</option>
-                </select>
-            </div>
-        </div>
-
-        <!-- ENTRADA CEBO -->
-        <?php elseif ($tipoActual === 'entrada_cebo'): ?>
-        <div class="form-section-title">Lote que pasa a cebo</div>
+    <!-- Fecha + Cantidad (común a todos los tipos) -->
+    <div class="form-grid form-grid-2">
         <div class="form-group">
-            <label>Lote de lechones *</label>
-            <select name="lote_origen_id" required>
-                <option value="">— Selecciona lote —</option>
-                <?php foreach ($lotes as $l): ?>
-                    <?php if (($l['estado_animal'] ?? 'lechon') === 'lechon'): ?>
-                    <option value="<?= $l['id'] ?>"><?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?> animales)</option>
-                    <?php endif; ?>
+            <label>Fecha *</label>
+            <input type="date" name="fecha" id="fechaMov" required
+                   value="<?= e($esEdicion ? $movimiento['fecha'] : date('Y-m-d')) ?>">
+            <div id="avisoFecha" style="display:none;margin-top:.4rem;font-size:.78rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:6px;padding:.45rem .65rem"></div>
+        </div>
+        <div class="form-group">
+            <label>Cantidad de animales *</label>
+            <input type="number" name="num_animales" id="numAnimales" min="1" required
+                   value="<?= e($esEdicion ? $movimiento['num_animales'] : '') ?>"
+                   placeholder="Nº de animales" oninput="actualizarPesoEstimado()">
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════
+         RAMAS POR CATEGORÍA
+    ═════════════════════════════════════════════════════════ -->
+
+    <?php if ($categoriaActual === 'traslado'): ?>
+    <!-- TRASLADO -->
+    <div class="form-section-title">Origen</div>
+    <div class="form-grid form-grid-3">
+        <div class="form-group">
+            <label>Nave origen</label>
+            <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
+                <option value="">— Nave —</option>
+                <?php foreach ($naves as $n): ?>
+                    <option value="<?= $n['id'] ?>"><?= e($n['nombre']) ?></option>
                 <?php endforeach; ?>
             </select>
-            <span class="form-hint">Todo el lote pasará al estado <strong>Cebo</strong></span>
         </div>
-
-        <!-- ENTRADA REPOSICIÓN -->
-        <?php elseif ($tipoActual === 'entrada_reposicion'): ?>
-        <div class="form-section-title">Origen</div>
-        <div class="form-grid form-grid-3">
-            <div class="form-group">
-                <label>Nave origen</label>
-                <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
-                    <option value="">— Nave —</option>
-                    <?php foreach ($naves as $n): ?>
-                        <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Cuadra origen</label>
-                <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
-                    <option value="">— Cuadra —</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Lote *</label>
-                <select id="loteOrigen" name="lote_origen_id" required>
-                    <option value="">— Lote —</option>
-                </select>
-            </div>
+        <div class="form-group">
+            <label>Cuadra origen</label>
+            <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
+                <option value="">— Cuadra —</option>
+            </select>
         </div>
-        <span class="form-hint">Se creará un nuevo lote con sufijo <strong>RE</strong> con los animales indicados</span>
-
-        <!-- ENTRADA MADRES -->
-        <?php elseif ($tipoActual === 'entrada_madres'): ?>
-        <div class="form-section-title">Lote de reposición de origen</div>
-        <div class="form-grid form-grid-3">
-            <div class="form-group">
-                <label>Nave origen</label>
-                <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
-                    <option value="">— Nave —</option>
-                    <?php foreach ($naves as $n): ?>
-                        <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre']) ?> · <?= e($n['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Cuadra origen</label>
-                <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen', null, true)">
-                    <option value="">— Cuadra —</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Lote RE *</label>
-                <select id="loteOrigen" name="lote_origen_id" required>
-                    <option value="">— Lote RE —</option>
-                </select>
-            </div>
+        <div class="form-group">
+            <label>Lote</label>
+            <select id="loteOrigen" name="lote_origen_id" required onchange="actualizarPesoEstimado()">
+                <option value="">— Lote —</option>
+            </select>
         </div>
-        <span class="form-hint">Solo se muestran lotes con sufijo <strong>RE</strong>. Se creará un nuevo lote <strong>MA</strong></span>
+    </div>
+    <div class="form-section-title">Destino</div>
+    <div class="form-grid form-grid-2">
+        <div class="form-group">
+            <label>Nave destino</label>
+            <select id="naveDestino" onchange="cargarCuadras(this.value, 'cuadraDestino', null)">
+                <option value="">— Nave —</option>
+                <?php foreach ($naves as $n): ?>
+                    <option value="<?= $n['id'] ?>"><?= e($n['nombre']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Cuadra destino</label>
+            <select id="cuadraDestino" name="cuadra_destino_id">
+                <option value="">— Cuadra —</option>
+            </select>
+        </div>
+    </div>
 
-        <!-- VENTA -->
-        <?php elseif ($tipoActual === 'venta'): ?>
-        <div class="form-section-title">Lote a vender</div>
+    <?php elseif ($categoriaActual === 'transicion'): ?>
+    <!-- ENTRADA CEBO (transición de estado) -->
+    <div class="form-section-title">Lote que pasa a cebo</div>
+    <div class="form-group">
+        <label>Lote de lechones *</label>
+        <select name="lote_origen_id" required onchange="actualizarPesoEstimado()">
+            <option value="">— Selecciona lote —</option>
+            <?php foreach ($lotes as $l): if (($l['estado_animal'] ?? 'lechon') !== 'lechon') continue; ?>
+            <option value="<?= $l['id'] ?>"><?= e($l['codigo']) ?> (<?= number_format($l['num_animales']) ?> animales)</option>
+            <?php endforeach; ?>
+        </select>
+        <span class="form-hint">Todo el lote pasará al estado <strong>Cebo</strong></span>
+    </div>
+
+    <?php elseif ($categoriaActual === 're_creacion'): ?>
+    <!-- ENTRADA REPOSICIÓN -->
+    <div class="form-section-title">Origen</div>
+    <div class="form-grid form-grid-3">
+        <div class="form-group">
+            <label>Nave origen</label>
+            <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
+                <option value="">— Nave —</option>
+                <?php foreach ($naves as $n): ?>
+                    <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre'] ?? '') ?> · <?= e($n['nombre']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Cuadra origen</label>
+            <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen')">
+                <option value="">— Cuadra —</option>
+            </select>
+        </div>
         <div class="form-group">
             <label>Lote *</label>
-            <select id="loteOrigenVenta" name="lote_origen_id" required onchange="cargarCuadrasDelLote(this.value, 'venta')">
+            <select id="loteOrigen" name="lote_origen_id" required onchange="actualizarPesoEstimado()">
+                <option value="">— Lote —</option>
+            </select>
+        </div>
+    </div>
+    <span class="form-hint">Se creará un nuevo lote con sufijo <strong>RE</strong> con los animales indicados</span>
+
+    <?php elseif ($categoriaActual === 're_consumo'): ?>
+    <!-- ENTRADA MADRES -->
+    <div class="form-section-title">Lote de reposición de origen</div>
+    <div class="form-grid form-grid-3">
+        <div class="form-group">
+            <label>Nave origen</label>
+            <select id="naveOrigen" onchange="cargarCuadras(this.value, 'cuadraOrigen', 'loteOrigen')">
+                <option value="">— Nave —</option>
+                <?php foreach ($naves as $n): ?>
+                    <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre'] ?? '') ?> · <?= e($n['nombre']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Cuadra origen</label>
+            <select id="cuadraOrigen" name="cuadra_origen_id" onchange="cargarLotesDeCuadra(this.value, 'loteOrigen', null, true)">
+                <option value="">— Cuadra —</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Lote RE *</label>
+            <select id="loteOrigen" name="lote_origen_id" required onchange="actualizarPesoEstimado()">
+                <option value="">— Lote RE —</option>
+            </select>
+        </div>
+    </div>
+    <span class="form-hint">Solo se muestran lotes con sufijo <strong>RE</strong>.</span>
+
+    <?php elseif ($categoriaActual === 'venta'): ?>
+    <!-- VENTA -->
+    <div class="form-section-title">Lote a vender</div>
+    <div class="form-group">
+        <label>Lote *</label>
+        <select id="loteOrigenVenta" name="lote_origen_id" required onchange="cargarCuadrasDelLote(this.value, 'venta'); actualizarPesoEstimado()">
+            <option value="">— Selecciona lote —</option>
+            <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
+            <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
+                <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?><?= $l['nave_nombre'] ? ' · ' . e($l['nave_nombre']) : '' ?> (<?= number_format($l['num_animales']) ?> animales)
+            </option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+
+    <div id="cuadrasVentaWrap" style="display:none;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+            <div class="form-section-title" style="margin:0">Cuadras de origen</div>
+            <button type="button" onclick="seleccionarLoteEntero('venta')" class="btn btn-secondary btn-sm">Lote entero</button>
+        </div>
+        <div id="cuadrasVentaCards" style="display:flex;flex-wrap:wrap;gap:.6rem"></div>
+        <div id="cuadrasVentaInputs"></div>
+    </div>
+    <div class="form-section-title" style="margin-top:.5rem">Datos de venta</div>
+    <div class="form-grid form-grid-2">
+        <div class="form-group">
+            <label>Destino de venta *</label>
+            <select name="tipo_venta" required>
+                <option value="">— Selecciona —</option>
+                <option value="matadero" <?= ($movimiento['tipo_venta'] ?? '') === 'matadero' ? 'selected' : '' ?>>Matadero</option>
+                <option value="tercero"  <?= ($movimiento['tipo_venta'] ?? '') === 'tercero'  ? 'selected' : '' ?>>Tercero</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Precio total (€)</label>
+            <input type="number" name="precio_eur" step="0.01" min="0"
+                   value="<?= e($movimiento['precio_eur'] ?? '') ?>"
+                   placeholder="0.00">
+        </div>
+    </div>
+    <div class="form-group">
+        <label>Peso canal total (kg)</label>
+        <input type="number" name="peso_canal_kg" id="pesoCanal" step="0.01" min="0"
+               value="<?= e($movimiento['peso_canal_kg'] ?? '') ?>"
+               placeholder="0.00" oninput="validarPeso()">
+        <div id="avisoPeso" style="display:none;margin-top:.4rem;font-size:.78rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:6px;padding:.45rem .65rem"></div>
+    </div>
+
+    <?php elseif ($categoriaActual === 'baja' || $categoriaActual === 'salida'): ?>
+    <!-- BAJA / SALIDA: nave → lote → cuadras -->
+    <div class="form-section-title">Origen</div>
+    <div class="form-grid form-grid-2">
+        <div class="form-group">
+            <label>Nave</label>
+            <select id="naveBaja" onchange="cargarLotesDeNave(this.value)">
+                <option value="">— Todas las naves —</option>
+                <?php foreach ($naves as $n): ?>
+                    <option value="<?= $n['id'] ?>"><?= e($n['granja_nombre'] ?? '') ?> · <?= e($n['nombre']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <span class="form-hint">Filtra los lotes por nave (opcional)</span>
+        </div>
+        <div class="form-group">
+            <label>Lote *</label>
+            <select id="loteOrigenBaja" name="lote_origen_id" required
+                    onchange="cargarCuadrasDelLote(this.value, 'baja'); actualizarPesoEstimado()">
                 <option value="">— Selecciona lote —</option>
-                <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
-                <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
+                <?php
+                // En edición permitir mostrar el lote actual aunque tenga 0 animales
+                $loteActualId = (int)($movimiento['lote_origen_id'] ?? 0);
+                foreach ($lotes as $l):
+                    if ((int)$l['num_animales'] <= 0 && (int)$l['id'] !== $loteActualId) continue;
+                ?>
+                <option value="<?= $l['id'] ?>"
+                        data-nave="<?= (int)($l['nave_id'] ?? 0) ?>"
+                        <?= $loteActualId === (int)$l['id'] ? 'selected' : '' ?>>
                     <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?><?= $l['nave_nombre'] ? ' · ' . e($l['nave_nombre']) : '' ?> (<?= number_format($l['num_animales']) ?> animales)
                 </option>
                 <?php endforeach; ?>
             </select>
         </div>
-
-        <div id="cuadrasVentaWrap" style="display:none;margin-bottom:1rem">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-                <div class="form-section-title" style="margin:0">Cuadras de origen</div>
-                <button type="button" onclick="seleccionarLoteEntero('venta')" class="btn btn-secondary btn-sm">Lote entero</button>
-            </div>
-            <div id="cuadrasVentaCards" style="display:flex;flex-wrap:wrap;gap:.6rem"></div>
-            <div id="cuadrasVentaInputs"></div>
+    </div>
+    <div id="cuadrasBajaWrap" style="display:none;margin-bottom:1rem">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
+            <div class="form-section-title" style="margin:0">Cuadra de origen</div>
+            <button type="button" onclick="seleccionarLoteEntero('baja')" class="btn btn-secondary btn-sm">Lote entero</button>
         </div>
-        <div class="form-section-title" style="margin-top:.5rem">Datos de venta</div>
-        <div class="form-grid form-grid-2">
-            <div class="form-group">
-                <label>Destino de venta *</label>
-                <select name="tipo_venta" required>
-                    <option value="">— Selecciona —</option>
-                    <option value="matadero">Matadero</option>
-                    <option value="tercero">Tercero</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Precio total (€)</label>
-                <input type="number" name="precio_eur" step="0.01" min="0" placeholder="0.00">
-            </div>
+        <div id="cuadrasBajaCards" style="display:flex;flex-wrap:wrap;gap:.6rem"></div>
+        <div id="cuadrasBajaInputs"></div>
+    </div>
+
+    <?php if ($categoriaActual === 'baja'): ?>
+    <div class="form-grid form-grid-2">
+        <div class="form-group">
+            <label>Motivo *</label>
+            <select name="motivo_baja" required>
+                <option value="">— Selecciona —</option>
+                <option value="enfermedad"     <?= ($movimiento['motivo_baja'] ?? '') === 'enfermedad' ? 'selected' : '' ?>>Enfermedad</option>
+                <option value="sacrificio"     <?= ($movimiento['motivo_baja'] ?? '') === 'sacrificio' ? 'selected' : '' ?>>Sacrificio</option>
+                <option value="canibalismo"    <?= ($movimiento['motivo_baja'] ?? '') === 'canibalismo' ? 'selected' : '' ?>>Canibalismo</option>
+                <option value="aplastamiento"  <?= ($movimiento['motivo_baja'] ?? '') === 'aplastamiento' ? 'selected' : '' ?>>Aplastamiento</option>
+                <option value="otro"           <?= ($movimiento['motivo_baja'] ?? '') === 'otro' ? 'selected' : '' ?>>Otro</option>
+            </select>
         </div>
         <div class="form-group">
-            <label>Peso canal total (kg)</label>
-            <input type="number" name="peso_canal_kg" step="0.01" min="0" placeholder="0.00">
+            <label>Peso real medio (kg/animal)</label>
+            <input type="number" name="peso_real_kg" id="pesoReal" step="0.001" min="0"
+                   value="<?= e($movimiento['peso_real_kg'] ?? '') ?>"
+                   placeholder="Opcional" oninput="validarPeso()">
+            <span class="form-hint">Si se conoce, peso medio individual de los animales dados de baja</span>
         </div>
-        <!-- ═══════════════════════════════════════════════════
-             BAJA
-        ════════════════════════════════════════════════════════ -->
-        <?php elseif ($tipoActual === 'baja'): ?>
-        <?php if ($esEdicion && $movimiento): ?>
-            <!-- Edición: lote/cuadra/motivo no editables -->
-            <div style="background:#f9fafb;border:1.5px solid #e5e7eb;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1rem">
-                <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;margin-bottom:.4rem">Lote y cuadra (no editables)</div>
-                <div style="font-size:.9rem;color:#374151;font-weight:600"><?= e($movimiento['lote_origen_codigo']) ?></div>
-                <?php if (!empty($movimiento['cuadra_origen_nombre'])): ?>
-                    <div style="font-size:.82rem;color:#6b7280">Cuadra: <?= e($movimiento['cuadra_origen_nombre']) ?></div>
-                <?php endif; ?>
-                <?php if (!empty($movimiento['motivo_baja'])): ?>
-                    <?php $motivoLabel = $movimiento['motivo_baja'] === 'enfermedad' ? 'Enfermedad' : 'Sacrificio'; ?>
-                    <div style="font-size:.82rem;color:#6b7280;margin-top:.25rem">Motivo: <strong><?= $motivoLabel ?></strong></div>
-                <?php endif; ?>
-            </div>
-            <input type="hidden" name="lote_origen_id"   value="<?= (int)$movimiento['lote_origen_id'] ?>">
-            <input type="hidden" name="cuadra_origen_id" value="<?= e($movimiento['cuadra_origen_id'] ?? '') ?>">
-            <input type="hidden" name="motivo_baja"      value="<?= e($movimiento['motivo_baja'] ?? '') ?>">
-        <?php else: ?>
-            <!-- Creación: primero lote, luego cuadras visuales -->
-            <div class="form-section-title">Lote afectado</div>
-            <div class="form-group">
-                <label>Lote *</label>
-                <select id="loteOrigenBaja" name="lote_origen_id" required onchange="cargarCuadrasDelLote(this.value, 'baja')">
-                    <option value="">— Selecciona lote —</option>
-                    <?php foreach ($lotes as $l): if ((int)$l['num_animales'] <= 0) continue; ?>
-                    <option value="<?= $l['id'] ?>">
-                        <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?><?= $l['nave_nombre'] ? ' · ' . e($l['nave_nombre']) : '' ?> (<?= number_format($l['num_animales']) ?> animales)
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-            <div id="cuadrasBajaWrap" style="display:none;margin-bottom:1rem">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.5rem">
-                    <div class="form-section-title" style="margin:0">Cuadra de origen</div>
-                    <button type="button" onclick="seleccionarLoteEntero('baja')" class="btn btn-secondary btn-sm">Lote entero</button>
-                </div>
-                <div id="cuadrasBajaCards" style="display:flex;flex-wrap:wrap;gap:.6rem"></div>
-                <div id="cuadrasBajaInputs"></div>
-            </div>
-            <div class="form-group">
-                <label>Motivo *</label>
-                <select name="motivo_baja" required>
-                    <option value="">— Selecciona —</option>
-                    <option value="enfermedad">Enfermedad</option>
-                    <option value="sacrificio">Sacrificio</option>
-                </select>
-            </div>
-        <?php endif; ?>
+    </div>
+    <div id="avisoPeso" style="display:none;margin-top:.4rem;font-size:.78rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:6px;padding:.45rem .65rem"></div>
+    <?php endif; ?>
 
-        <?php endif; ?>
-
-        <!-- Observaciones -->
+    <?php elseif ($categoriaActual === 'entrada'): ?>
+    <!-- COMPRA / ENTRADA: lote existente + cuadra opcional -->
+    <div class="form-section-title">Lote receptor</div>
+    <div class="form-grid form-grid-2">
         <div class="form-group">
-            <label>Observaciones</label>
-            <textarea name="observaciones" rows="2"></textarea>
+            <label>Lote *</label>
+            <select name="lote_origen_id" required onchange="actualizarPesoEstimado()">
+                <option value="">— Selecciona lote —</option>
+                <?php foreach ($lotes as $l): ?>
+                <option value="<?= $l['id'] ?>" <?= ($movimiento['lote_origen_id'] ?? '') == $l['id'] ? 'selected' : '' ?>>
+                    <?= e($l['codigo']) ?> · <?= e($l['granja_nombre'] ?? '') ?><?= $l['nave_nombre'] ? ' · ' . e($l['nave_nombre']) : '' ?> (<?= number_format($l['num_animales']) ?> animales)
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <span class="form-hint">Los animales se sumarán a este lote</span>
         </div>
-
+        <div class="form-group">
+            <label>Cuadra (opcional)</label>
+            <select name="cuadra_origen_id">
+                <option value="">— Sin cuadra específica —</option>
+            </select>
+        </div>
     </div>
 
     <?php endif; ?>
+
+    <!-- Panel peso estimado (visible cuando hay lote+fecha) -->
+    <div id="panelPeso" style="display:none;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:8px;padding:.85rem 1rem;margin-top:.5rem">
+        <div style="font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#1e40af;margin-bottom:.4rem">
+            Peso estimado del lote
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:1.25rem;font-size:.85rem">
+            <div><span style="color:#6b7280">Semana:</span> <strong id="pesoSemana">—</strong></div>
+            <div><span style="color:#6b7280">Tabla:</span> <strong id="pesoTabla">—</strong> kg/ud</div>
+            <div><span style="color:#6b7280">Real proyectado:</span> <strong id="pesoReal2">—</strong> kg/ud</div>
+            <div><span style="color:#6b7280">Total estimado:</span> <strong id="pesoTotal">—</strong></div>
+        </div>
+    </div>
+
+    <!-- Observaciones -->
+    <div class="form-group" style="margin-top:1rem">
+        <label>Observaciones</label>
+        <textarea name="observaciones" rows="2"><?= e($movimiento['observaciones'] ?? '') ?></textarea>
+    </div>
 
     <div class="form-actions">
         <button type="submit" class="btn btn-primary">
@@ -379,12 +397,23 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
 <?php endif; ?>
 
 <script>
+const BASE_URL  = '<?= base_url('') ?>';
+const TIPO      = '<?= e($tipoActual) ?>';
+const CATEGORIA = '<?= e($categoriaActual) ?>';
+const CFG_DIAS  = <?= (int)$diasAvisoFecha ?>;
+const CFG_PCT   = <?= (int)$pctAvisoPeso ?>;
+const ES_EDICION = <?= $esEdicion ? 'true' : 'false' ?>;
+const MOV_ID     = <?= $esEdicion ? (int)$movimiento['id'] : 'null' ?>;
+const LOTE_ORIGINAL_ID = <?= $esEdicion ? (int)$movimiento['lote_origen_id'] : 'null' ?>;
+
+// ── Tipos comunes a varias ramas ────────────────────────────
 async function cargarCuadras(naveId, selectId, loteSelectId, valorSeleccionado = null) {
     const sel = document.getElementById(selectId);
+    if (!sel) return;
     sel.innerHTML = '<option value="">Cargando...</option>';
     if (!naveId) { sel.innerHTML = '<option value="">— Cuadra —</option>'; return; }
 
-    const res  = await fetch(`<?= base_url('movimientos/cuadras') ?>?nave_id=${naveId}`);
+    const res  = await fetch(`${BASE_URL}movimientos/cuadras?nave_id=${naveId}`);
     const data = await res.json();
 
     sel.innerHTML = '<option value="">— Cuadra —</option>';
@@ -399,13 +428,13 @@ async function cargarCuadras(naveId, selectId, loteSelectId, valorSeleccionado =
     }
 }
 
-// Datos de cuadras cargados por lote (para referenciar al seleccionar lote entero)
 let cuadrasCache = {};
 
 async function cargarCuadrasDelLote(loteId, tipo) {
     const wrap   = document.getElementById(tipo === 'venta' ? 'cuadrasVentaWrap'   : 'cuadrasBajaWrap');
     const cards  = document.getElementById(tipo === 'venta' ? 'cuadrasVentaCards'  : 'cuadrasBajaCards');
     const inputs = document.getElementById(tipo === 'venta' ? 'cuadrasVentaInputs' : 'cuadrasBajaInputs');
+    if (!wrap || !cards || !inputs) return;
 
     cards.innerHTML  = '';
     inputs.innerHTML = '';
@@ -413,7 +442,7 @@ async function cargarCuadrasDelLote(loteId, tipo) {
 
     if (!loteId) { wrap.style.display = 'none'; return; }
 
-    const res  = await fetch(`<?= base_url('movimientos/cuadras-lote') ?>?lote_id=${loteId}`);
+    const res  = await fetch(`${BASE_URL}movimientos/cuadras-lote?lote_id=${loteId}`);
     const data = await res.json();
 
     if (data.length === 0) {
@@ -424,7 +453,6 @@ async function cargarCuadrasDelLote(loteId, tipo) {
     }
 
     cuadrasCache[tipo] = data;
-
     data.forEach(c => {
         const card = document.createElement('div');
         card.className  = 'cuadra-card-multi';
@@ -480,12 +508,12 @@ function actualizarTotalAnimales(tipo) {
     });
 
     if (numField) { numField.value = total; numField.readOnly = true; numField.style.background = '#f3f4f6'; }
-
-    // Generar hidden inputs para el POST
-    inputs.innerHTML = hidden.map((h, i) =>
+    inputs.innerHTML = hidden.map(h =>
         `<input type="hidden" name="cuadras_origen_ids[]" value="${h.id}">
          <input type="hidden" name="cuadras_origen_nums[]" value="${h.num}">`
     ).join('');
+
+    actualizarPesoEstimado();
 }
 
 function seleccionarLoteEntero(tipo) {
@@ -501,13 +529,12 @@ function seleccionarLoteEntero(tipo) {
 
 async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = null, soloRE = false) {
     const sel = document.getElementById(loteSelectId);
+    if (!sel) return;
     sel.innerHTML = '<option value="">Cargando...</option>';
     if (!cuadraId) { sel.innerHTML = '<option value="">— Lote —</option>'; return; }
 
-    const res  = await fetch(`<?= base_url('movimientos/lotes-cuadra') ?>?cuadra_id=${cuadraId}`);
+    const res  = await fetch(`${BASE_URL}movimientos/lotes-cuadra?cuadra_id=${cuadraId}`);
     let data = await res.json();
-
-    // Filtrar solo lotes RE si se pide
     if (soloRE) data = data.filter(l => l.codigo.trim().endsWith('RE'));
 
     sel.innerHTML = soloRE ? '<option value="">— Lote RE —</option>' : '<option value="">— Lote —</option>';
@@ -516,179 +543,150 @@ async function cargarLotesDeCuadra(cuadraId, loteSelectId, valorSeleccionado = n
         sel.innerHTML += `<option value="${l.id}" ${selected}>${l.codigo} (${l.num_animales} animales)</option>`;
     });
     if (!valorSeleccionado && data.length === 1) sel.value = data[0].id;
+    actualizarPesoEstimado();
 }
 
-<?php if ($esEdicion && $movimiento):
-    $db = \App\Core\Database::getInstance();
-    $naveOrigen = null;
-    $naveDestino = null;
-    if ($movimiento['cuadra_origen_id']) {
-        $s = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
-        $s->execute(['id' => $movimiento['cuadra_origen_id']]);
-        $naveOrigen = $s->fetchColumn();
-    }
-    if ($movimiento['cuadra_destino_id']) {
-        $s = $db->prepare("SELECT nave_id FROM cuadras WHERE id = :id");
-        $s->execute(['id' => $movimiento['cuadra_destino_id']]);
-        $naveDestino = $s->fetchColumn();
-    }
-?>
-document.addEventListener('DOMContentLoaded', async () => {
+// ── Bajas/salida: nave → lote ────────────────────────────────
+async function cargarLotesDeNave(naveId) {
+    const sel = document.getElementById('loteOrigenBaja');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Cargando...</option>';
+    const res  = await fetch(`${BASE_URL}movimientos/lotes-de-nave?nave_id=${naveId || 0}`);
+    const data = await res.json();
+    sel.innerHTML = '<option value="">— Selecciona lote —</option>';
+    data.forEach(l => {
+        sel.innerHTML += `<option value="${l.id}">${l.codigo} (${l.num_animales} animales)</option>`;
+    });
 
-    <?php if ($naveOrigen): ?>
-    // Precargar origen
-    const naveOrigenSel = document.getElementById('naveOrigen');
-    if (naveOrigenSel) {
-        naveOrigenSel.value = <?= (int)$naveOrigen ?>;
-        await cargarCuadras(<?= (int)$naveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= (int)$movimiento['cuadra_origen_id'] ?>);
-        await cargarLotesDeCuadra(<?= (int)$movimiento['cuadra_origen_id'] ?>, 'loteOrigen', <?= (int)$movimiento['lote_origen_id'] ?>);
-        // Bloquear origen (nave, cuadra, lote) — no se puede cambiar en edición
-        ['naveOrigen','cuadraOrigen','loteOrigen'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) {
-                el.style.pointerEvents = 'none';
-                el.style.background    = '#f3f4f6';
-                el.style.color         = '#9ca3af';
-            }
-        });
+    // Limpiar cuadras
+    const wrap = document.getElementById('cuadrasBajaWrap');
+    if (wrap) wrap.style.display = 'none';
+}
+
+// ── Peso estimado (vivo) ──────────────────────────────────────
+let _pesoTimer = null;
+function actualizarPesoEstimado() {
+    if (_pesoTimer) clearTimeout(_pesoTimer);
+    _pesoTimer = setTimeout(_actualizarPesoEstimadoNow, 200);
+}
+
+async function _actualizarPesoEstimadoNow() {
+    const loteSel = document.querySelector('select[name="lote_origen_id"]');
+    const fechaEl = document.getElementById('fechaMov');
+    const numEl   = document.getElementById('numAnimales');
+    const panel   = document.getElementById('panelPeso');
+    if (!panel) return;
+
+    if (!loteSel || !loteSel.value || !fechaEl || !fechaEl.value) {
+        panel.style.display = 'none';
+        return;
     }
-    <?php elseif ($movimiento['lote_origen_id']): ?>
-    // Tipo sin cuadra — preseleccionar lote si el select tiene opciones estáticas
-    const loteOrigenSel = document.getElementById('loteOrigen');
-    if (loteOrigenSel) {
-        loteOrigenSel.value = <?= (int)$movimiento['lote_origen_id'] ?>;
-        // Si el select dinámico está vacío, añadir hidden input como respaldo
-        if (loteOrigenSel.value === '' || loteOrigenSel.value === '0') {
-            const h = document.createElement('input');
-            h.type  = 'hidden';
-            h.name  = 'lote_origen_id';
-            h.value = '<?= (int)$movimiento['lote_origen_id'] ?>';
-            loteOrigenSel.insertAdjacentElement('afterend', h);
-            loteOrigenSel.name = '';
-        }
+
+    const url = `${BASE_URL}movimientos/peso-estimado?lote_id=${loteSel.value}&fecha=${fechaEl.value}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.ok || data.peso_tabla === null) { panel.style.display = 'none'; return; }
+
+    const num = parseInt(numEl?.value || '0') || 0;
+    const pesoUd = data.peso_real_proyectado ?? data.peso_tabla;
+
+    document.getElementById('pesoSemana').textContent = data.semana ? 'S' + data.semana : '—';
+    document.getElementById('pesoTabla').textContent  = data.peso_tabla.toFixed(3);
+    document.getElementById('pesoReal2').textContent  = data.peso_real_proyectado !== null ? data.peso_real_proyectado.toFixed(3) : '—';
+    document.getElementById('pesoTotal').textContent  = num > 0 ? (pesoUd * num).toFixed(2) + ' kg' : '—';
+    panel.style.display = '';
+
+    // Comparar con peso introducido (canal o real) si lo hay → mostrar warning
+    validarPeso(data);
+}
+
+// ── Aviso fecha lejana ───────────────────────────────────────
+function validarFecha() {
+    const aviso = document.getElementById('avisoFecha');
+    const fecha = document.getElementById('fechaMov');
+    if (!aviso || !fecha || !fecha.value || CFG_DIAS <= 0) {
+        if (aviso) aviso.style.display = 'none';
+        return;
     }
+    const hoy   = new Date(); hoy.setHours(0,0,0,0);
+    const sel   = new Date(fecha.value);
+    const dias  = Math.abs(Math.round((sel - hoy) / 86400000));
+    if (dias > CFG_DIAS) {
+        const direccion = sel < hoy ? 'pasado' : 'futuro';
+        aviso.textContent = `⚠ La fecha está ${dias} días en el ${direccion} (umbral: ${CFG_DIAS}).`;
+        aviso.style.display = '';
+    } else {
+        aviso.style.display = 'none';
+    }
+}
+
+// ── Aviso peso fuera de tabla ────────────────────────────────
+let _pesoEstimadoCache = null;
+function validarPeso(dataInput) {
+    if (dataInput) _pesoEstimadoCache = dataInput;
+    const aviso = document.getElementById('avisoPeso');
+    if (!aviso || CFG_PCT <= 0 || !_pesoEstimadoCache || !_pesoEstimadoCache.peso_tabla) {
+        if (aviso) aviso.style.display = 'none';
+        return;
+    }
+
+    let pesoUdInput = null;
+    const numEl = document.getElementById('numAnimales');
+    const num   = parseInt(numEl?.value || '0') || 0;
+
+    if (CATEGORIA === 'venta') {
+        const pc = parseFloat(document.getElementById('pesoCanal')?.value || '0');
+        if (pc > 0 && num > 0) pesoUdInput = pc / num;
+    } else if (CATEGORIA === 'baja') {
+        const pr = parseFloat(document.getElementById('pesoReal')?.value || '0');
+        if (pr > 0) pesoUdInput = pr;
+    }
+
+    if (pesoUdInput === null) { aviso.style.display = 'none'; return; }
+
+    const pesoEsperado = _pesoEstimadoCache.peso_real_proyectado ?? _pesoEstimadoCache.peso_tabla;
+    const desv = Math.abs(pesoUdInput - pesoEsperado) / pesoEsperado * 100;
+    if (desv > CFG_PCT) {
+        const dir = pesoUdInput > pesoEsperado ? 'mayor' : 'menor';
+        aviso.textContent = `⚠ El peso introducido (${pesoUdInput.toFixed(2)} kg/ud) es ${desv.toFixed(0)}% ${dir} que el esperado por la tabla (${pesoEsperado.toFixed(2)} kg/ud). Umbral: ${CFG_PCT}%.`;
+        aviso.style.display = '';
+    } else {
+        aviso.style.display = 'none';
+    }
+}
+
+// ── Confirmar inventarios afectados al cambiar lote en edición ─
+async function antesDeEnviar(e) {
+    if (!ES_EDICION || !MOV_ID) return true;
+    const loteSel = document.querySelector('select[name="lote_origen_id"]');
+    if (!loteSel) return true;
+    const nuevoLote = parseInt(loteSel.value || '0');
+    if (!nuevoLote || nuevoLote === LOTE_ORIGINAL_ID) return true;
+
+    const res = await fetch(`${BASE_URL}movimientos/${MOV_ID}/inventarios-afectados?lote_id=${nuevoLote}`);
+    const data = await res.json();
+    if ((data.count || 0) === 0) return true;
+
+    e.preventDefault();
+    const ok = confirm(`Hay ${data.count} inventario(s) con fecha posterior a este movimiento que se verán afectados al cambiar el lote.\n\n¿Continuar?`);
+    if (ok) {
+        document.getElementById('confirmarInv').value = '1';
+        document.getElementById('frmMov').submit();
+    }
+    return false;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('fechaMov')?.addEventListener('change', () => { validarFecha(); actualizarPesoEstimado(); });
+    document.getElementById('frmMov')?.addEventListener('submit', antesDeEnviar);
+    validarFecha();
+    actualizarPesoEstimado();
+
+    <?php if ($esEdicion && $movimiento && $categoriaActual === 'baja'): ?>
+    // Precargar cuadras del lote en edición de baja
+    if (LOTE_ORIGINAL_ID) cargarCuadrasDelLote(LOTE_ORIGINAL_ID, 'baja');
+    <?php elseif ($esEdicion && $movimiento && $categoriaActual === 'venta'): ?>
+    if (LOTE_ORIGINAL_ID) cargarCuadrasDelLote(LOTE_ORIGINAL_ID, 'venta');
     <?php endif; ?>
-
-    <?php if ($naveDestino): ?>
-    // Precargar destino (editable)
-    const naveDestinoSel = document.getElementById('naveDestino');
-    if (naveDestinoSel) {
-        naveDestinoSel.value = <?= (int)$naveDestino ?>;
-        await cargarCuadras(<?= (int)$naveDestino ?>, 'cuadraDestino', null, <?= (int)$movimiento['cuadra_destino_id'] ?>);
-    }
-    <?php endif; ?>
-
 });
-<?php endif; ?>
-
-<?php if (!$esEdicion && !empty($old)): ?>
-// ── Restaurar datos tras error de validación ──────────────────
-document.addEventListener('DOMContentLoaded', async () => {
-
-    // Fecha
-    <?php if (!empty($old['fecha'])): ?>
-    const _fecha = document.querySelector('input[name="fecha"]');
-    if (_fecha) _fecha.value = <?= json_encode($old['fecha']) ?>;
-    <?php endif; ?>
-
-    // Observaciones / campos de texto simples
-    <?php if (!empty($old['observaciones'])): ?>
-    const _obs = document.querySelector('textarea[name="observaciones"]');
-    if (_obs) _obs.value = <?= json_encode($old['observaciones']) ?>;
-    <?php endif; ?>
-
-    <?php if ($tipoActual === 'traslado_cuadra'): ?>
-    // ── Traslado: nave origen → cuadra → lote ──────────────────
-    <?php if ($oldNaveOrigen): ?>
-    const _naveOrig = document.getElementById('naveOrigen');
-    if (_naveOrig) {
-        _naveOrig.value = <?= (int)$oldNaveOrigen ?>;
-        await cargarCuadras(<?= (int)$oldNaveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= (int)($old['cuadra_origen_id'] ?? 0) ?>);
-        <?php if (!empty($old['cuadra_origen_id'])): ?>
-        await cargarLotesDeCuadra(<?= (int)$old['cuadra_origen_id'] ?>, 'loteOrigen', <?= (int)($old['lote_origen_id'] ?? 0) ?>);
-        <?php endif; ?>
-    }
-    <?php endif; ?>
-    <?php if ($oldNaveDestino): ?>
-    const _naveDest = document.getElementById('naveDestino');
-    if (_naveDest) {
-        _naveDest.value = <?= (int)$oldNaveDestino ?>;
-        await cargarCuadras(<?= (int)$oldNaveDestino ?>, 'cuadraDestino', null, <?= (int)($old['cuadra_destino_id'] ?? 0) ?>);
-    }
-    <?php endif; ?>
-    // Cantidad
-    <?php if (!empty($old['num_animales'])): ?>
-    const _num = document.querySelector('input[name="num_animales"]');
-    if (_num && !_num.readOnly) _num.value = <?= (int)$old['num_animales'] ?>;
-    <?php endif; ?>
-
-    <?php elseif ($tipoActual === 'venta' || $tipoActual === 'baja'): ?>
-    // ── Venta / Baja: lote → cuadras multi ─────────────────────
-    <?php if (!empty($old['lote_origen_id'])): ?>
-    const _loteVB = document.querySelector('select[name="lote_origen_id"]');
-    if (_loteVB) {
-        _loteVB.value = <?= (int)$old['lote_origen_id'] ?>;
-        await cargarCuadrasDelLote(<?= (int)$old['lote_origen_id'] ?>, '<?= e($tipoActual) ?>');
-        // Restaurar cantidades por cuadra
-        const _ids  = <?= json_encode(array_values($old['cuadras_origen_ids']  ?? [])) ?>;
-        const _nums = <?= json_encode(array_values($old['cuadras_origen_nums'] ?? [])) ?>;
-        const _cards = document.querySelectorAll('.cuadra-card-multi');
-        _cards.forEach(card => {
-            const idx = _ids.indexOf(card.dataset.id);
-            if (idx !== -1 && _nums[idx] > 0) {
-                const inp = card.querySelector('.cuadra-qty-input');
-                if (inp) { inp.value = _nums[idx]; onQtyChange(inp, '<?= e($tipoActual) ?>'); }
-            }
-        });
-    }
-    <?php endif; ?>
-    <?php if ($tipoActual === 'venta'): ?>
-    <?php if (!empty($old['precio_eur'])): ?>
-    const _precio = document.querySelector('input[name="precio_eur"]');
-    if (_precio) _precio.value = <?= json_encode($old['precio_eur']) ?>;
-    <?php endif; ?>
-    <?php if (!empty($old['peso_canal_kg'])): ?>
-    const _peso = document.querySelector('input[name="peso_canal_kg"]');
-    if (_peso) _peso.value = <?= json_encode($old['peso_canal_kg']) ?>;
-    <?php endif; ?>
-    <?php if (!empty($old['tipo_venta'])): ?>
-    const _tv = document.querySelector('select[name="tipo_venta"]');
-    if (_tv) _tv.value = <?= json_encode($old['tipo_venta']) ?>;
-    <?php endif; ?>
-    <?php elseif ($tipoActual === 'baja'): ?>
-    <?php if (!empty($old['motivo_baja'])): ?>
-    const _motivo = document.querySelector('select[name="motivo_baja"]');
-    if (_motivo) _motivo.value = <?= json_encode($old['motivo_baja']) ?>;
-    <?php endif; ?>
-    <?php endif; ?>
-
-    <?php elseif (in_array($tipoActual, ['entrada_reposicion', 'entrada_madres'])): ?>
-    // ── Entrada reposición / madres: nave → cuadra → lote ──────
-    <?php if ($oldNaveOrigen): ?>
-    const _naveR = document.getElementById('naveOrigen');
-    if (_naveR) {
-        _naveR.value = <?= (int)$oldNaveOrigen ?>;
-        await cargarCuadras(<?= (int)$oldNaveOrigen ?>, 'cuadraOrigen', 'loteOrigen', <?= (int)($old['cuadra_origen_id'] ?? 0) ?>);
-        <?php if (!empty($old['cuadra_origen_id'])): ?>
-        await cargarLotesDeCuadra(<?= (int)$old['cuadra_origen_id'] ?>, 'loteOrigen',
-            <?= (int)($old['lote_origen_id'] ?? 0) ?>,
-            <?= $tipoActual === 'entrada_madres' ? 'true' : 'false' ?>);
-        <?php endif; ?>
-    }
-    <?php endif; ?>
-    <?php if (!empty($old['num_animales'])): ?>
-    const _numR = document.querySelector('input[name="num_animales"]');
-    if (_numR) _numR.value = <?= (int)$old['num_animales'] ?>;
-    <?php endif; ?>
-
-    <?php elseif ($tipoActual === 'entrada_cebo'): ?>
-    // ── Entrada cebo: solo lote ─────────────────────────────────
-    <?php if (!empty($old['lote_origen_id'])): ?>
-    const _loteCebo = document.querySelector('select[name="lote_origen_id"]');
-    if (_loteCebo) _loteCebo.value = <?= (int)$old['lote_origen_id'] ?>;
-    <?php endif; ?>
-    <?php endif; ?>
-
-});
-<?php endif; ?>
 </script>

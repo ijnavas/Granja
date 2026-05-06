@@ -76,13 +76,15 @@ class Inventario
 
     public function insertLinea(int $inventarioId, array $linea): void
     {
+        // peso_real_kg: peso medio realmente pesado (NULL si nunca se pesó)
+        if (!array_key_exists('peso_real_kg', $linea)) $linea['peso_real_kg'] = null;
         $stmt = $this->db->prepare("
             INSERT INTO inventario_lineas
                 (inventario_id, lote_id, cuadra_id, nave_id, granja_id, estado_animal,
-                 num_animales, peso_kg, peso_total_kg, coste_eur, valor_total_eur, semana_tabla)
+                 num_animales, peso_kg, peso_real_kg, peso_total_kg, coste_eur, valor_total_eur, semana_tabla)
             VALUES
                 (:inventario_id, :lote_id, :cuadra_id, :nave_id, :granja_id, :estado_animal,
-                 :num_animales, :peso_kg, :peso_total_kg, :coste_eur, :valor_total_eur, :semana_tabla)
+                 :num_animales, :peso_kg, :peso_real_kg, :peso_total_kg, :coste_eur, :valor_total_eur, :semana_tabla)
         ");
         $stmt->execute(array_merge(['inventario_id' => $inventarioId], $linea));
     }
@@ -304,6 +306,8 @@ class Inventario
                 'num_animales'    => $num,
                 'peso_kg'         => $pesoKg,
                 'peso_kg_tabla'   => $pesoTabla,
+                // peso_real_kg: solo si hay pesaje real
+                'peso_real_kg'    => $r['ultimo_peso_real'] !== null ? $pesoKg : null,
                 'tiene_pesaje'    => $r['ultimo_peso_real'] !== null,
                 'peso_total_kg'   => round($pesoKg * $num, 3),
                 'coste_eur'       => $costeEur,
@@ -366,6 +370,7 @@ class Inventario
                 'num_animales'    => $num,
                 'peso_kg'         => $pesoKg,
                 'peso_kg_tabla'   => $pesoTabla,
+                'peso_real_kg'    => $d['peso_real_proyectado'] !== null ? $pesoKg : null,
                 'tiene_pesaje'    => $d['peso_real_proyectado'] !== null,
                 'peso_total_kg'   => round($pesoKg * $num, 3),
                 'coste_eur'       => $costeEur,

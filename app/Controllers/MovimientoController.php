@@ -7,6 +7,8 @@ use App\Models\Movimiento;
 use App\Models\Lote;
 use App\Models\Nave;
 use App\Models\Cuadra;
+use App\Models\TipoMovimiento;
+use App\Models\ConfiguracionGranja;
 use App\Core\Session;
 use App\Core\Paginator;
 use App\Core\AuditLog;
@@ -14,17 +16,21 @@ use PDO;
 
 class MovimientoController extends BaseController
 {
-    private Movimiento $model;
-    private Lote       $loteModel;
-    private Nave       $naveModel;
-    private Cuadra     $cuadraModel;
+    private Movimiento          $model;
+    private Lote                $loteModel;
+    private Nave                $naveModel;
+    private Cuadra              $cuadraModel;
+    private TipoMovimiento      $tipoMovModel;
+    private ConfiguracionGranja $configModel;
 
     public function __construct()
     {
-        $this->model       = new Movimiento();
-        $this->loteModel   = new Lote();
-        $this->naveModel   = new Nave();
-        $this->cuadraModel = new Cuadra();
+        $this->model        = new Movimiento();
+        $this->loteModel    = new Lote();
+        $this->naveModel    = new Nave();
+        $this->cuadraModel  = new Cuadra();
+        $this->tipoMovModel = new TipoMovimiento();
+        $this->configModel  = new ConfiguracionGranja();
     }
 
     // ── Listado ──────────────────────────────────────────────────
@@ -48,6 +54,7 @@ class MovimientoController extends BaseController
             'movimientos' => $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset),
             'filtros'     => $filtros,
             'paginacion'  => $paginacion,
+            'tipos'       => $this->tipoMovModel->all(false),
             'pageTitle'   => 'Movimientos',
             'success'     => Session::getFlash('success'),
             'error'       => Session::getFlash('error'),
@@ -137,6 +144,8 @@ class MovimientoController extends BaseController
             'lotes'          => $this->loteModel->allByUsuario($uid),
             'naves'          => $this->naveModel->allByUsuario($uid),
             'estados'        => $this->model->estadosAnimal(),
+            'tipos'          => $this->tipoMovModel->all(true),
+            'config'         => $this->configModel->get($uid),
             'pageTitle'      => 'Nuevo movimiento',
             'error'          => Session::getFlash('error'),
             'old'            => $old,
@@ -195,6 +204,7 @@ class MovimientoController extends BaseController
             'cuadra_destino_id' => $cuadraDestinoId,
             'num_animales'      => $totalAnimales,
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
+            'peso_real_kg'      => $this->post('peso_real_kg')      ? (float)$this->post('peso_real_kg')  : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
             'tipo_venta'        => $this->post('tipo_venta')        ?: null,
             'motivo_baja'       => $this->postString('motivo_baja') ?: null,
@@ -241,6 +251,8 @@ class MovimientoController extends BaseController
             'lotes'      => $this->loteModel->allByUsuario($uid),
             'naves'      => $this->naveModel->allByUsuario($uid),
             'estados'    => $this->model->estadosAnimal(),
+            'tipos'      => $this->tipoMovModel->all(true),
+            'config'     => $this->configModel->get($uid),
             'historial'  => $this->model->historial((int)$id),
             'pageTitle'  => 'Editar movimiento',
             'error'      => Session::getFlash('error'),
@@ -282,11 +294,23 @@ class MovimientoController extends BaseController
             'cuadra_destino_id' => $cuadraDestinoId,
             'num_animales'      => (int)$this->post('num_animales'),
             'peso_canal_kg'     => $this->post('peso_canal_kg')     ? (float)$this->post('peso_canal_kg') : null,
+            'peso_real_kg'      => $this->post('peso_real_kg')      ? (float)$this->post('peso_real_kg')  : null,
             'precio_eur'        => $this->post('precio_eur')        ? (float)$this->post('precio_eur')    : null,
             'tipo_venta'        => $this->post('tipo_venta')        ?: null,
             'motivo_baja'       => $this->postString('motivo_baja') ?: null,
             'observaciones'     => $this->postString('observaciones'),
         ];
+
+        // Si cambia el lote_origen y hay inventarios afectados, exigir confirmación.
+        $loteCambiado = (int)$movActual['lote_origen_id'] !== $loteOrigenId;
+        if ($loteCambiado && empty($_POST['confirmar_inventarios'])) {
+            $afectados = $this->countInventariosAfectados((int)$movActual['lote_origen_id'], $loteOrigenId, $movActual['fecha'], $uid);
+            if ($afectados > 0) {
+                Session::flash('error', "Hay {$afectados} inventario(s) cuya fecha es posterior al movimiento y se verán afectados al cambiar el lote. Vuelve a guardar marcando la confirmación.");
+                $_SESSION['_old_input'] = $_POST;
+                $this->redirect("movimientos/{$id}/editar");
+            }
+        }
 
         // Revertir efecto anterior y aplicar el nuevo
         try {
@@ -301,6 +325,156 @@ class MovimientoController extends BaseController
         AuditLog::log('movimiento', (int)$id, 'update', $movActual, $data);
         Session::flash('success', 'Movimiento actualizado.');
         $this->redirect('movimientos');
+    }
+
+    /**
+     * Cuenta los inventarios del usuario con fecha >= movimiento.fecha donde
+     * cualquiera de los dos lotes (origen anterior o nuevo) tiene una línea.
+     * Sirve como advertencia: cambiar el lote tras un inventario altera la
+     * foto histórica que ese inventario congeló.
+     */
+    private function countInventariosAfectados(int $loteAntiguoId, int $loteNuevoId, string $fechaMov, int $uid): int
+    {
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT COUNT(DISTINCT i.id)
+            FROM inventarios i
+            JOIN inventario_lineas il ON il.inventario_id = i.id
+            WHERE i.usuario_id = :uid
+              AND i.fecha >= :fecha
+              AND (il.lote_id = :lote_a OR il.lote_id = :lote_n)
+        ");
+        $stmt->execute([
+            'uid'     => $uid,
+            'fecha'   => $fechaMov,
+            'lote_a'  => $loteAntiguoId,
+            'lote_n'  => $loteNuevoId,
+        ]);
+        return (int)$stmt->fetchColumn();
+    }
+
+    /** AJAX: cuenta inventarios afectados por un cambio de lote en un movimiento. */
+    public function inventariosAfectados(string $id): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $uid = (int)Session::get('usuario_id');
+        $mov = $this->ownedMovimientoOrAbort((int)$id, $uid);
+        $loteNuevo = (int)($_GET['lote_id'] ?? 0);
+        if (!$loteNuevo || $loteNuevo === (int)$mov['lote_origen_id']) {
+            echo json_encode(['count' => 0]); return;
+        }
+        // IDOR guard del lote nuevo
+        if (!$this->loteModel->find($loteNuevo, $uid)) {
+            echo json_encode(['count' => 0]); return;
+        }
+        $count = $this->countInventariosAfectados((int)$mov['lote_origen_id'], $loteNuevo, $mov['fecha'], $uid);
+        echo json_encode(['count' => $count]);
+    }
+
+    /** AJAX: lotes activos en una nave (con animales > 0). Soporta nave_id o lista vacía → todos. */
+    public function lotesPorNave(): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $uid    = (int)Session::get('usuario_id');
+        $naveId = (int)($_GET['nave_id'] ?? 0);
+
+        if ($naveId) {
+            // IDOR guard: la nave debe ser del usuario
+            $check = \App\Core\Database::getInstance()->prepare("
+                SELECT 1 FROM naves n JOIN granjas g ON n.granja_id = g.id
+                WHERE n.id = :id AND g.usuario_id = :uid
+            ");
+            $check->execute(['id' => $naveId, 'uid' => $uid]);
+            if (!$check->fetchColumn()) { echo json_encode([]); return; }
+
+            // Lotes con presencia en CUALQUIER cuadra de la nave (no solo lotes.nave_id)
+            $stmt = \App\Core\Database::getInstance()->prepare("
+                SELECT DISTINCT l.id, l.codigo, l.num_animales,
+                       COALESCE(SUM(cl.num_animales), l.num_animales) AS animales_en_nave
+                FROM lotes l
+                LEFT JOIN cuadra_lote cl ON cl.lote_id = l.id AND cl.activo = 1 AND cl.num_animales > 0
+                LEFT JOIN cuadras c ON cl.cuadra_id = c.id
+                WHERE l.estado = 'activo'
+                  AND l.num_animales > 0
+                  AND (l.nave_id = :nid OR c.nave_id = :nid2)
+                GROUP BY l.id
+                ORDER BY l.codigo
+            ");
+            $stmt->execute(['nid' => $naveId, 'nid2' => $naveId]);
+            echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+            return;
+        }
+
+        // Sin nave: todos los lotes activos del usuario
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT l.id, l.codigo, l.num_animales
+            FROM lotes l
+            JOIN granjas g ON l.granja_id = g.id
+            WHERE g.usuario_id = :uid AND l.estado = 'activo' AND l.num_animales > 0
+            ORDER BY l.codigo
+        ");
+        $stmt->execute(['uid' => $uid]);
+        echo json_encode($stmt->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /** AJAX: peso esperado (tabla y proyección con último pesaje) para un lote a una fecha. */
+    public function pesoEstimado(): void
+    {
+        auth_required();
+        header('Content-Type: application/json');
+        $uid    = (int)Session::get('usuario_id');
+        $loteId = (int)($_GET['lote_id'] ?? 0);
+        $fecha  = trim($_GET['fecha'] ?? date('Y-m-d'));
+        if (!$loteId || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            echo json_encode(['ok' => false]); return;
+        }
+        // IDOR guard
+        if (!$this->loteModel->find($loteId, $uid)) {
+            echo json_encode(['ok' => false]); return;
+        }
+
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT
+                l.codigo,
+                l.num_animales,
+                l.fecha_nacimiento,
+                CEIL(DATEDIFF(:f1, l.fecha_nacimiento) / 7) AS semana,
+                tcl.peso_kg     AS peso_tabla,
+                tcl.coste_eur   AS coste_tabla,
+                ult_p.peso_medio_kg  AS ultimo_peso_real,
+                ult_p.fecha          AS ultimo_pesaje_fecha,
+                tcl_p.peso_kg        AS peso_tabla_en_pesaje,
+                ROUND(ult_p.peso_medio_kg + COALESCE(tcl.peso_kg,0) - COALESCE(tcl_p.peso_kg,0), 3) AS peso_real_proyectado
+            FROM lotes l
+            LEFT JOIN tabla_raza tr ON tr.raza_id = l.raza_id
+            LEFT JOIN tablas_crecimiento tc  ON tc.id = tr.tabla_id AND tc.activa = 1
+            LEFT JOIN tablas_crecimiento_lineas tcl
+                ON tcl.tabla_id = tc.id
+                AND tcl.semana  = CEIL(DATEDIFF(:f2, l.fecha_nacimiento) / 7)
+            LEFT JOIN pesajes ult_p ON ult_p.id = (
+                SELECT id FROM pesajes WHERE lote_id = l.id AND fecha <= :f3 ORDER BY fecha DESC LIMIT 1
+            )
+            LEFT JOIN tablas_crecimiento_lineas tcl_p
+                ON tcl_p.tabla_id = tc.id
+                AND tcl_p.semana  = CEIL(DATEDIFF(ult_p.fecha, l.fecha_nacimiento) / 7)
+            WHERE l.id = :id
+            LIMIT 1
+        ");
+        $stmt->execute(['id' => $loteId, 'f1' => $fecha, 'f2' => $fecha, 'f3' => $fecha]);
+        $row = $stmt->fetch();
+        if (!$row) { echo json_encode(['ok' => false]); return; }
+
+        echo json_encode([
+            'ok'                   => true,
+            'codigo'               => $row['codigo'],
+            'num_animales'         => (int)$row['num_animales'],
+            'semana'               => $row['semana'] !== null ? (int)$row['semana'] : null,
+            'peso_tabla'           => $row['peso_tabla']           !== null ? (float)$row['peso_tabla']           : null,
+            'coste_tabla'          => $row['coste_tabla']          !== null ? (float)$row['coste_tabla']          : null,
+            'ultimo_peso_real'     => $row['ultimo_peso_real']     !== null ? (float)$row['ultimo_peso_real']     : null,
+            'peso_real_proyectado' => $row['peso_real_proyectado'] !== null ? (float)$row['peso_real_proyectado'] : null,
+        ]);
     }
 
     // ── Eliminar ─────────────────────────────────────────────────
@@ -483,12 +657,38 @@ class MovimientoController extends BaseController
     }
 
     // ── Lógica de efectos ────────────────────────────────────────
+    /**
+     * Resuelve la "rama de efecto" a aplicar: para los 6 tipos del sistema
+     * usamos su código directamente (mantienen lógica especial). Para tipos
+     * personalizados, mapeamos la categoría al efecto equivalente:
+     *   venta → 'venta', baja → 'baja', salida → 'baja' (sin motivo),
+     *   entrada → 'entrada', traslado → 'traslado_cuadra',
+     *   transicion / re_creacion / re_consumo: requieren tipo del sistema.
+     */
+    private function ramaEfecto(string $tipo): string
+    {
+        static $sistema = ['traslado_cuadra','entrada_cebo','entrada_reposicion','entrada_madres','venta','baja'];
+        if (in_array($tipo, $sistema, true)) return $tipo;
+        $cat = $this->tipoMovModel->categoriaDe($tipo);
+        return match ($cat) {
+            'venta'       => 'venta',
+            'baja'        => 'baja',
+            'salida'      => 'baja',     // resta animales sin motivo
+            'entrada'     => 'entrada',  // suma animales al lote existente
+            'traslado'    => 'traslado_cuadra',
+            'transicion'  => 'entrada_cebo',
+            're_creacion' => 'entrada_reposicion',
+            're_consumo'  => 'entrada_madres',
+            default       => 'baja',     // fallback seguro: tratar como salida
+        };
+    }
+
     private function revertirMovimiento(array $mov, int $uid): void
     {
         $db       = \App\Core\Database::getInstance();
         $cantidad = (int)$mov['num_animales'];
 
-        switch ($mov['tipo']) {
+        switch ($this->ramaEfecto($mov['tipo'])) {
 
             case 'traslado_cuadra':
                 // Devolver animales a la cuadra origen
@@ -605,6 +805,19 @@ class MovimientoController extends BaseController
                     }
                 }
                 break;
+
+            case 'entrada':
+                // Compra/entrada genérica: restar animales del lote para revertir el alta.
+                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $mov['lote_origen_id']]);
+                if ($mov['cuadra_origen_id']) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n)
+                                  WHERE cuadra_id = :cid AND lote_id = :lid AND activo = 1")
+                       ->execute(['n' => $cantidad, 'cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id = :cid AND lote_id = :lid AND num_animales = 0")
+                       ->execute(['cid' => $mov['cuadra_origen_id'], 'lid' => $mov['lote_origen_id']]);
+                }
+                break;
         }
     }
 
@@ -617,7 +830,7 @@ class MovimientoController extends BaseController
         $cantidad = $data['num_animales'];
         if ($cantidad < 1) throw new \Exception('La cantidad debe ser mayor que 0.');
 
-        switch ($tipo) {
+        switch ($this->ramaEfecto($tipo)) {
 
             case 'traslado_cuadra':
                 if (!$data['cuadra_destino_id']) throw new \Exception('Selecciona una cuadra destino.');
@@ -800,6 +1013,24 @@ class MovimientoController extends BaseController
                 $restantes->execute(['id' => $data['lote_origen_id']]);
                 if ((int)$restantes->fetchColumn() <= 0) {
                     $db->prepare("UPDATE lotes SET estado='cerrado', fecha_cierre=CURDATE() WHERE id=:id")->execute(['id' => $data['lote_origen_id']]);
+                }
+                break;
+
+            case 'entrada':
+                // Compra/entrada genérica: sumar animales al lote existente y a la cuadra si se indica.
+                $db->prepare("UPDATE lotes SET num_animales = num_animales + :n, estado = 'activo' WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $data['lote_origen_id']]);
+                if (!empty($data['cuadra_origen_id'])) {
+                    $stmtCL = $db->prepare("SELECT id FROM cuadra_lote WHERE cuadra_id=:cid AND lote_id=:lid LIMIT 1");
+                    $stmtCL->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id']]);
+                    $clId = $stmtCL->fetchColumn();
+                    if ($clId) {
+                        $db->prepare("UPDATE cuadra_lote SET num_animales = num_animales + :n, activo = 1 WHERE id = :id")
+                           ->execute(['n' => $cantidad, 'id' => $clId]);
+                    } else {
+                        $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada) VALUES (:cid, :lid, :n, CURDATE())")
+                           ->execute(['cid' => $data['cuadra_origen_id'], 'lid' => $data['lote_origen_id'], 'n' => $cantidad]);
+                    }
                 }
                 break;
         }

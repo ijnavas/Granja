@@ -150,14 +150,24 @@ $tipoLabels = [
                     <input type="number" name="num_animales" id="numAnimales" min="1" required
                            value="<?= e($lote['num_animales'] ?? '') ?>"
                            placeholder="200"
-                           oninput="calcularPesoIndividual(); calcularValoracion(); if(cuadrasData.length) { recalcularDistribucion(); mostrarAdvertenciaCapacidad(); }">
+                           oninput="onPesoInput(); calcularValoracion(); if(cuadrasData.length) { recalcularDistribucion(); mostrarAdvertenciaCapacidad(); }">
                 </div>
                 <div class="form-group">
-                    <label>Peso medio entrada (kg)</label>
-                    <input type="number" name="peso_entrada_kg" id="pesoEntrada" step="0.001" min="0"
-                           value="<?= e($lote['peso_entrada_kg'] ?? '') ?>"
-                           placeholder="0.000"
-                           oninput="calcularPesoIndividual()">
+                    <label>Peso entrada</label>
+                    <div style="display:flex;gap:.4rem;align-items:stretch">
+                        <input type="number" id="pesoEntradaInput" step="0.001" min="0"
+                               value="<?= e($lote['peso_entrada_kg'] ?? '') ?>"
+                               placeholder="0.000"
+                               style="flex:1"
+                               oninput="onPesoInput()">
+                        <select id="pesoModo" onchange="onPesoModoCambio()"
+                                style="width:130px">
+                            <option value="total">Total</option>
+                            <option value="individual">Por animal</option>
+                        </select>
+                    </div>
+                    <input type="hidden" name="peso_entrada_kg" id="pesoEntrada"
+                           value="<?= e($lote['peso_entrada_kg'] ?? '') ?>">
                     <span class="form-hint" id="pesoIndividualHint">Según tabla de crecimiento</span>
                 </div>
             </div>
@@ -435,21 +445,56 @@ function actualizarCodigo() {
     }
 }
 
-function calcularPesoIndividual() {
+// El usuario puede introducir peso total o por animal (toggle).
+// El campo oculto pesoEntrada SIEMPRE contiene el total (kg) que es lo que se almacena.
+function onPesoInput() {
     const num   = parseFloat(document.getElementById('numAnimales').value) || 0;
-    const peso  = parseFloat(document.getElementById('pesoEntrada').value) || 0;
-    const hint  = document.getElementById('pesoIndividualHint');
-    if (num > 0 && peso > 0) {
-        const individual = (peso / num).toFixed(3);
-        hint.textContent = 'Peso individual: ' + individual + ' kg/animal';
-        hint.style.color = '#1d4ed8';
-        hint.style.fontWeight = '600';
+    const valor = parseFloat(document.getElementById('pesoEntradaInput').value) || 0;
+    const modo  = document.getElementById('pesoModo').value;
+    const hidden = document.getElementById('pesoEntrada');
+    const hint   = document.getElementById('pesoIndividualHint');
+
+    if (modo === 'total') {
+        hidden.value = valor || '';
+        if (num > 0 && valor > 0) {
+            hint.textContent = `Peso individual: ${(valor / num).toFixed(3)} kg/animal`;
+            hint.style.color = '#1d4ed8'; hint.style.fontWeight = '600';
+        } else {
+            hint.textContent = 'Según tabla de crecimiento';
+            hint.style.color = ''; hint.style.fontWeight = '';
+        }
     } else {
-        hint.textContent = 'Según tabla de crecimiento';
-        hint.style.color = '';
-        hint.style.fontWeight = '';
+        // Por animal → multiplicar por num para obtener total
+        const total = num * valor;
+        hidden.value = total > 0 ? total.toFixed(3) : '';
+        if (num > 0 && valor > 0) {
+            hint.textContent = `Peso total del lote: ${total.toFixed(3)} kg`;
+            hint.style.color = '#1d4ed8'; hint.style.fontWeight = '600';
+        } else {
+            hint.textContent = 'Introduce el número de animales para calcular el total';
+            hint.style.color = '#9ca3af'; hint.style.fontWeight = '';
+        }
     }
 }
+
+function onPesoModoCambio() {
+    // Al cambiar el modo, mantener el valor visible coherente con lo que escribió antes
+    const num    = parseFloat(document.getElementById('numAnimales').value) || 0;
+    const input  = document.getElementById('pesoEntradaInput');
+    const hidden = document.getElementById('pesoEntrada');
+    const total  = parseFloat(hidden.value) || 0;
+    const modo   = document.getElementById('pesoModo').value;
+
+    if (modo === 'individual' && num > 0 && total > 0) {
+        input.value = (total / num).toFixed(3);
+    } else if (modo === 'total') {
+        input.value = total > 0 ? total.toFixed(3) : '';
+    }
+    onPesoInput();
+}
+
+// Compat: la valoración antigua llama a calcularPesoIndividual(); mantenemos alias.
+function calcularPesoIndividual() { onPesoInput(); }
 
 async function calcularValoracion() {
     const razaSel  = document.getElementById('razaSelect');

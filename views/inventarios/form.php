@@ -78,9 +78,13 @@ const COLS = [
     { key: 'estado_animal',   label: () => 'Estado',      align: 'left'   },
     { key: 'num_animales',    label: () => 'Animales',    align: 'right'  },
     { key: 'peso_kg',         label: () => 'Peso/ud',     align: 'right'  },
+    { key: 'peso_real_kg',    label: () => 'Peso real',   align: 'right'  },
     { key: 'peso_total_kg',   label: () => 'Peso total',  align: 'right'  },
     { key: 'valor_total_eur', label: () => 'Valor total', align: 'right'  },
 ];
+
+// Filtros por columna (lo escribe el usuario, se aplica antes de sortData)
+const filtrosCol = {};
 
 const estadoLabel = k => ({ lechon:'Lechón', cebo:'Cebo', reposicion:'Reposición', madres:'Madres' }[k] || k || '—');
 
@@ -104,6 +108,25 @@ document.querySelectorAll('input[name="tipo"]').forEach(r => {
     r.addEventListener('change', toggleFechaField);
 });
 
+function aplicarFiltros(data) {
+    const claves = Object.keys(filtrosCol).filter(k => filtrosCol[k] !== '' && filtrosCol[k] != null);
+    if (!claves.length) return data;
+    return data.filter(row => {
+        for (const k of claves) {
+            let v = row[k];
+            if (k === 'ubicacion') {
+                v = ([row._nave_nombre, row._cuadra_nombre].filter(Boolean).join(' · ') || row._granja_nombre || '');
+            }
+            if (k === 'estado_animal') {
+                v = estadoLabel(row.estado_animal);
+            }
+            const txt = (v ?? '').toString().toLowerCase();
+            if (!txt.includes(String(filtrosCol[k]).toLowerCase())) return false;
+        }
+        return true;
+    });
+}
+
 function sortData(data) {
     return [...data].sort((a, b) => {
         let va = a[sortCol], vb = b[sortCol];
@@ -114,12 +137,30 @@ function sortData(data) {
     });
 }
 
+let _focoFiltro = null;
+function setFiltro(col, valor) {
+    filtrosCol[col] = valor;
+    _focoFiltro = col;
+    renderTable();
+    // Restaurar foco al input que estaba siendo escrito
+    setTimeout(() => {
+        const input = document.querySelector(`input[data-filtro-col="${_focoFiltro}"]`);
+        if (input) {
+            input.focus();
+            const v = input.value;
+            input.value = '';
+            input.value = v;
+        }
+    }, 0);
+}
+
 function renderTable() {
     const esCuadra = getTipo() === 'cuadra';
-    const sorted   = sortData(previewData);
+    const filtrados = aplicarFiltros(previewData);
+    const sorted    = sortData(filtrados);
 
     let totalAnim = 0, totalValor = 0;
-    previewData.forEach(l => {
+    filtrados.forEach(l => {
         totalAnim  += l.num_animales;
         totalValor += parseFloat(l.valor_total_eur) || 0;
     });
@@ -137,13 +178,25 @@ function renderTable() {
 
     let html = '<div class="list-card" style="font-size:.82rem">';
     html += `<div style="padding:.75rem 1rem;background:#f0fdf4;border-bottom:1px solid #bbf7d0;display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:700;color:#166534">${previewData.length} línea${previewData.length !== 1 ? 's' : ''} · ${totalAnim.toLocaleString('es-ES')} animales</span>
+        <span style="font-weight:700;color:#166534">${filtrados.length}<span style="font-weight:400">/${previewData.length}</span> línea${filtrados.length !== 1 ? 's' : ''} · ${totalAnim.toLocaleString('es-ES')} animales</span>
         <span style="font-weight:700;color:#166534">${totalValor > 0 ? totalValor.toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €' : '—'}</span>
     </div>`;
 
     html += '<table style="width:100%;border-collapse:collapse">';
     html += `<thead><tr style="background:#f9fafb;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em">`;
     COLS.forEach(c => { html += thStyle(c); });
+    html += `</tr>`;
+    // Fila de filtros por columna
+    html += `<tr style="background:#fafafa">`;
+    COLS.forEach(c => {
+        const v = filtrosCol[c.key] || '';
+        html += `<th style="padding:.25rem .5rem">
+            <input type="text" placeholder="Filtrar" data-filtro-col="${c.key}"
+                   value="${v.replace(/"/g, '&quot;')}"
+                   oninput="setFiltro('${c.key}', this.value)"
+                   style="width:100%;padding:.18rem .35rem;border:1px solid #d1d5db;border-radius:.25rem;font-size:.72rem;font-weight:400">
+        </th>`;
+    });
     html += `</tr></thead><tbody>`;
 
     sorted.forEach((l, i) => {
@@ -152,6 +205,7 @@ function renderTable() {
             ? ([l._nave_nombre, l._cuadra_nombre].filter(Boolean).join(' · ') || l._granja_nombre || '—')
             : (l._nave_nombre || l._granja_nombre || '—');
         const pesoUd    = l.peso_kg         ? parseFloat(l.peso_kg).toFixed(3) + ' kg'         : '—';
+        const pesoReal  = l.peso_real_kg    ? `<span style="color:#1d4ed8">${parseFloat(l.peso_real_kg).toFixed(3)} kg</span>` : '<span style="color:#d1d5db">—</span>';
         const pesoTotal = l.peso_total_kg   ? parseFloat(l.peso_total_kg).toFixed(1) + ' kg'   : '—';
         const valor     = l.valor_total_eur ? parseFloat(l.valor_total_eur).toLocaleString('es-ES', {minimumFractionDigits:2}) + ' €' : '—';
 
@@ -162,6 +216,7 @@ function renderTable() {
             <td style="padding:.45rem .75rem;color:#374151">${estadoLabel(l.estado_animal)}</td>
             <td style="padding:.45rem .75rem;text-align:right;font-weight:600">${l.num_animales.toLocaleString('es-ES')}</td>
             <td style="padding:.45rem .75rem;text-align:right">${pesoUd}</td>
+            <td style="padding:.45rem .75rem;text-align:right">${pesoReal}</td>
             <td style="padding:.45rem .75rem;text-align:right">${pesoTotal}</td>
             <td style="padding:.45rem .75rem;text-align:right;font-weight:600;color:#166534">${valor}</td>
         </tr>`;

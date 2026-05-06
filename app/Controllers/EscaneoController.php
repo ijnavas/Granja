@@ -150,16 +150,44 @@ class EscaneoController extends BaseController
             if ($cantidad <= 0 || !$tipo) continue;
 
             // ── IDOR guards: lote y cuadras deben pertenecer al usuario
-            if (!$loteModel->find($loteId, $uid)) {
+            $loteRow = $loteModel->find($loteId, $uid);
+            if (!$loteRow) {
                 \App\Core\SecurityLog::log('idor_attempt', [
                     'user_id' => $uid, 'resource' => 'Lote', 'target_id' => $loteId,
                     'context' => 'escaneo/confirmar',
                 ]);
-                $errores[] = "Fila " . ((int)$i + 1) . ": lote no válido.";
+                $errores[] = "Fila " . ((int)$i + 1) . ": lote no válido o no pertenece a tu cuenta.";
                 continue;
             }
             $cuadraId        = $this->ownedIdOrNull($cuadraModel, $cuadraId);
             $cuadraDestinoId = $this->ownedIdOrNull($cuadraModel, (int)($cuadraDestinoIds[$i] ?? 0) ?: null);
+
+            // ── Validar cantidad contra existencias del lote / cuadra ──
+            // Para tipos que restan animales (baja, traslado_cuadra), asegurarnos
+            // de que no escaneamos más de los que hay realmente disponibles —
+            // un error de OCR en la cantidad podría dejar contadores en negativo
+            // o vaciar cuadras erróneamente.
+            $tipoResta = in_array($tipo, ['baja', 'traslado_cuadra'], true);
+            if ($tipoResta) {
+                if ($cuadraId) {
+                    $stmtChk = \App\Core\Database::getInstance()->prepare("
+                        SELECT COALESCE(num_animales,0) FROM cuadra_lote
+                        WHERE cuadra_id=:cid AND lote_id=:lid AND activo=1 LIMIT 1
+                    ");
+                    $stmtChk->execute(['cid' => $cuadraId, 'lid' => $loteId]);
+                    $existenciaCuadra = (int)$stmtChk->fetchColumn();
+                    if ($cantidad > $existenciaCuadra) {
+                        $errores[] = "Fila " . ((int)$i + 1) . ": en la cuadra solo hay {$existenciaCuadra} animales del lote {$loteRow['codigo']}, no se pueden mover {$cantidad}.";
+                        continue;
+                    }
+                } else {
+                    $existenciaLote = (int)$loteRow['num_animales'];
+                    if ($cantidad > $existenciaLote) {
+                        $errores[] = "Fila " . ((int)$i + 1) . ": el lote {$loteRow['codigo']} solo tiene {$existenciaLote} animales, no se pueden registrar {$cantidad} bajas.";
+                        continue;
+                    }
+                }
+            }
 
             $data = [
                 'tipo'              => $tipo,

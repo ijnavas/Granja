@@ -1,12 +1,28 @@
 <?php
-$etiquetas = [
-    'traslado_cuadra'    => ['label' => 'Traslado cuadra',   'color' => '#dbeafe', 'text' => '#1e40af'],
-    'entrada_cebo'       => ['label' => 'Entrada cebo',      'color' => '#fef3c7', 'text' => '#92400e'],
-    'entrada_reposicion' => ['label' => 'Reposición',        'color' => '#f3e8ff', 'text' => '#6b21a8'],
-    'entrada_madres'     => ['label' => 'Entrada madres',    'color' => '#fce7f3', 'text' => '#9d174d'],
-    'venta'              => ['label' => 'Venta',             'color' => '#d1fae5', 'text' => '#065f46'],
-    'baja'               => ['label' => 'Baja',              'color' => '#fee2e2', 'text' => '#991b1b'],
-];
+// Construir mapa de etiquetas a partir de los tipos definidos en BD.
+// Backwards-compat: si aparece un tipo histórico que ya no existe en BD,
+// se renderiza con el código y un color genérico.
+$etiquetas = [];
+$tiposMostrar = [];
+foreach (($tipos ?? []) as $t) {
+    $color = $t['color'] ?: '#374151';
+    // Convertir a versiones más claras para fondo (mantenemos compat visual)
+    $bgMap = [
+        'traslado'    => ['#dbeafe', '#1e40af'],
+        'transicion'  => ['#fef3c7', '#92400e'],
+        're_creacion' => ['#f3e8ff', '#6b21a8'],
+        're_consumo'  => ['#fce7f3', '#9d174d'],
+        'venta'       => ['#d1fae5', '#065f46'],
+        'baja'        => ['#fee2e2', '#991b1b'],
+        'salida'      => ['#fef3c7', '#92400e'],
+        'entrada'     => ['#dcfce7', '#166534'],
+    ];
+    [$bg, $tx] = $bgMap[$t['categoria']] ?? ['#f3f4f6', '#374151'];
+    $etiquetas[$t['codigo']] = ['label' => $t['nombre'], 'color' => $bg, 'text' => $tx];
+    if ((int)$t['activo'] === 1) {
+        $tiposMostrar[$t['codigo']] = $t['nombre'];
+    }
+}
 $filtros = $filtros ?? [];
 $hayFiltros = !empty(array_filter($filtros));
 ?>
@@ -16,11 +32,7 @@ $hayFiltros = !empty(array_filter($filtros));
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center">
         <a href="<?= base_url('movimientos/export') . ($hayFiltros ? '?' . http_build_query($filtros) : '') ?>"
            class="btn btn-secondary btn-sm" title="Descargar CSV">CSV</a>
-        <?php foreach ($etiquetas as $tipo => $et): ?>
-        <a href="<?= base_url('movimientos/crear?tipo=' . $tipo) ?>" class="btn btn-secondary btn-sm">
-            + <?= $et['label'] ?>
-        </a>
-        <?php endforeach; ?>
+        <a href="<?= base_url('movimientos/crear') ?>" class="btn btn-primary btn-sm">+ Nuevo movimiento</a>
     </div>
 </div>
 
@@ -51,8 +63,8 @@ $hayFiltros = !empty(array_filter($filtros));
         <label style="font-size:.72rem;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:.04em">Tipo</label>
         <select name="tipo" style="padding:.3rem .55rem;border:1px solid #d1d5db;border-radius:.35rem;font-size:.85rem;min-width:140px">
             <option value="">Todos</option>
-            <?php foreach ($etiquetas as $t => $et): ?>
-            <option value="<?= $t ?>" <?= ($filtros['tipo'] ?? '') === $t ? 'selected' : '' ?>><?= $et['label'] ?></option>
+            <?php foreach ($tiposMostrar as $code => $label): ?>
+            <option value="<?= e($code) ?>" <?= ($filtros['tipo'] ?? '') === $code ? 'selected' : '' ?>><?= e($label) ?></option>
             <?php endforeach; ?>
         </select>
     </div>

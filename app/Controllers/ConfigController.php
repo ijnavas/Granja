@@ -6,27 +6,34 @@ namespace App\Controllers;
 use App\Models\RazaPorcino;
 use App\Models\TablaCrecimiento;
 use App\Models\EstadoAnimal;
+use App\Models\TipoMovimiento;
+use App\Models\ConfiguracionGranja;
 use App\Core\Session;
 
 class ConfigController extends BaseController
 {
-    private RazaPorcino      $razaModel;
-    private TablaCrecimiento $tablaModel;
-    private EstadoAnimal     $estadoModel;
+    private RazaPorcino         $razaModel;
+    private TablaCrecimiento    $tablaModel;
+    private EstadoAnimal        $estadoModel;
+    private TipoMovimiento      $tipoMovModel;
+    private ConfiguracionGranja $configModel;
 
     public function __construct()
     {
-        $this->razaModel   = new RazaPorcino();
-        $this->tablaModel  = new TablaCrecimiento();
-        $this->estadoModel = new EstadoAnimal();
+        $this->razaModel    = new RazaPorcino();
+        $this->tablaModel   = new TablaCrecimiento();
+        $this->estadoModel  = new EstadoAnimal();
+        $this->tipoMovModel = new TipoMovimiento();
+        $this->configModel  = new ConfiguracionGranja();
     }
 
     // ── Panel principal ──────────────────────────────────────────
     public function index(): void
     {
         auth_required();
-        require_rol('admin');
-        $this->redirect('configuracion/razas');
+        // Admins entran por razas (la sección original); resto por avisos.
+        if (es_admin()) $this->redirect('configuracion/razas');
+        $this->redirect('configuracion/general');
     }
 
     // ════════════════════════════════════════════════════════════
@@ -340,6 +347,143 @@ class ConfigController extends BaseController
 
         Session::flash('success', 'Todos los datos operativos han sido eliminados correctamente.');
         $this->redirect('configuracion/reset');
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // TIPOS DE MOVIMIENTO
+    // ════════════════════════════════════════════════════════════
+    public function tiposMovimiento(): void
+    {
+        auth_required();
+        require_rol('admin');
+        $this->view('config/movimientos', [
+            'tipos'     => $this->tipoMovModel->all(false),
+            'pageTitle' => 'Configuración — Tipos de movimiento',
+            'success'   => Session::getFlash('success'),
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function crearTipoMovimiento(): void
+    {
+        auth_required();
+        require_rol('admin');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('configuracion/movimientos');
+        }
+        $codigo = strtolower(trim(preg_replace('/[^a-z0-9_]/i', '_', $this->postString('codigo'))));
+        $nombre = capitalizar($this->postString('nombre'));
+        if (strlen($codigo) < 2 || strlen($nombre) < 2) {
+            Session::flash('error', 'Código y nombre son obligatorios.');
+            $this->redirect('configuracion/movimientos');
+        }
+        if ($this->tipoMovModel->findByCodigo($codigo)) {
+            Session::flash('error', "Ya existe un tipo con código \"{$codigo}\".");
+            $this->redirect('configuracion/movimientos');
+        }
+        $this->tipoMovModel->create([
+            'codigo'    => $codigo,
+            'nombre'    => $nombre,
+            'categoria' => $this->postString('categoria') ?: 'salida',
+            'activo'    => $this->post('activo') !== null ? 1 : 0,
+            'orden'     => (int)$this->post('orden'),
+            'color'     => $this->postString('color') ?: null,
+        ]);
+        Session::flash('success', "Tipo \"{$nombre}\" creado.");
+        $this->redirect('configuracion/movimientos');
+    }
+
+    public function editarTipoMovimiento(string $id): void
+    {
+        auth_required();
+        require_rol('admin');
+        $tipo = $this->tipoMovModel->find((int)$id);
+        if (!$tipo) $this->redirect('configuracion/movimientos');
+        $this->view('config/movimiento_form', [
+            'tipo'      => $tipo,
+            'pageTitle' => 'Editar tipo de movimiento',
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function actualizarTipoMovimiento(string $id): void
+    {
+        auth_required();
+        require_rol('admin');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect("configuracion/movimientos/{$id}/editar");
+        }
+        $codigo = strtolower(trim(preg_replace('/[^a-z0-9_]/i', '_', $this->postString('codigo'))));
+        $nombre = capitalizar($this->postString('nombre'));
+        if (strlen($nombre) < 2) {
+            Session::flash('error', 'El nombre es obligatorio.');
+            $this->redirect("configuracion/movimientos/{$id}/editar");
+        }
+        // Si el código cambia, comprobar que no choca con otro
+        $actual = $this->tipoMovModel->find((int)$id);
+        if ($actual && $codigo !== $actual['codigo']) {
+            $otro = $this->tipoMovModel->findByCodigo($codigo);
+            if ($otro && (int)$otro['id'] !== (int)$id) {
+                Session::flash('error', "Ya existe un tipo con código \"{$codigo}\".");
+                $this->redirect("configuracion/movimientos/{$id}/editar");
+            }
+        }
+        $this->tipoMovModel->update((int)$id, [
+            'codigo'    => $codigo,
+            'nombre'    => $nombre,
+            'categoria' => $this->postString('categoria') ?: 'salida',
+            'activo'    => $this->post('activo') !== null ? 1 : 0,
+            'orden'     => (int)$this->post('orden'),
+            'color'     => $this->postString('color') ?: null,
+        ]);
+        Session::flash('success', 'Tipo actualizado.');
+        $this->redirect('configuracion/movimientos');
+    }
+
+    public function eliminarTipoMovimiento(string $id): void
+    {
+        auth_required();
+        require_rol('admin');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('configuracion/movimientos');
+        }
+        $ok = $this->tipoMovModel->delete((int)$id);
+        Session::flash($ok ? 'success' : 'error', $ok ? 'Tipo eliminado.' : 'No se puede eliminar un tipo del sistema.');
+        $this->redirect('configuracion/movimientos');
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // CONFIGURACIÓN GENERAL (umbrales de avisos)
+    // ════════════════════════════════════════════════════════════
+    public function general(): void
+    {
+        auth_required();
+        $uid = Session::get('usuario_id');
+        $this->view('config/general', [
+            'config'    => $this->configModel->get($uid),
+            'pageTitle' => 'Configuración — Avisos',
+            'success'   => Session::getFlash('success'),
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function actualizarGeneral(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('configuracion/general');
+        }
+        $uid = Session::get('usuario_id');
+        $this->configModel->save(
+            $uid,
+            (int)$this->post('dias_advertencia_movimiento'),
+            (int)$this->post('pct_desviacion_peso_tabla')
+        );
+        Session::flash('success', 'Configuración guardada.');
+        $this->redirect('configuracion/general');
     }
 
     private function guardarLineas(int $tablaId): void

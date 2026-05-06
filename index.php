@@ -222,6 +222,9 @@ $router->get('/movimientos/cuadras',                [MovimientoController::class
 $router->get('/movimientos/lotes-cuadra',           [MovimientoController::class, 'lotesPorCuadra']);
 $router->get('/movimientos/cuadras-lote',           [MovimientoController::class, 'cuadrasPorLote']);
 $router->get('/movimientos/todas-cuadras',          [MovimientoController::class, 'todasLasCuadras']);
+$router->get('/movimientos/peso-estimado',          [MovimientoController::class, 'pesoEstimado']);
+$router->get('/movimientos/lotes-de-nave',          [MovimientoController::class, 'lotesPorNave']);
+$router->get('/movimientos/{id}/inventarios-afectados', [MovimientoController::class, 'inventariosAfectados']);
 
 // Escaneo de cuaderno con IA
 $router->get('/escaneo',                            [EscaneoController::class, 'form']);
@@ -266,6 +269,13 @@ $router->post('/recevet/cerrar-sesion',                     [RecevtController::c
 $router->post('/recevet/sincronizar',                       [RecevtController::class, 'sincronizar']);
 
 $router->get('/configuracion',                              [ConfigController::class, 'index']);
+$router->get('/configuracion/general',                       [ConfigController::class, 'general']);
+$router->post('/configuracion/general',                      [ConfigController::class, 'actualizarGeneral']);
+$router->get('/configuracion/movimientos',                   [ConfigController::class, 'tiposMovimiento']);
+$router->post('/configuracion/movimientos',                  [ConfigController::class, 'crearTipoMovimiento']);
+$router->get('/configuracion/movimientos/{id}/editar',       [ConfigController::class, 'editarTipoMovimiento']);
+$router->post('/configuracion/movimientos/{id}/actualizar',  [ConfigController::class, 'actualizarTipoMovimiento']);
+$router->post('/configuracion/movimientos/{id}/eliminar',    [ConfigController::class, 'eliminarTipoMovimiento']);
 $router->get('/configuracion/razas',                        [ConfigController::class, 'razas']);
 $router->post('/configuracion/razas',                       [ConfigController::class, 'crearRaza']);
 $router->get('/configuracion/razas/{id}/editar',            [ConfigController::class, 'editarRaza']);

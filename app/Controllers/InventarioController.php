@@ -96,7 +96,7 @@ class InventarioController extends BaseController
 
         // Columnas reales de inventario_lineas (excluir claves de preview)
         $colsPermitidas = ['lote_id','cuadra_id','nave_id','granja_id','estado_animal',
-                           'num_animales','peso_kg','peso_total_kg','coste_eur','valor_total_eur','semana_tabla'];
+                           'num_animales','peso_kg','peso_real_kg','peso_total_kg','coste_eur','valor_total_eur','semana_tabla'];
 
         $id = $this->model->create($uid, $fecha, $nombre, $tipo);
         foreach ($lineas as $l) {

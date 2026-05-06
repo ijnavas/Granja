@@ -129,13 +129,16 @@ class Movimiento
         $data['usuario_id'] = $userId;
         $data['lote_id']    = $data['lote_origen_id'];
 
+        // peso_real_kg es opcional (peso individual real para bajas)
+        if (!array_key_exists('peso_real_kg', $data)) $data['peso_real_kg'] = null;
+
         $stmt = $this->db->prepare("
             INSERT INTO movimientos
                 (lote_id, tipo, fecha, lote_origen_id, lote_destino_id, cuadra_origen_id, cuadra_destino_id,
-                 num_animales, peso_canal_kg, precio_eur, tipo_venta, motivo_baja, observaciones, usuario_id)
+                 num_animales, peso_canal_kg, peso_real_kg, precio_eur, tipo_venta, motivo_baja, observaciones, usuario_id)
             VALUES
                 (:lote_id, :tipo, :fecha, :lote_origen_id, :lote_destino_id, :cuadra_origen_id, :cuadra_destino_id,
-                 :num_animales, :peso_canal_kg, :precio_eur, :tipo_venta, :motivo_baja, :observaciones, :usuario_id)
+                 :num_animales, :peso_canal_kg, :peso_real_kg, :precio_eur, :tipo_venta, :motivo_baja, :observaciones, :usuario_id)
         ");
         $stmt->execute($data);
         $id = (int) $this->db->lastInsertId();
@@ -147,6 +150,8 @@ class Movimiento
     public function update(int $id, array $data, int $userId): bool
     {
         $antes = $this->find($id);
+        if (!array_key_exists('peso_real_kg', $data)) $data['peso_real_kg'] = null;
+
         $stmt  = $this->db->prepare("
             UPDATE movimientos SET
                 tipo              = :tipo,
@@ -155,8 +160,9 @@ class Movimiento
                 lote_destino_id   = :lote_destino_id,
                 cuadra_origen_id  = :cuadra_origen_id,
                 cuadra_destino_id = :cuadra_destino_id,
-                num_animales          = :num_animales,
+                num_animales      = :num_animales,
                 peso_canal_kg     = :peso_canal_kg,
+                peso_real_kg      = :peso_real_kg,
                 precio_eur        = :precio_eur,
                 tipo_venta        = :tipo_venta,
                 motivo_baja       = :motivo_baja,
