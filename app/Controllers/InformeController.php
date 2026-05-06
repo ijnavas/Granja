@@ -43,19 +43,30 @@ class InformeController extends BaseController
             $filtros['estados'], $filtros['naves'], $filtros['lotes'],
         ], fn($v) => !empty($v)));
 
-        $resultado = $this->informeModel->agregado($uid, $filtros);
+        $errorInforme = null;
+        $resultado    = ['filas' => [], 'total' => [
+            'num_movimientos' => 0, 'total_animales' => 0,
+            'total_kg_canal' => 0, 'total_kg_real' => 0, 'total_eur' => 0,
+        ]];
+        try {
+            $resultado = $this->informeModel->agregado($uid, $filtros);
+        } catch (\Throwable $e) {
+            error_log('Informe error: ' . $e->getMessage());
+            $errorInforme = $e->getMessage();
+        }
 
         $this->view('informes/index', [
-            'pageTitle'   => 'Informes',
-            'filtros'     => $filtros,
-            'tieneFiltros'=> $tieneFiltros,
-            'dimensiones' => Informe::DIMENSIONES,
-            'categorias'  => Informe::CATEGORIAS_FILTRO,
-            'estadosMap'  => Informe::ESTADOS_ANIMAL,
-            'naves'       => $this->naveModel->allByUsuario($uid),
-            'lotes'       => $this->loteModel->allByUsuario($uid),
-            'filas'       => $resultado['filas'],
-            'total'       => $resultado['total'],
+            'pageTitle'    => 'Informes',
+            'filtros'      => $filtros,
+            'tieneFiltros' => $tieneFiltros,
+            'dimensiones'  => Informe::DIMENSIONES,
+            'categorias'   => Informe::CATEGORIAS_FILTRO,
+            'estadosMap'   => Informe::ESTADOS_ANIMAL,
+            'naves'        => $this->naveModel->allByUsuario($uid),
+            'lotes'        => $this->loteModel->allByUsuario($uid),
+            'filas'        => $resultado['filas'],
+            'total'        => $resultado['total'],
+            'errorInforme' => $errorInforme,
         ]);
     }
 }

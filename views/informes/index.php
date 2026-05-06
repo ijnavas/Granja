@@ -14,6 +14,13 @@ $mostrarEur     = in_array($catActual, ['venta','entrada','todos'], true);
     <h2>Informes</h2>
 </div>
 
+<?php if (!empty($errorInforme)): ?>
+<div class="alert-flash alert-error" style="margin-bottom:1rem">
+    <strong>Error al generar el informe:</strong><br>
+    <code style="font-size:.8rem"><?= e($errorInforme) ?></code>
+</div>
+<?php endif; ?>
+
 <?php
 // Accesos rápidos: presets de filtros para informes habituales
 $presets = [
