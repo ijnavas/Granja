@@ -1,6 +1,8 @@
 .claude/
 CLAUDE.md
 database/
+database/*
+*.sql
 config.local.php
 .env
 .env.local

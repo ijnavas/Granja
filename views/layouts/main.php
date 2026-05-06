@@ -7,6 +7,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= base_url('css/app.css') ?>">
+    <link rel="stylesheet" href="<?= base_url('lib/flatpickr/flatpickr.min.css') ?>">
+    <style>
+        /* Refinamientos sobre Flatpickr para destacar la columna de semana */
+        .flatpickr-weeks { background:#fef2f2; border-right:1px solid #fecaca }
+        .flatpickr-weeks .flatpickr-weekday { color:#dc2626 }
+        .flatpickr-weeks span.flatpickr-day { color:#dc2626; font-weight:700 }
+        /* Igualar la altura del input alterno con los inputs nativos */
+        input.flatpickr-alt-input { width:100%; padding:.6rem .85rem; border:1.5px solid #d1d5db; border-radius:7px; font-size:.9rem; font-family:inherit; background:#fff }
+        input.flatpickr-alt-input:focus { outline:none; border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.15) }
+    </style>
 </head>
 <body>
 
@@ -162,46 +172,48 @@
         sidebar.classList.add('collapsed');
         mainWrap.classList.add('collapsed');
     }
+</script>
 
-    // ── Indicador de semana ISO en cada input type=date ────────────
-    // En cualquier formulario, cada <input type="date"> recibe junto a sí
-    // un pequeño badge "Sem. NN" con el número de semana ISO de la fecha
-    // seleccionada. Se actualiza en vivo con cada cambio.
-    function getISOWeek(d) {
-        const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-        date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
-        const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-        return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+<!-- Flatpickr: date picker con número de semana ISO en columna lateral -->
+<script src="<?= base_url('lib/flatpickr/flatpickr.min.js') ?>"></script>
+<script src="<?= base_url('lib/flatpickr/flatpickr-es.js') ?>"></script>
+<script>
+    // Aplicar locale español globalmente (lunes como inicio de semana, ISO weeks)
+    if (typeof flatpickr === 'function' && window.es) {
+        flatpickr.localize(window.es);
     }
-    function actualizarBadgeSemana(input) {
-        let badge = input.nextElementSibling;
-        if (!badge || !badge.classList?.contains('semana-badge')) {
-            badge = document.createElement('span');
-            badge.className = 'semana-badge';
-            badge.style.cssText = 'display:inline-block;margin-left:.4rem;font-size:.7rem;font-weight:600;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;padding:.1rem .4rem;border-radius:99px;vertical-align:middle';
-            input.parentNode.insertBefore(badge, input.nextSibling);
-        }
-        if (input.value) {
-            const semana = getISOWeek(new Date(input.value));
-            badge.textContent = 'Sem. ' + semana;
-            badge.style.display = '';
-        } else {
-            badge.style.display = 'none';
-        }
-    }
-    function inicializarSemanaInputs(scope) {
-        const inputs = (scope || document).querySelectorAll('input[type="date"]');
+
+    // Inicializa Flatpickr en cada input[type=date] no procesado todavía.
+    // El picker muestra una columna de semanas a la izquierda (weekNumbers).
+    // altInput=true: el usuario ve "06/05/2026" pero se envía "2026-05-06".
+    function initFlatpickr(scope) {
+        if (typeof flatpickr !== 'function') return;
+        const root   = scope || document;
+        const inputs = root.querySelectorAll('input[type="date"]:not(.flatpickr-input)');
         inputs.forEach(inp => {
-            if (inp.dataset.semanaInit === '1') return;
-            inp.dataset.semanaInit = '1';
-            actualizarBadgeSemana(inp);
-            inp.addEventListener('change', () => actualizarBadgeSemana(inp));
-            inp.addEventListener('input',  () => actualizarBadgeSemana(inp));
+            try {
+                flatpickr(inp, {
+                    dateFormat:    'Y-m-d',
+                    altInput:      true,
+                    altFormat:     'd/m/Y',
+                    weekNumbers:   true,
+                    allowInput:    true,
+                    disableMobile: true, // forzar nuestro picker también en móvil
+                });
+            } catch (e) { console.error('flatpickr init', e); }
         });
     }
-    document.addEventListener('DOMContentLoaded', () => inicializarSemanaInputs());
-    // Re-inicializar tras inyecciones dinámicas (cards de cuadras, etc.)
-    new MutationObserver(() => inicializarSemanaInputs()).observe(document.body, { childList: true, subtree: true });
+    document.addEventListener('DOMContentLoaded', () => initFlatpickr());
+    // Inputs añadidos dinámicamente (cards de cuadras, repetidores, etc.)
+    new MutationObserver((muts) => {
+        for (const m of muts) {
+            for (const n of m.addedNodes) {
+                if (n.nodeType !== 1) continue;
+                if (n.matches && n.matches('input[type="date"]:not(.flatpickr-input)')) initFlatpickr(n.parentNode);
+                else if (n.querySelector && n.querySelector('input[type="date"]:not(.flatpickr-input)')) initFlatpickr(n);
+            }
+        }
+    }).observe(document.body, { childList: true, subtree: true });
 </script>
 </body>
 </html>
