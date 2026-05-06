@@ -2,7 +2,10 @@
 
 <div class="page-header">
     <h2>Cuadras</h2>
-    <a href="<?= base_url('cuadras/crear') ?>" class="btn btn-primary">+ Nueva cuadra</a>
+    <div style="display:flex;gap:.5rem">
+        <a href="<?= base_url('cuadras/masiva') ?>" class="btn btn-secondary">+ Crear varias a la vez</a>
+        <a href="<?= base_url('cuadras/crear') ?>" class="btn btn-primary">+ Nueva cuadra</a>
+    </div>
 </div>
 
 <?php if ($flash = \App\Core\Session::getFlash('success')): ?>
