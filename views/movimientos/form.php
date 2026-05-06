@@ -73,7 +73,7 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
 <?php endif; ?>
 
 <div class="form-card" style="max-width:780px">
-<form method="POST" action="<?= $action ?>" id="frmMov">
+<form method="POST" action="<?= $action ?>" id="frmMov" enctype="multipart/form-data">
     <?= csrf_field() ?>
     <input type="hidden" name="tipo" id="tipoHidden" value="<?= e($tipoActual) ?>">
     <input type="hidden" name="confirmar_inventarios" id="confirmarInv" value="">
@@ -311,6 +311,27 @@ $lotesReposicion = array_filter($lotes, fn($l) => str_ends_with(trim($l['codigo'
                value="<?= e($movimiento['peso_canal_kg'] ?? '') ?>"
                placeholder="0.00" oninput="validarPeso()">
         <div id="avisoPeso" style="display:none;margin-top:.4rem;font-size:.78rem;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:6px;padding:.45rem .65rem"></div>
+    </div>
+
+    <!-- Albarán / foto con peso del camión -->
+    <div class="form-group">
+        <label>Albarán / foto del peso de camión</label>
+        <?php if (!empty($movimiento['albaran_archivo'])): ?>
+        <div style="margin-bottom:.5rem;padding:.5rem .75rem;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:.5rem">
+            <span style="font-size:.85rem;color:#1d4ed8;display:flex;align-items:center;gap:.4rem">
+                📎 Albarán adjunto
+            </span>
+            <a href="<?= base_url($movimiento['albaran_archivo']) ?>" target="_blank"
+               style="font-size:.82rem;color:#1d4ed8;font-weight:600;text-decoration:none">
+                Ver archivo →
+            </a>
+        </div>
+        <span class="form-hint">Subir uno nuevo lo reemplaza:</span>
+        <?php endif; ?>
+        <input type="file" name="albaran_archivo"
+               accept="image/jpeg,image/png,image/webp,application/pdf"
+               capture="environment">
+        <span class="form-hint">JPG/PNG/WEBP o PDF (máx 10 MB). En móvil puedes hacer foto directa.</span>
     </div>
 
     <?php elseif ($categoriaActual === 'baja' || $categoriaActual === 'salida'): ?>

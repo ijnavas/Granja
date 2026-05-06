@@ -213,6 +213,7 @@ class MovimientoController extends BaseController
             'tipo_venta'        => $this->post('tipo_venta')        ?: null,
             'motivo_baja'       => $this->postString('motivo_baja') ?: null,
             'observaciones'     => $this->postString('observaciones'),
+            'albaran_archivo'   => $this->guardarAlbaran($_FILES['albaran_archivo'] ?? null),
             'cuadras_origen'    => $cuadrasOrigen,
         ];
 
@@ -290,6 +291,10 @@ class MovimientoController extends BaseController
         $cuadraOrigenId  = $this->ownedIdOrNull($this->cuadraModel, (int)$this->post('cuadra_origen_id') ?: null);
         $cuadraDestinoId = $this->ownedIdOrNull($this->cuadraModel, (int)$this->post('cuadra_destino_id') ?: null);
 
+        // Albaran: si se sube nuevo archivo, reemplaza al anterior; si no,
+        // se conserva el ya existente (lo lee el modelo del valor actual).
+        $albaranNuevo = $this->guardarAlbaran($_FILES['albaran_archivo'] ?? null);
+
         $data = [
             'tipo'              => $tipo,
             'fecha'             => $this->postString('fecha') ?: date('Y-m-d'),
@@ -305,6 +310,9 @@ class MovimientoController extends BaseController
             'motivo_baja'       => $this->postString('motivo_baja') ?: null,
             'observaciones'     => $this->postString('observaciones'),
         ];
+        if ($albaranNuevo !== null) {
+            $data['albaran_archivo'] = $albaranNuevo;
+        }
 
         // Si cambia el lote_origen y hay inventarios afectados, exigir confirmación.
         $loteCambiado = (int)$movActual['lote_origen_id'] !== $loteOrigenId;
@@ -1039,6 +1047,66 @@ class MovimientoController extends BaseController
                 }
                 break;
         }
+    }
+
+    /**
+     * Guarda un archivo subido como albarán (foto JPG/PNG/WEBP o PDF) en
+     * /uploads/albaranes/. Devuelve la ruta relativa para almacenar en BD,
+     * o null si no se subió archivo. Lanza excepción si el archivo es
+     * inválido (tipo no permitido, demasiado grande, etc.).
+     *
+     * Reutiliza la misma defensa-en-profundidad del escáner: valida MIME
+     * real (magic bytes) y tamaño, no la extensión.
+     */
+    private function guardarAlbaran(?array $file): ?string
+    {
+        if (!$file || !isset($file['error'])) return null;
+        if ($file['error'] === UPLOAD_ERR_NO_FILE)  return null;
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            throw new \Exception('Error al subir el archivo del albarán.');
+        }
+
+        $maxBytes = 10 * 1024 * 1024; // 10 MB
+        if (!is_uploaded_file($file['tmp_name']) || $file['size'] > $maxBytes) {
+            throw new \Exception('El albarán supera 10 MB.');
+        }
+
+        $allowedMime = [
+            'image/jpeg'      => 'jpg',
+            'image/png'       => 'png',
+            'image/webp'      => 'webp',
+            'application/pdf' => 'pdf',
+        ];
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mime  = $finfo->file($file['tmp_name']) ?: '';
+        if (!isset($allowedMime[$mime])) {
+            throw new \Exception('Solo se permiten imágenes JPG/PNG/WEBP o PDF.');
+        }
+
+        $uploadDir = ROOT_PATH . '/uploads/albaranes/';
+        if (!is_dir($uploadDir)) mkdir($uploadDir, 0750, true);
+
+        // .htaccess que impide ejecución y listado en /uploads
+        $htUploads = ROOT_PATH . '/uploads/.htaccess';
+        if (!is_file($htUploads)) {
+            @file_put_contents($htUploads,
+                "<FilesMatch \"\\.(php|phtml|phar|pl|py|jsp|asp|sh|cgi)$\">\n" .
+                "    Require all denied\n" .
+                "</FilesMatch>\n" .
+                "Options -ExecCGI -Indexes\n"
+            );
+        }
+
+        $ext      = $allowedMime[$mime];
+        $filename = date('Ymd_His') . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+        $destPath = $uploadDir . $filename;
+
+        if (!move_uploaded_file($file['tmp_name'], $destPath)) {
+            throw new \Exception('No se pudo guardar el albarán.');
+        }
+        @chmod($destPath, 0640);
+
+        return 'uploads/albaranes/' . $filename;
     }
 
     private function crearSubLote(array $origen, string $codigo, int $numAnimales, string $estadoAnimal, int $uid, ?int $cuadraOrigenId = null): int
