@@ -566,6 +566,270 @@ class ConfigController extends BaseController
         $this->redirect('configuracion/general');
     }
 
+    // ════════════════════════════════════════════════════════════
+    // SEED TEST DATA — un solo uso para crear datos de prueba
+    // ════════════════════════════════════════════════════════════
+    public function seedTestForm(): void
+    {
+        auth_required();
+        require_rol('admin');
+        $this->view('config/seed_test', [
+            'pageTitle' => 'Configuración — Datos de prueba',
+            'success'   => Session::getFlash('success'),
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    public function seedTestRun(): void
+    {
+        auth_required();
+        require_rol('admin');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('configuracion/seed-test');
+        }
+        if ($this->postString('confirmacion') !== 'SEMBRAR') {
+            Session::flash('error', 'Confirmación incorrecta. Escribe SEMBRAR.');
+            $this->redirect('configuracion/seed-test');
+        }
+
+        $uid = (int) Session::get('usuario_id');
+        $db  = \App\Core\Database::getInstance();
+
+        // Granja: la primera del usuario
+        $stmt = $db->prepare("SELECT id, especie FROM granjas WHERE usuario_id = :uid ORDER BY id LIMIT 1");
+        $stmt->execute(['uid' => $uid]);
+        $granja = $stmt->fetch();
+        if (!$granja) {
+            Session::flash('error', 'Crea al menos una granja antes de sembrar datos.');
+            $this->redirect('configuracion/seed-test');
+        }
+        $granjaId = (int)$granja['id'];
+
+        // Tipo animal porcino (cebo)
+        $tipoAnimalId = (int) $db->query(
+            "SELECT id FROM tipos_animal WHERE especie = 'porcino' ORDER BY id LIMIT 1"
+        )->fetchColumn();
+        if (!$tipoAnimalId) {
+            Session::flash('error', 'Falta tipo de animal porcino en la BD.');
+            $this->redirect('configuracion/seed-test');
+        }
+
+        // Raza (la primera disponible, opcional)
+        $razaId = $db->query("SELECT id FROM razas_porcino LIMIT 1")->fetchColumn() ?: null;
+
+        // Helper inline: crea o devuelve nave/cuadra
+        $naveOrCreate = function(string $nombre) use ($db, $granjaId): int {
+            $s = $db->prepare("SELECT id FROM naves WHERE granja_id = :g AND nombre = :n");
+            $s->execute(['g' => $granjaId, 'n' => $nombre]);
+            $id = $s->fetchColumn();
+            if ($id) return (int)$id;
+            $db->prepare("INSERT INTO naves (granja_id, nombre, capacidad_maxima, especie, activa) VALUES (:g, :n, 5000, 'porcino', 1)")
+               ->execute(['g' => $granjaId, 'n' => $nombre]);
+            return (int)$db->lastInsertId();
+        };
+        $cuadraOrCreate = function(int $naveId, string $nombre) use ($db): int {
+            $s = $db->prepare("SELECT id FROM cuadras WHERE nave_id = :n AND nombre = :nm");
+            $s->execute(['n' => $naveId, 'nm' => $nombre]);
+            $id = $s->fetchColumn();
+            if ($id) return (int)$id;
+            $db->prepare("INSERT INTO cuadras (nave_id, nombre, capacidad_maxima, activa) VALUES (:n, :nm, 1000, 1)")
+               ->execute(['n' => $naveId, 'nm' => $nombre]);
+            return (int)$db->lastInsertId();
+        };
+
+        // Crear naves y cuadras
+        $d1Id = $naveOrCreate('D1');
+        $d2Id = $naveOrCreate('D2');
+        $d3Id = $naveOrCreate('D3');
+        $c7Id = $naveOrCreate('C7');
+
+        $d1Cuadras = [];
+        foreach (['1','2','3','4','5'] as $n) $d1Cuadras[] = $cuadraOrCreate($d1Id, $n);
+        $d2Cuadras = [];
+        foreach (['90','91','92','93'] as $n) $d2Cuadras[] = $cuadraOrCreate($d2Id, $n);
+        $d3Cuadras = [];
+        foreach (['90','91','92','93'] as $n) $d3Cuadras[] = $cuadraOrCreate($d3Id, $n);
+        $c7Cuadras = [];
+        foreach (['11','21','31','41','51','61','71','81'] as $n) $c7Cuadras[] = $cuadraOrCreate($c7Id, $n);
+
+        // Generar todos los jueves desde 2025-12-01 hasta 2026-12-31
+        $thursdays = [];
+        $cur = new \DateTime('2025-12-01');
+        $end = new \DateTime('2026-12-31');
+        while ($cur <= $end) {
+            if ((int)$cur->format('N') === 4) $thursdays[] = $cur->format('Y-m-d');
+            $cur->modify('+1 day');
+        }
+
+        // Estados de cada cuadra (índice → ['lote_id'=>X,'fecha'=>Y,'num_animales'=>N] o null)
+        $d1State = array_fill(0, 5, null);
+        $d2State = array_fill(0, 4, null);
+        $d3State = array_fill(0, 4, null);
+        $c7State = array_fill(0, 8, null);
+
+        $loteModel   = new \App\Models\Lote();
+        $pesajeModel = new \App\Models\Pesaje();
+        $movModel    = new \App\Models\Movimiento();
+
+        $findFree   = fn(array $st) => array_key_first(array_filter($st, fn($v) => $v === null)) ?? null;
+        $findOldest = function(array $st) {
+            $oldestIdx = null; $oldestFecha = null;
+            foreach ($st as $i => $v) {
+                if ($v === null) continue;
+                if ($oldestFecha === null || $v['fecha'] < $oldestFecha) {
+                    $oldestIdx = $i; $oldestFecha = $v['fecha'];
+                }
+            }
+            return $oldestIdx;
+        };
+
+        $hechos = ['lotes' => 0, 'movimientos' => 0, 'omitidos' => 0];
+
+        // Determinismo razonable
+        mt_srand(20260507);
+
+        foreach ($thursdays as $thursday) {
+            // ── 1) Liberar D1 si está lleno (mover oldest D1 → D2/D3/C7) ──
+            if ($findFree($d1State) === null) {
+                $oldestD1 = $findOldest($d1State);
+                $loteOldest = $d1State[$oldestD1];
+
+                // Buscar destino: D2 → D3 → C7
+                $tIdx = $findFree($d2State);
+                $tCuadras = $d2Cuadras; $tNave = 'D2'; $tNaveId = $d2Id; $tStateRef = 'd2';
+                if ($tIdx === null) {
+                    $tIdx = $findFree($d3State);
+                    $tCuadras = $d3Cuadras; $tNave = 'D3'; $tNaveId = $d3Id; $tStateRef = 'd3';
+                }
+                if ($tIdx === null) {
+                    $tIdx = $findFree($c7State);
+                    $tCuadras = $c7Cuadras; $tNave = 'C7'; $tNaveId = $c7Id; $tStateRef = 'c7';
+                }
+
+                if ($tIdx !== null) {
+                    $wedDate = (new \DateTime($thursday))->modify('-1 day')->format('Y-m-d');
+                    $cuadraOrigen  = $d1Cuadras[$oldestD1];
+                    $cuadraDestino = $tCuadras[$tIdx];
+
+                    // Crear movimiento traslado_cuadra
+                    $movModel->create([
+                        'tipo'              => 'traslado_cuadra',
+                        'fecha'             => $wedDate,
+                        'lote_origen_id'    => $loteOldest['lote_id'],
+                        'lote_destino_id'   => null,
+                        'cuadra_origen_id'  => $cuadraOrigen,
+                        'cuadra_destino_id' => $cuadraDestino,
+                        'num_animales'      => $loteOldest['num_animales'],
+                        'peso_canal_kg'     => null,
+                        'peso_real_kg'      => null,
+                        'precio_eur'        => null,
+                        'tipo_venta'        => null,
+                        'motivo_baja'       => null,
+                        'observaciones'     => "Traslado D1 → {$tNave} (test data)",
+                        'albaran_archivo'   => null,
+                    ], $uid);
+                    $hechos['movimientos']++;
+
+                    // Mover en cuadra_lote
+                    $db->prepare("UPDATE cuadra_lote SET activo=0, num_animales=0 WHERE cuadra_id=:c AND lote_id=:l")
+                       ->execute(['c' => $cuadraOrigen, 'l' => $loteOldest['lote_id']]);
+                    $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada, activo) VALUES (:c,:l,:n,:f,1)")
+                       ->execute(['c' => $cuadraDestino, 'l' => $loteOldest['lote_id'], 'n' => $loteOldest['num_animales'], 'f' => $wedDate]);
+
+                    // Actualizar nave del lote
+                    $db->prepare("UPDATE lotes SET nave_id = :nv WHERE id = :id")
+                       ->execute(['nv' => $tNaveId, 'id' => $loteOldest['lote_id']]);
+
+                    // Actualizar estado en memoria
+                    if ($tStateRef === 'd2') $d2State[$tIdx] = $loteOldest;
+                    elseif ($tStateRef === 'd3') $d3State[$tIdx] = $loteOldest;
+                    else $c7State[$tIdx] = $loteOldest;
+                    $d1State[$oldestD1] = null;
+                } else {
+                    // Todo lleno — saltar este destete
+                    $hechos['omitidos']++;
+                    continue;
+                }
+            }
+
+            // ── 2) Crear lote de destete del jueves ──
+            $numAnimales = mt_rand(401, 600);
+            $pesoIndividual = 7.0; // kg/animal típico al destete
+            $pesoTotal = round($numAnimales * $pesoIndividual, 3);
+
+            // Generar código L WW/YY (ISO week + año 2 dígitos)
+            $codigoBase = \App\Models\Lote::generarCodigo($thursday);
+            $codigo = $codigoBase;
+            $sufijo = 2;
+            while ($loteModel->codigoExisteSimple($codigo)) {
+                $codigo = $codigoBase . "-{$sufijo}";
+                $sufijo++;
+            }
+
+            $loteId = $loteModel->create([
+                'nave_id'         => $d1Id,
+                'granja_id'       => $granjaId,
+                'tipo_animal_id'  => $tipoAnimalId,
+                'raza_id'         => $razaId ? (int)$razaId : null,
+                'codigo'          => $codigo,
+                'num_animales'    => $numAnimales,
+                'peso_entrada_kg' => $pesoTotal,
+                'fecha_entrada'   => $thursday,
+                'fecha_nacimiento'=> $thursday,
+                'observaciones'   => 'Lote de destete (test data)',
+            ]);
+            $hechos['lotes']++;
+
+            // Auto-pesaje al alta
+            $pesajeModel->create([
+                'lote_id'              => $loteId,
+                'cuadra_id'            => null,
+                'fecha'                => $thursday,
+                'peso_medio_kg'        => $pesoIndividual,
+                'num_animales_pesados' => $numAnimales,
+                'consumo_pienso_kg'    => null,
+                'ic_real'              => null,
+                'observaciones'        => 'Pesaje automático al alta del lote',
+                'usuario_id'           => $uid,
+            ]);
+
+            // Asignar a primera cuadra D1 libre
+            $freeIdx = $findFree($d1State);
+            if ($freeIdx === null) { $hechos['omitidos']++; continue; }
+
+            $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada, activo) VALUES (:c,:l,:n,:f,1)")
+               ->execute(['c' => $d1Cuadras[$freeIdx], 'l' => $loteId, 'n' => $numAnimales, 'f' => $thursday]);
+
+            // Movimiento destete
+            $movModel->create([
+                'tipo'              => 'destete',
+                'fecha'             => $thursday,
+                'lote_origen_id'    => $loteId,
+                'lote_destino_id'   => null,
+                'cuadra_origen_id'  => null,
+                'cuadra_destino_id' => null,
+                'num_animales'      => $numAnimales,
+                'peso_canal_kg'     => null,
+                'peso_real_kg'      => null,
+                'precio_eur'        => null,
+                'tipo_venta'        => null,
+                'motivo_baja'       => null,
+                'observaciones'     => 'Destete: alta del lote (test)',
+                'albaran_archivo'   => null,
+            ], $uid);
+            $hechos['movimientos']++;
+
+            $d1State[$freeIdx] = ['lote_id' => $loteId, 'fecha' => $thursday, 'num_animales' => $numAnimales];
+        }
+
+        Session::flash('success', sprintf(
+            'Generados: %d lotes, %d movimientos. Saltados (sin sitio): %d.',
+            $hechos['lotes'], $hechos['movimientos'], $hechos['omitidos']
+        ));
+        $this->redirect('configuracion/seed-test');
+    }
+
     private function guardarLineas(int $tablaId): void
     {
         $semanas  = $_POST['semana']  ?? [];

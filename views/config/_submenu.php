@@ -33,6 +33,10 @@ $seccion = $seccionConfig ?? 'razas';
        class="btn <?= $seccion === 'audit' ? 'btn-primary' : 'btn-secondary' ?>">
         Audit log
     </a>
+    <a href="<?= base_url('configuracion/seed-test') ?>"
+       class="btn <?= $seccion === 'seed_test' ? 'btn-primary' : 'btn-secondary' ?>">
+        🧪 Datos de prueba
+    </a>
     <a href="<?= base_url('configuracion/reset') ?>"
        class="btn <?= $seccion === 'reset' ? 'btn-danger' : 'btn-secondary' ?>"
        style="<?= $seccion === 'reset' ? '' : 'color:#dc2626;border-color:#fca5a5' ?>">
