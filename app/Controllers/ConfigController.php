@@ -653,8 +653,7 @@ class ConfigController extends BaseController
         $c7Cuadras = [];
         foreach (['11','21','31','41','51','61','71','81'] as $n) $c7Cuadras[] = $cuadraOrCreate($c7Id, $n);
 
-        // Generar todos los jueves desde 2025-12-01 hasta hoy (no se
-        // generan lotes con fecha en el futuro).
+        // Generar todos los jueves desde 2025-12-01 hasta hoy
         $thursdays = [];
         $cur = new \DateTime('2025-12-01');
         $end = new \DateTime('today');
@@ -663,17 +662,22 @@ class ConfigController extends BaseController
             $cur->modify('+1 day');
         }
 
-        // Estados de cada cuadra (índice → ['lote_id'=>X,'fecha'=>Y,'num_animales'=>N] o null)
-        $d1State = array_fill(0, 5, null);
-        $d2State = array_fill(0, 4, null);
-        $d3State = array_fill(0, 4, null);
-        $c7State = array_fill(0, 8, null);
+        // Estados de cada cuadra: ['lote_id', 'fecha', 'num_animales'] o null
+        // (cada slot = una cuadra, máximo un lote — sin compartir)
+        $d1 = array_fill(0, 5, null);   // D1 cuadras 1-5
+        $d2 = array_fill(0, 4, null);   // D2 cuadras 90-93
+        $d3 = array_fill(0, 4, null);   // D3 cuadras 90-93
+        $c7 = array_fill(0, 8, null);   // C7 cuadras 11, 21, ..., 81
 
         $loteModel   = new \App\Models\Lote();
         $pesajeModel = new \App\Models\Pesaje();
         $movModel    = new \App\Models\Movimiento();
 
-        $findFree   = fn(array $st) => array_key_first(array_filter($st, fn($v) => $v === null)) ?? null;
+        // Helpers
+        $findFree   = function(array $st) {
+            foreach ($st as $i => $v) if ($v === null) return $i;
+            return null;
+        };
         $findOldest = function(array $st) {
             $oldestIdx = null; $oldestFecha = null;
             foreach ($st as $i => $v) {
@@ -686,80 +690,52 @@ class ConfigController extends BaseController
         };
 
         $hechos = ['lotes' => 0, 'movimientos' => 0, 'omitidos' => 0];
+        mt_srand(20260507);  // determinismo razonable
 
-        // Determinismo razonable
-        mt_srand(20260507);
+        // Función auxiliar para registrar un traslado entre cuadras
+        $registrarTraslado = function(int $loteId, int $cuadraOrigen, int $cuadraDestino, int $naveDestinoId, int $num, string $fecha, string $obs) use ($db, $movModel, $uid, &$hechos) {
+            $movModel->create([
+                'tipo'              => 'traslado_cuadra',
+                'fecha'             => $fecha,
+                'lote_origen_id'    => $loteId,
+                'lote_destino_id'   => null,
+                'cuadra_origen_id'  => $cuadraOrigen,
+                'cuadra_destino_id' => $cuadraDestino,
+                'num_animales'      => $num,
+                'peso_canal_kg'     => null,
+                'peso_real_kg'      => null,
+                'precio_eur'        => null,
+                'tipo_venta'        => null,
+                'motivo_baja'       => null,
+                'observaciones'     => $obs,
+                'albaran_archivo'   => null,
+            ], $uid);
+            $hechos['movimientos']++;
+
+            $db->prepare("UPDATE cuadra_lote SET activo=0, num_animales=0 WHERE cuadra_id=:c AND lote_id=:l")
+               ->execute(['c' => $cuadraOrigen, 'l' => $loteId]);
+            $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada, activo) VALUES (:c,:l,:n,:f,1)")
+               ->execute(['c' => $cuadraDestino, 'l' => $loteId, 'n' => $num, 'f' => $fecha]);
+            $db->prepare("UPDATE lotes SET nave_id = :nv WHERE id = :id")
+               ->execute(['nv' => $naveDestinoId, 'id' => $loteId]);
+        };
 
         foreach ($thursdays as $thursday) {
-            // ── 1) Liberar D1 si está lleno (mover oldest D1 → D2/D3/C7) ──
-            if ($findFree($d1State) === null) {
-                $oldestD1 = $findOldest($d1State);
-                $loteOldest = $d1State[$oldestD1];
-
-                // Buscar destino: D2 → D3 → C7
-                $tIdx = $findFree($d2State);
-                $tCuadras = $d2Cuadras; $tNave = 'D2'; $tNaveId = $d2Id; $tStateRef = 'd2';
-                if ($tIdx === null) {
-                    $tIdx = $findFree($d3State);
-                    $tCuadras = $d3Cuadras; $tNave = 'D3'; $tNaveId = $d3Id; $tStateRef = 'd3';
-                }
-                if ($tIdx === null) {
-                    $tIdx = $findFree($c7State);
-                    $tCuadras = $c7Cuadras; $tNave = 'C7'; $tNaveId = $c7Id; $tStateRef = 'c7';
-                }
-
-                if ($tIdx !== null) {
-                    $wedDate = (new \DateTime($thursday))->modify('-1 day')->format('Y-m-d');
-                    $cuadraOrigen  = $d1Cuadras[$oldestD1];
-                    $cuadraDestino = $tCuadras[$tIdx];
-
-                    // Crear movimiento traslado_cuadra
-                    $movModel->create([
-                        'tipo'              => 'traslado_cuadra',
-                        'fecha'             => $wedDate,
-                        'lote_origen_id'    => $loteOldest['lote_id'],
-                        'lote_destino_id'   => null,
-                        'cuadra_origen_id'  => $cuadraOrigen,
-                        'cuadra_destino_id' => $cuadraDestino,
-                        'num_animales'      => $loteOldest['num_animales'],
-                        'peso_canal_kg'     => null,
-                        'peso_real_kg'      => null,
-                        'precio_eur'        => null,
-                        'tipo_venta'        => null,
-                        'motivo_baja'       => null,
-                        'observaciones'     => "Traslado D1 → {$tNave} (test data)",
-                        'albaran_archivo'   => null,
-                    ], $uid);
-                    $hechos['movimientos']++;
-
-                    // Mover en cuadra_lote
-                    $db->prepare("UPDATE cuadra_lote SET activo=0, num_animales=0 WHERE cuadra_id=:c AND lote_id=:l")
-                       ->execute(['c' => $cuadraOrigen, 'l' => $loteOldest['lote_id']]);
-                    $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada, activo) VALUES (:c,:l,:n,:f,1)")
-                       ->execute(['c' => $cuadraDestino, 'l' => $loteOldest['lote_id'], 'n' => $loteOldest['num_animales'], 'f' => $wedDate]);
-
-                    // Actualizar nave del lote
-                    $db->prepare("UPDATE lotes SET nave_id = :nv WHERE id = :id")
-                       ->execute(['nv' => $tNaveId, 'id' => $loteOldest['lote_id']]);
-
-                    // Actualizar estado en memoria
-                    if ($tStateRef === 'd2') $d2State[$tIdx] = $loteOldest;
-                    elseif ($tStateRef === 'd3') $d3State[$tIdx] = $loteOldest;
-                    else $c7State[$tIdx] = $loteOldest;
-                    $d1State[$oldestD1] = null;
-                } else {
-                    // Todo lleno — saltar este destete
-                    $hechos['omitidos']++;
-                    continue;
-                }
+            // ─────────────────────────────────────────────────────
+            // 1) JUEVES: nuevo destete en D1 (si hay sitio)
+            // ─────────────────────────────────────────────────────
+            $freeD1 = $findFree($d1);
+            if ($freeD1 === null) {
+                // D1 lleno: el viernes anterior no pudo limpiar (todo el sistema saturado)
+                $hechos['omitidos']++;
+                continue;
             }
 
-            // ── 2) Crear lote de destete del jueves ──
-            $numAnimales = mt_rand(401, 600);
-            $pesoIndividual = 7.0; // kg/animal típico al destete
+            // ~400 ± 10% → 360-440 animales
+            $numAnimales = mt_rand(360, 440);
+            $pesoIndividual = 7.0;
             $pesoTotal = round($numAnimales * $pesoIndividual, 3);
 
-            // Generar código L WW/YY (ISO week + año 2 dígitos)
             $codigoBase = \App\Models\Lote::generarCodigo($thursday);
             $codigo = $codigoBase;
             $sufijo = 2;
@@ -782,7 +758,6 @@ class ConfigController extends BaseController
             ]);
             $hechos['lotes']++;
 
-            // Auto-pesaje al alta
             $pesajeModel->create([
                 'lote_id'              => $loteId,
                 'cuadra_id'            => null,
@@ -795,14 +770,9 @@ class ConfigController extends BaseController
                 'usuario_id'           => $uid,
             ]);
 
-            // Asignar a primera cuadra D1 libre
-            $freeIdx = $findFree($d1State);
-            if ($freeIdx === null) { $hechos['omitidos']++; continue; }
-
             $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada, activo) VALUES (:c,:l,:n,:f,1)")
-               ->execute(['c' => $d1Cuadras[$freeIdx], 'l' => $loteId, 'n' => $numAnimales, 'f' => $thursday]);
+               ->execute(['c' => $d1Cuadras[$freeD1], 'l' => $loteId, 'n' => $numAnimales, 'f' => $thursday]);
 
-            // Movimiento destete
             $movModel->create([
                 'tipo'              => 'destete',
                 'fecha'             => $thursday,
@@ -821,7 +791,88 @@ class ConfigController extends BaseController
             ], $uid);
             $hechos['movimientos']++;
 
-            $d1State[$freeIdx] = ['lote_id' => $loteId, 'fecha' => $thursday, 'num_animales' => $numAnimales];
+            $d1[$freeD1] = ['lote_id' => $loteId, 'fecha' => $thursday, 'num_animales' => $numAnimales];
+
+            // ─────────────────────────────────────────────────────
+            // 2) VIERNES (jueves+1): si D1 está lleno, mover oldest
+            //    D1 → D2/D3 (con cascada a C7 si esas también llenas)
+            // ─────────────────────────────────────────────────────
+            if ($findFree($d1) !== null) continue;  // aún hay sitio en D1, no hay que limpiar
+
+            $friday = (new \DateTime($thursday))->modify('+1 day')->format('Y-m-d');
+            $oldestD1Idx = $findOldest($d1);
+            $oldestD1    = $d1[$oldestD1Idx];
+
+            // Buscar slot libre en D2 o D3
+            $targetNave   = null;   // 'd2' | 'd3'
+            $targetIdx    = null;
+            $targetCuadras = null;
+            $targetNaveId  = null;
+
+            $tmp = $findFree($d2);
+            if ($tmp !== null) {
+                $targetNave = 'd2'; $targetIdx = $tmp;
+                $targetCuadras = $d2Cuadras; $targetNaveId = $d2Id;
+            } else {
+                $tmp = $findFree($d3);
+                if ($tmp !== null) {
+                    $targetNave = 'd3'; $targetIdx = $tmp;
+                    $targetCuadras = $d3Cuadras; $targetNaveId = $d3Id;
+                }
+            }
+
+            if ($targetNave === null) {
+                // D2 y D3 llenos → cascada: mover oldest de D2/D3 → C7
+                $c7Free = $findFree($c7);
+                if ($c7Free === null) {
+                    // C7 también lleno: nada se puede hacer, D1 queda lleno
+                    continue;
+                }
+
+                // Encontrar el oldest entre D2 + D3
+                $oldestSrc    = null;  // 'd2' | 'd3'
+                $oldestSrcIdx = null;
+                $oldestSrcDate = null;
+                foreach ($d2 as $i => $v) {
+                    if ($v && ($oldestSrcDate === null || $v['fecha'] < $oldestSrcDate)) {
+                        $oldestSrc = 'd2'; $oldestSrcIdx = $i; $oldestSrcDate = $v['fecha'];
+                    }
+                }
+                foreach ($d3 as $i => $v) {
+                    if ($v && ($oldestSrcDate === null || $v['fecha'] < $oldestSrcDate)) {
+                        $oldestSrc = 'd3'; $oldestSrcIdx = $i; $oldestSrcDate = $v['fecha'];
+                    }
+                }
+                $oldestD23     = ($oldestSrc === 'd2') ? $d2[$oldestSrcIdx] : $d3[$oldestSrcIdx];
+                $srcCuadras    = ($oldestSrc === 'd2') ? $d2Cuadras : $d3Cuadras;
+                $srcCuadraId   = $srcCuadras[$oldestSrcIdx];
+
+                // Trasladar oldest D2/D3 → C7
+                $registrarTraslado(
+                    $oldestD23['lote_id'], $srcCuadraId, $c7Cuadras[$c7Free],
+                    $c7Id, $oldestD23['num_animales'], $friday,
+                    'Traslado ' . strtoupper($oldestSrc) . ' → C7 (test)'
+                );
+                $c7[$c7Free] = $oldestD23;
+                if ($oldestSrc === 'd2') $d2[$oldestSrcIdx] = null;
+                else                     $d3[$oldestSrcIdx] = null;
+
+                // El slot recién liberado en D2/D3 será el destino del oldest D1
+                $targetNave    = $oldestSrc;
+                $targetIdx     = $oldestSrcIdx;
+                $targetCuadras = $srcCuadras;
+                $targetNaveId  = ($oldestSrc === 'd2') ? $d2Id : $d3Id;
+            }
+
+            // Trasladar oldest D1 → target (D2 o D3)
+            $registrarTraslado(
+                $oldestD1['lote_id'], $d1Cuadras[$oldestD1Idx], $targetCuadras[$targetIdx],
+                $targetNaveId, $oldestD1['num_animales'], $friday,
+                'Traslado D1 → ' . strtoupper($targetNave) . ' (test)'
+            );
+            if ($targetNave === 'd2') $d2[$targetIdx] = $oldestD1;
+            else                      $d3[$targetIdx] = $oldestD1;
+            $d1[$oldestD1Idx] = null;
         }
 
         Session::flash('success', sprintf(

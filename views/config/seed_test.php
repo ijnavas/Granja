@@ -18,9 +18,12 @@
         <ul style="color:#1e3a8a;margin:0 0 .5rem;padding-left:1.25rem;line-height:1.7">
             <li><strong>Naves</strong>: D1, D2, D3, C7 (en tu primera granja)</li>
             <li><strong>Cuadras</strong>: D1 (1, 2, 3, 4, 5) · D2 (90, 91, 92, 93) · D3 (90, 91, 92, 93) · C7 (11, 21, 31, 41, 51, 61, 71, 81)</li>
-            <li><strong>Lotes de destete</strong>: uno por cada jueves desde el 04/12/2025 hasta hoy (sin fechas futuras), con cantidad aleatoria entre 401 y 600 animales</li>
-            <li><strong>Movimientos de destete</strong> el jueves de cada lote (asignación a la primera cuadra D1 libre)</li>
-            <li><strong>Traslados los miércoles</strong>: cuando D1 está lleno, mueve el lote más antiguo al primer hueco libre en D2 → D3 → C7 antes del siguiente destete</li>
+            <li><strong>Lotes de destete</strong>: uno por cada jueves desde el 04/12/2025 hasta hoy, con cantidad aleatoria <strong>~400 ± 10%</strong> (360-440 animales)</li>
+            <li><strong>Una cuadra = un solo lote</strong> (sin compartir cuadras)</li>
+            <li><strong>Destete (jueves)</strong>: cada nuevo lote va a la primera cuadra libre de D1</li>
+            <li><strong>Limpieza (viernes, día siguiente)</strong>: si D1 quedó lleno, el más antiguo se mueve a la primera cuadra libre de D2 o D3</li>
+            <li><strong>Cascada a C7</strong>: cuando D2 y D3 están llenos, el viernes se mueven dos lotes — primero el más viejo de D2/D3 va a C7 (cuadra libre), y el más viejo de D1 ocupa el hueco que dejó en D2/D3</li>
+            <li>El lote <strong>más nuevo</strong> siempre está en D1 y el <strong>más viejo</strong> en C7</li>
             <li><strong>Auto-pesaje</strong> al alta de cada lote (7 kg/animal)</li>
         </ul>
         <p style="margin:.5rem 0 0;color:#1e3a8a;font-size:.85rem">
