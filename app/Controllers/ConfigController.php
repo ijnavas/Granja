@@ -653,10 +653,11 @@ class ConfigController extends BaseController
         $c7Cuadras = [];
         foreach (['11','21','31','41','51','61','71','81'] as $n) $c7Cuadras[] = $cuadraOrCreate($c7Id, $n);
 
-        // Generar todos los jueves desde 2025-12-01 hasta 2026-12-31
+        // Generar todos los jueves desde 2025-12-01 hasta hoy (no se
+        // generan lotes con fecha en el futuro).
         $thursdays = [];
         $cur = new \DateTime('2025-12-01');
-        $end = new \DateTime('2026-12-31');
+        $end = new \DateTime('today');
         while ($cur <= $end) {
             if ((int)$cur->format('N') === 4) $thursdays[] = $cur->format('Y-m-d');
             $cur->modify('+1 day');

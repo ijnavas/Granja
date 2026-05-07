@@ -18,7 +18,7 @@
         <ul style="color:#1e3a8a;margin:0 0 .5rem;padding-left:1.25rem;line-height:1.7">
             <li><strong>Naves</strong>: D1, D2, D3, C7 (en tu primera granja)</li>
             <li><strong>Cuadras</strong>: D1 (1, 2, 3, 4, 5) · D2 (90, 91, 92, 93) · D3 (90, 91, 92, 93) · C7 (11, 21, 31, 41, 51, 61, 71, 81)</li>
-            <li><strong>Lotes de destete</strong>: uno por cada jueves desde el 04/12/2025 hasta el 31/12/2026 (61 lotes), con cantidad aleatoria entre 401 y 600 animales</li>
+            <li><strong>Lotes de destete</strong>: uno por cada jueves desde el 04/12/2025 hasta hoy (sin fechas futuras), con cantidad aleatoria entre 401 y 600 animales</li>
             <li><strong>Movimientos de destete</strong> el jueves de cada lote (asignación a la primera cuadra D1 libre)</li>
             <li><strong>Traslados los miércoles</strong>: cuando D1 está lleno, mueve el lote más antiguo al primer hueco libre en D2 → D3 → C7 antes del siguiente destete</li>
             <li><strong>Auto-pesaje</strong> al alta de cada lote (7 kg/animal)</li>
