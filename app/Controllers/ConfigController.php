@@ -694,30 +694,35 @@ class ConfigController extends BaseController
 
         // Función auxiliar para registrar un traslado entre cuadras
         $registrarTraslado = function(int $loteId, int $cuadraOrigen, int $cuadraDestino, int $naveDestinoId, int $num, string $fecha, string $obs) use ($db, $movModel, $uid, &$hechos) {
-            $movModel->create([
-                'tipo'              => 'traslado_cuadra',
-                'fecha'             => $fecha,
-                'lote_origen_id'    => $loteId,
-                'lote_destino_id'   => null,
-                'cuadra_origen_id'  => $cuadraOrigen,
-                'cuadra_destino_id' => $cuadraDestino,
-                'num_animales'      => $num,
-                'peso_canal_kg'     => null,
-                'peso_real_kg'      => null,
-                'precio_eur'        => null,
-                'tipo_venta'        => null,
-                'motivo_baja'       => null,
-                'observaciones'     => $obs,
-                'albaran_archivo'   => null,
-            ], $uid);
-            $hechos['movimientos']++;
+            try {
+                $movModel->create([
+                    'tipo'              => 'traslado_cuadra',
+                    'fecha'             => $fecha,
+                    'lote_origen_id'    => $loteId,
+                    'lote_destino_id'   => null,
+                    'cuadra_origen_id'  => $cuadraOrigen,
+                    'cuadra_destino_id' => $cuadraDestino,
+                    'num_animales'      => $num,
+                    'peso_canal_kg'     => null,
+                    'peso_real_kg'      => null,
+                    'precio_eur'        => null,
+                    'tipo_venta'        => null,
+                    'motivo_baja'       => null,
+                    'observaciones'     => $obs,
+                    'albaran_archivo'   => null,
+                ], $uid);
+                $hechos['movimientos']++;
 
-            $db->prepare("UPDATE cuadra_lote SET activo=0, num_animales=0 WHERE cuadra_id=:c AND lote_id=:l")
-               ->execute(['c' => $cuadraOrigen, 'l' => $loteId]);
-            $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada, activo) VALUES (:c,:l,:n,:f,1)")
-               ->execute(['c' => $cuadraDestino, 'l' => $loteId, 'n' => $num, 'f' => $fecha]);
-            $db->prepare("UPDATE lotes SET nave_id = :nv WHERE id = :id")
-               ->execute(['nv' => $naveDestinoId, 'id' => $loteId]);
+                $db->prepare("UPDATE cuadra_lote SET activo=0, num_animales=0 WHERE cuadra_id=:c AND lote_id=:l")
+                   ->execute(['c' => $cuadraOrigen, 'l' => $loteId]);
+                $db->prepare("INSERT INTO cuadra_lote (cuadra_id, lote_id, num_animales, fecha_entrada, activo) VALUES (:c,:l,:n,:f,1)")
+                   ->execute(['c' => $cuadraDestino, 'l' => $loteId, 'n' => $num, 'f' => $fecha]);
+                $db->prepare("UPDATE lotes SET nave_id = :nv WHERE id = :id")
+                   ->execute(['nv' => $naveDestinoId, 'id' => $loteId]);
+            } catch (\Throwable $e) {
+                error_log("Seeder traslado FAIL lote={$loteId} de={$cuadraOrigen} a={$cuadraDestino}: " . $e->getMessage());
+                throw $e;
+            }
         };
 
         foreach ($thursdays as $thursday) {
@@ -875,9 +880,31 @@ class ConfigController extends BaseController
             $d1[$oldestD1Idx] = null;
         }
 
+        // Diagnóstico: contar lotes asignados a cada nave en el estado en memoria
+        $countNotNull = fn($arr) => count(array_filter($arr));
+        $diag = sprintf(
+            'D1=%d/5, D2=%d/4, D3=%d/4, C7=%d/8',
+            $countNotNull($d1), $countNotNull($d2), $countNotNull($d3), $countNotNull($c7)
+        );
+
+        // Diagnóstico real: contar lotes con cuadra_lote activo en cada nave (BD)
+        $stmt = $db->prepare("
+            SELECT n.nombre, COALESCE(COUNT(DISTINCT cl.lote_id), 0) AS num_lotes,
+                   COALESCE(SUM(cl.num_animales), 0) AS total_anim
+            FROM naves n
+            LEFT JOIN cuadras c ON c.nave_id = n.id
+            LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
+            WHERE n.id IN (:d1, :d2, :d3, :c7)
+            GROUP BY n.id, n.nombre
+            ORDER BY n.nombre
+        ");
+        $stmt->execute(['d1' => $d1Id, 'd2' => $d2Id, 'd3' => $d3Id, 'c7' => $c7Id]);
+        $bdRows = $stmt->fetchAll();
+        $bdStr  = implode(', ', array_map(fn($r) => "{$r['nombre']}=" . (int)$r['num_lotes'] . " lotes/" . (int)$r['total_anim'] . "anim", $bdRows));
+
         Session::flash('success', sprintf(
-            'Generados: %d lotes, %d movimientos. Saltados (sin sitio): %d.',
-            $hechos['lotes'], $hechos['movimientos'], $hechos['omitidos']
+            'Generados: %d lotes, %d movimientos. Saltados: %d. <br>Memoria final: %s. <br>BD final: %s',
+            $hechos['lotes'], $hechos['movimientos'], $hechos['omitidos'], $diag, $bdStr
         ));
         $this->redirect('configuracion/seed-test');
     }
