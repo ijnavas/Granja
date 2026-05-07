@@ -299,6 +299,7 @@ $router->get('/configuracion/reset',                        [ConfigController::c
 $router->post('/configuracion/reset',                       [ConfigController::class, 'resetConfirm']);
 $router->get('/configuracion/seed-test',                    [ConfigController::class, 'seedTestForm']);
 $router->post('/configuracion/seed-test',                   [ConfigController::class, 'seedTestRun']);
+$router->post('/configuracion/seed-bajas',                  [ConfigController::class, 'seedBajasRun']);
 $router->get('/configuracion/tablas/crear',                 [ConfigController::class, 'crearTabla']);
 $router->post('/configuracion/tablas',                      [ConfigController::class, 'storeTabla']);
 $router->get('/configuracion/tablas/{id}/editar',           [ConfigController::class, 'editarTabla']);

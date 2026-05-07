@@ -29,25 +29,53 @@
     </div>
 
     <div class="form-card">
-        <form method="POST" action="<?= base_url('configuracion/seed-test') ?>" onsubmit="return confirmarSeed()">
+        <form method="POST" action="<?= base_url('configuracion/seed-test') ?>" onsubmit="return confirmarSeed('confirmacion','SEMBRAR')">
             <?= csrf_field() ?>
             <div class="form-group">
                 <label style="font-weight:600">Para confirmar, escribe <code style="background:#dbeafe;padding:.1rem .4rem;border-radius:4px;color:#1e40af">SEMBRAR</code> en el campo:</label>
                 <input type="text" name="confirmacion" id="confirmacion" autocomplete="off"
                        placeholder="Escribe SEMBRAR para confirmar" style="margin-top:.5rem">
             </div>
-            <button type="submit" class="btn btn-primary">Sembrar datos</button>
-            <a href="<?= base_url('configuracion/general') ?>" class="btn btn-secondary" style="margin-left:.5rem">Cancelar</a>
+            <button type="submit" class="btn btn-primary">Sembrar datos básicos</button>
+        </form>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────── -->
+    <!-- Sembrar bajas en lotes existentes                            -->
+    <!-- ─────────────────────────────────────────────────────────── -->
+    <div style="background:#fef2f2;border:1.5px solid #fecaca;border-radius:10px;padding:1.5rem;margin:1.5rem 0">
+        <p style="margin:0 0 .5rem;color:#991b1b"><strong>Sembrar bajas aleatorias.</strong></p>
+        <p style="margin:0 0 .5rem;color:#7f1d1d">Para cada lote existente del usuario:</p>
+        <ul style="color:#7f1d1d;margin:0 0 .5rem;padding-left:1.25rem;line-height:1.7">
+            <li>~10% de los lotes son <strong>outliers</strong> con mortalidad <strong>6-8%</strong> (destacarán en informes)</li>
+            <li>El resto tendrá mortalidad entre <strong>1.5% y 2.5%</strong></li>
+            <li>3-7 eventos de baja por lote, repartidos entre <em>fecha_entrada</em> y hoy (o fecha de cierre)</li>
+            <li>Motivos aleatorios entre los configurados en Avisos</li>
+            <li>Descuenta animales del lote y de su cuadra activa</li>
+        </ul>
+    </div>
+
+    <div class="form-card">
+        <form method="POST" action="<?= base_url('configuracion/seed-bajas') ?>" onsubmit="return confirmarSeed('confirmacion-bajas','BAJAS')">
+            <?= csrf_field() ?>
+            <div class="form-group">
+                <label style="font-weight:600">Para confirmar, escribe <code style="background:#fee2e2;padding:.1rem .4rem;border-radius:4px;color:#991b1b">BAJAS</code> en el campo:</label>
+                <input type="text" name="confirmacion" id="confirmacion-bajas" autocomplete="off"
+                       placeholder="Escribe BAJAS para confirmar" style="margin-top:.5rem">
+            </div>
+            <button type="submit" class="btn btn-danger" style="background:#dc2626;color:#fff;border-color:#dc2626">
+                Sembrar bajas
+            </button>
         </form>
     </div>
 </div>
 
 <script>
-function confirmarSeed() {
-    if (document.getElementById('confirmacion').value.trim() !== 'SEMBRAR') {
-        alert('Escribe SEMBRAR en el campo para confirmar.');
+function confirmarSeed(inputId, palabra) {
+    if (document.getElementById(inputId).value.trim() !== palabra) {
+        alert('Escribe ' + palabra + ' en el campo para confirmar.');
         return false;
     }
-    return confirm('¿Sembrar los datos de prueba ahora? Esta acción puede tardar varios segundos.');
+    return confirm('¿Continuar con el sembrado? Puede tardar unos segundos.');
 }
 </script>

@@ -830,6 +830,149 @@ class ConfigController extends BaseController
         $this->redirect('configuracion/seed-test');
     }
 
+    /**
+     * Genera bajas aleatorias en los lotes existentes.
+     * - Lotes "outlier" (10% de probabilidad) → mortalidad 6-8% (resaltan en informes)
+     * - Resto → mortalidad 1.5-2.5%
+     * - 3 a 7 eventos de baja por lote, distribuidos entre fecha_entrada y hoy
+     * - Motivos aleatorios entre los configurados en motivos_baja
+     */
+    public function seedBajasRun(): void
+    {
+        auth_required();
+        require_rol('admin');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            Session::flash('error', 'Token inválido.');
+            $this->redirect('configuracion/seed-test');
+        }
+        if ($this->postString('confirmacion') !== 'BAJAS') {
+            Session::flash('error', 'Confirmación incorrecta. Escribe BAJAS.');
+            $this->redirect('configuracion/seed-test');
+        }
+
+        $uid = (int) Session::get('usuario_id');
+        $db  = \App\Core\Database::getInstance();
+
+        // Lotes del usuario con animales > 0
+        $stmt = $db->prepare("
+            SELECT l.id, l.codigo, l.num_animales_entrada, l.num_animales, l.fecha_entrada, l.estado, l.fecha_cierre
+            FROM lotes l
+            JOIN granjas g ON l.granja_id = g.id
+            WHERE g.usuario_id = :uid AND l.num_animales > 0 AND l.fecha_entrada IS NOT NULL
+            ORDER BY l.fecha_entrada
+        ");
+        $stmt->execute(['uid' => $uid]);
+        $lotes = $stmt->fetchAll();
+
+        if (empty($lotes)) {
+            Session::flash('error', 'No hay lotes a los que añadir bajas.');
+            $this->redirect('configuracion/seed-test');
+        }
+
+        // Motivos de baja activos
+        $motivosBd = $db->query("SELECT codigo FROM motivos_baja WHERE activo = 1")->fetchAll(\PDO::FETCH_COLUMN);
+        if (empty($motivosBd)) $motivosBd = ['enfermedad', 'sacrificio', 'otro'];
+
+        $movModel = new \App\Models\Movimiento();
+        mt_srand(20260507);
+
+        $hechos = ['lotes_afectados' => 0, 'eventos' => 0, 'animales' => 0, 'outliers' => 0];
+
+        foreach ($lotes as $l) {
+            $entrada = (int)$l['num_animales_entrada'];
+            $actual  = (int)$l['num_animales'];
+            if ($entrada <= 0 || $actual <= 0) continue;
+
+            // ¿Es un outlier?
+            $isOutlier = (mt_rand(1, 10) === 1);
+            // Mortalidad objetivo: outlier 6-8% / resto 1.5-2.5%
+            $pct = $isOutlier
+                ? mt_rand(60, 80) / 1000.0   // 0.060 - 0.080
+                : mt_rand(15, 25) / 1000.0;  // 0.015 - 0.025
+            $targetBajas = (int) round($entrada * $pct);
+            // No puede pasar de los animales que quedan
+            $targetBajas = min($targetBajas, $actual);
+            if ($targetBajas <= 0) continue;
+
+            // Rango de fechas: desde fecha_entrada (excl. el día mismo) hasta
+            // hoy (o fecha_cierre si está cerrado, lo que sea menor).
+            $startTs = strtotime($l['fecha_entrada']);
+            $endTs   = strtotime('today');
+            if ($l['estado'] === 'cerrado' && !empty($l['fecha_cierre'])) {
+                $endTs = min($endTs, strtotime($l['fecha_cierre']));
+            }
+            if ($startTs >= $endTs) continue;
+
+            // Número de eventos repartidos
+            $numEventos = max(1, min(7, (int) round($targetBajas / 3)));
+            $fechas = [];
+            for ($i = 0; $i < $numEventos; $i++) {
+                $fechas[] = $startTs + mt_rand(86400, max(86400, $endTs - $startTs));
+            }
+            sort($fechas);
+
+            $remaining = $targetBajas;
+            foreach ($fechas as $j => $ts) {
+                if ($remaining <= 0) break;
+                $isLast = ($j === count($fechas) - 1);
+                // Reparto: las primeras un poco más para que el último cierre exacto
+                $maxEvento = $isLast ? $remaining : (int) ceil($remaining / (count($fechas) - $j));
+                $cantidad = $isLast ? $remaining : mt_rand(1, max(1, $maxEvento));
+                $cantidad = min($cantidad, $remaining);
+                if ($cantidad <= 0) continue;
+
+                $fecha   = date('Y-m-d', $ts);
+                $motivo  = $motivosBd[array_rand($motivosBd)];
+
+                // Cuadra activa actual del lote
+                $stmtC = $db->prepare("SELECT cuadra_id FROM cuadra_lote WHERE lote_id = :l AND activo = 1 ORDER BY id DESC LIMIT 1");
+                $stmtC->execute(['l' => $l['id']]);
+                $cuadraId = $stmtC->fetchColumn() ?: null;
+
+                // Crear movimiento de baja
+                $movModel->create([
+                    'tipo'              => 'baja',
+                    'fecha'             => $fecha,
+                    'lote_origen_id'    => (int)$l['id'],
+                    'lote_destino_id'   => null,
+                    'cuadra_origen_id'  => $cuadraId ? (int)$cuadraId : null,
+                    'cuadra_destino_id' => null,
+                    'num_animales'      => $cantidad,
+                    'peso_canal_kg'     => null,
+                    'peso_real_kg'      => null,
+                    'precio_eur'        => null,
+                    'tipo_venta'        => null,
+                    'motivo_baja'       => $motivo,
+                    'observaciones'     => 'Baja (test data)' . ($isOutlier ? ' — lote outlier' : ''),
+                    'albaran_archivo'   => null,
+                ], $uid);
+                $hechos['eventos']++;
+                $hechos['animales'] += $cantidad;
+
+                // Aplicar efecto: descontar de lote y cuadra
+                $db->prepare("UPDATE lotes SET num_animales = GREATEST(0, num_animales - :n) WHERE id = :id")
+                   ->execute(['n' => $cantidad, 'id' => $l['id']]);
+                if ($cuadraId) {
+                    $db->prepare("UPDATE cuadra_lote SET num_animales = GREATEST(0, num_animales - :n) WHERE cuadra_id=:c AND lote_id=:l AND activo=1")
+                       ->execute(['n' => $cantidad, 'c' => $cuadraId, 'l' => $l['id']]);
+                    $db->prepare("UPDATE cuadra_lote SET activo = 0 WHERE cuadra_id=:c AND lote_id=:l AND num_animales = 0")
+                       ->execute(['c' => $cuadraId, 'l' => $l['id']]);
+                }
+
+                $remaining -= $cantidad;
+            }
+
+            $hechos['lotes_afectados']++;
+            if ($isOutlier) $hechos['outliers']++;
+        }
+
+        Session::flash('success', sprintf(
+            'Bajas generadas: %d eventos en %d lotes (%d outliers con %%alto), %d animales en total.',
+            $hechos['eventos'], $hechos['lotes_afectados'], $hechos['outliers'], $hechos['animales']
+        ));
+        $this->redirect('configuracion/seed-test');
+    }
+
     private function guardarLineas(int $tablaId): void
     {
         $semanas  = $_POST['semana']  ?? [];
