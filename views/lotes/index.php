@@ -4,6 +4,18 @@ $filtros    = $filtros ?? [];
 $hayFiltros = !empty(array_filter($filtros));
 ?>
 
+<style>
+/* Filas más estrechas en /lotes para que se vean más a la vez */
+.list-card table.list-table.lotes-compact td,
+.list-card table.list-table.lotes-compact th {
+    padding-top: .35rem;
+    padding-bottom: .35rem;
+    font-size: .85rem;
+}
+.list-card table.list-table.lotes-compact .actions { gap: .25rem; flex-wrap: nowrap }
+.list-card table.list-table.lotes-compact .actions .btn-sm { padding: .15rem .5rem; font-size: .72rem }
+</style>
+
 <div class="page-header">
     <h2>Lotes</h2>
     <div style="display:flex;gap:.75rem;align-items:center">
@@ -78,7 +90,7 @@ $hayFiltros = !empty(array_filter($filtros));
 <?php if (empty($lotes)): ?>
     <div class="empty-state">No hay lotes<?= $hayFiltros ? ' con esos filtros' : '' ?>. <a href="<?= base_url('lotes/crear?modo=destete') ?>">Da de alta el primero (destete)</a>.</div>
 <?php else: ?>
-    <table class="list-table">
+    <table class="list-table lotes-compact">
         <thead>
             <tr>
                 <th>Codigo</th>
@@ -143,24 +155,24 @@ $hayFiltros = !empty(array_filter($filtros));
                 </td>
                 <td>
                     <?php if ($pesoTabla): ?>
-                        <?= number_format($pesoTabla, 3) ?> kg
+                        <?= number_format($pesoTabla, 0) ?> kg
                     <?php else: ?>
                         <span style="color:#d1d5db">—</span>
                     <?php endif; ?>
                 </td>
                 <td>
                     <?php if ($pesoReal): ?>
-                        <span style="font-weight:600;color:#1d4ed8"><?= number_format($pesoReal, 3) ?> kg</span>
+                        <span style="font-weight:600;color:#1d4ed8"><?= number_format($pesoReal, 0) ?> kg</span>
                         <?php if ($desv !== null): ?>
                             <span style="font-size:.72rem;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>;display:block">
                                 <?= $desv >= 0 ? '+' : '' ?><?= $desv ?>% vs tabla
                             </span>
                         <?php endif; ?>
                         <span style="font-size:.7rem;color:#9ca3af;display:block">
-                            Pesaje <?= date('d/m/Y', strtotime($ultimoPesaje)) ?>
+                            Peso. <?= date('d/m/Y', strtotime($ultimoPesaje)) ?>
                         </span>
                     <?php else: ?>
-                        <span style="color:#d1d5db">Sin pesaje</span>
+                        <span style="color:#d1d5db">Sin peso</span>
                     <?php endif; ?>
                 </td>
                 <td>

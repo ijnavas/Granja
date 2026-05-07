@@ -615,8 +615,9 @@ class ConfigController extends BaseController
             $this->redirect('configuracion/seed-test');
         }
 
-        // Raza (la primera disponible, opcional)
-        $razaId = $db->query("SELECT id FROM razas_porcino LIMIT 1")->fetchColumn() ?: null;
+        // Raza: dejar sin asignar para que los lotes no lleven sufijo de raza
+        // (los animales son 50% Ibérico por defecto y no se especifica).
+        $razaId = null;
 
         // Helper inline: crea o devuelve nave/cuadra
         $naveOrCreate = function(string $nombre) use ($db, $granjaId): int {
@@ -1045,9 +1046,24 @@ class ConfigController extends BaseController
             if ($isOutlier) $hechos['outliers']++;
         }
 
+        // Diagnóstico post-bajas: ¿siguen activos los cuadra_lote de C7?
+        $stmt = $db->prepare("
+            SELECT n.nombre, COALESCE(COUNT(DISTINCT cl.lote_id), 0) AS num_lotes,
+                   COALESCE(SUM(cl.num_animales), 0) AS total_anim
+            FROM naves n
+            JOIN granjas g ON n.granja_id = g.id
+            LEFT JOIN cuadras c ON c.nave_id = n.id
+            LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
+            WHERE g.usuario_id = :uid AND n.activa = 1 AND n.nombre IN ('D1','D2','D3','C7')
+            GROUP BY n.id, n.nombre
+            ORDER BY n.nombre
+        ");
+        $stmt->execute(['uid' => $uid]);
+        $diag = implode(', ', array_map(fn($r) => "{$r['nombre']}=" . (int)$r['num_lotes'] . " lotes/" . (int)$r['total_anim'] . "anim", $stmt->fetchAll()));
+
         Session::flash('success', sprintf(
-            'Bajas generadas: %d eventos en %d lotes (%d outliers con %%alto), %d animales en total.',
-            $hechos['eventos'], $hechos['lotes_afectados'], $hechos['outliers'], $hechos['animales']
+            'Bajas: %d eventos en %d lotes (%d outliers), %d animales. <br>BD post-bajas: %s',
+            $hechos['eventos'], $hechos['lotes_afectados'], $hechos['outliers'], $hechos['animales'], $diag
         ));
         $this->redirect('configuracion/seed-test');
     }
