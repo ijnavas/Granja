@@ -634,21 +634,40 @@ class ConfigController extends BaseController
         }
         $razaId = (int) $razaId;
 
-        // Helper inline: crea o devuelve nave/cuadra
+        // Helpers: prefiere naves/cuadras ACTIVAS (activa=1). Si solo existe
+        // una soft-deleted con el mismo nombre, la reactiva en lugar de
+        // crear una duplicada o de seguir usando una invisible.
         $naveOrCreate = function(string $nombre) use ($db, $granjaId): int {
-            $s = $db->prepare("SELECT id FROM naves WHERE granja_id = :g AND nombre = :n");
+            // 1) ¿existe activa?
+            $s = $db->prepare("SELECT id FROM naves WHERE granja_id = :g AND nombre = :n AND activa = 1 ORDER BY id LIMIT 1");
             $s->execute(['g' => $granjaId, 'n' => $nombre]);
             $id = $s->fetchColumn();
             if ($id) return (int)$id;
+            // 2) ¿existe soft-deleted? Reactivarla
+            $s = $db->prepare("SELECT id FROM naves WHERE granja_id = :g AND nombre = :n ORDER BY id LIMIT 1");
+            $s->execute(['g' => $granjaId, 'n' => $nombre]);
+            $id = $s->fetchColumn();
+            if ($id) {
+                $db->prepare("UPDATE naves SET activa = 1 WHERE id = :id")->execute(['id' => $id]);
+                return (int)$id;
+            }
+            // 3) Crear nueva
             $db->prepare("INSERT INTO naves (granja_id, nombre, capacidad_maxima, especie, activa) VALUES (:g, :n, 5000, 'porcino', 1)")
                ->execute(['g' => $granjaId, 'n' => $nombre]);
             return (int)$db->lastInsertId();
         };
         $cuadraOrCreate = function(int $naveId, string $nombre) use ($db): int {
-            $s = $db->prepare("SELECT id FROM cuadras WHERE nave_id = :n AND nombre = :nm");
+            $s = $db->prepare("SELECT id FROM cuadras WHERE nave_id = :n AND nombre = :nm AND activa = 1 ORDER BY id LIMIT 1");
             $s->execute(['n' => $naveId, 'nm' => $nombre]);
             $id = $s->fetchColumn();
             if ($id) return (int)$id;
+            $s = $db->prepare("SELECT id FROM cuadras WHERE nave_id = :n AND nombre = :nm ORDER BY id LIMIT 1");
+            $s->execute(['n' => $naveId, 'nm' => $nombre]);
+            $id = $s->fetchColumn();
+            if ($id) {
+                $db->prepare("UPDATE cuadras SET activa = 1 WHERE id = :id")->execute(['id' => $id]);
+                return (int)$id;
+            }
             $db->prepare("INSERT INTO cuadras (nave_id, nombre, capacidad_maxima, activa) VALUES (:n, :nm, 1000, 1)")
                ->execute(['n' => $naveId, 'nm' => $nombre]);
             return (int)$db->lastInsertId();
