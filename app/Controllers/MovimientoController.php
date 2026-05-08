@@ -127,6 +127,9 @@ class MovimientoController extends BaseController
         $uid  = Session::get('usuario_id');
         $tipo = $_GET['tipo'] ?? '';
 
+        // Auto-instala 'traslado_cuadra' si falta (es de sistema).
+        $this->tipoMovModel->ensureSystemTipos();
+
         // Atajo: el "destete" es una alta de lote — el formulario es el de
         // nuevo lote, así que redirigimos. El controller de lote registra
         // automáticamente el movimiento al guardar cuando ?modo=destete.

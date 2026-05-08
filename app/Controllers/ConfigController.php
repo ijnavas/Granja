@@ -377,12 +377,18 @@ class ConfigController extends BaseController
     {
         auth_required();
         require_rol('admin');
+        $this->ensureSystemTipos();
         $this->view('config/movimientos', [
             'tipos'     => $this->tipoMovModel->all(false),
             'pageTitle' => 'Configuración — Tipos de movimiento',
             'success'   => Session::getFlash('success'),
             'error'     => Session::getFlash('error'),
         ]);
+    }
+
+    private function ensureSystemTipos(): void
+    {
+        $this->tipoMovModel->ensureSystemTipos();
     }
 
     public function crearTipoMovimiento(): void

@@ -91,4 +91,23 @@ class TipoMovimiento
         $stmt->execute(['id' => $id]);
         return $stmt->rowCount() > 0;
     }
+
+    /**
+     * Asegura que los tipos fundamentales de sistema existen y están
+     * activos. Idempotente; pensado para llamarse al entrar a páginas
+     * que dependen de ellos (Configuración, formulario de movimiento)
+     * para auto-instalarse sin migraciones manuales.
+     */
+    public function ensureSystemTipos(): void
+    {
+        $this->db->prepare("
+            INSERT IGNORE INTO tipos_movimiento (codigo, nombre, categoria, es_sistema, activo, orden, color)
+            VALUES ('traslado_cuadra', 'Traslado cuadra', 'traslado', 1, 1, 8, '#1d4ed8')
+        ")->execute();
+        $this->db->prepare("
+            UPDATE tipos_movimiento
+               SET es_sistema = 1, activo = 1, categoria = 'traslado'
+             WHERE codigo = 'traslado_cuadra'
+        ")->execute();
+    }
 }
