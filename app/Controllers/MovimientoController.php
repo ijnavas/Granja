@@ -232,6 +232,14 @@ class MovimientoController extends BaseController
             'cuadras_origen'    => $cuadrasOrigen,
         ];
 
+        // Bloquear si crear este movimiento alteraría un inventario existente
+        $invsAfectados = $this->inventariosAfectadosPorMov($data, $uid);
+        if (!empty($invsAfectados)) {
+            Session::flash('error', $this->mensajeInventariosAfectados($invsAfectados));
+            $_SESSION['_old_input'] = $_POST;
+            $this->redirect('movimientos/crear?tipo=' . $tipo);
+        }
+
         // Aplicar efectos del movimiento
         try {
             $this->aplicarMovimiento($tipo, $data, $uid);
@@ -336,15 +344,22 @@ class MovimientoController extends BaseController
             $data['albaran_archivo'] = $albaranNuevo;
         }
 
-        // Si cambia el lote_origen y hay inventarios afectados, exigir confirmación.
-        $loteCambiado = (int)$movActual['lote_origen_id'] !== $loteOrigenId;
-        if ($loteCambiado && empty($_POST['confirmar_inventarios'])) {
-            $afectados = $this->countInventariosAfectados((int)$movActual['lote_origen_id'], $loteOrigenId, $movActual['fecha'], $uid);
-            if ($afectados > 0) {
-                Session::flash('error', "Hay {$afectados} inventario(s) cuya fecha es posterior al movimiento y se verán afectados al cambiar el lote. Vuelve a guardar marcando la confirmación.");
-                $_SESSION['_old_input'] = $_POST;
-                $this->redirect("movimientos/{$id}/editar");
-            }
+        // Bloquear si hay inventarios posteriores que dependan del movimiento
+        // (en su estado actual O con los lotes nuevos que se están guardando).
+        $invsAfectados = $this->inventariosAfectadosPorMov($movActual, $uid);
+        // También chequear los lotes "nuevos" si han cambiado
+        $movNuevoLikeArr = $movActual;
+        $movNuevoLikeArr['lote_origen_id']  = $loteOrigenId;
+        $movNuevoLikeArr['lote_destino_id'] = $loteDestinoId;
+        $movNuevoLikeArr['fecha']           = $data['fecha'];
+        $invsAfectados2 = $this->inventariosAfectadosPorMov($movNuevoLikeArr, $uid);
+        $todosAfectados = array_values(array_column(
+            array_merge($invsAfectados, $invsAfectados2),
+            null, 'id'
+        ));
+        if (!empty($todosAfectados)) {
+            Session::flash('error', $this->mensajeInventariosAfectados($todosAfectados));
+            $this->redirect("movimientos/{$id}/editar");
         }
 
         // Revertir efecto anterior y aplicar el nuevo
@@ -390,6 +405,47 @@ class MovimientoController extends BaseController
             'lote_n'  => $loteNuevoId,
         ]);
         return (int)$stmt->fetchColumn();
+    }
+
+    /**
+     * Lista de inventarios cuya foto histórica depende de este movimiento:
+     * inventarios del usuario con fecha >= movimiento.fecha que tienen una
+     * línea para alguno de los lotes implicados (origen o destino).
+     *
+     * Si esta lista no está vacía, el movimiento NO debe poder modificarse
+     * ni borrarse hasta que el usuario elimine esos inventarios.
+     */
+    private function inventariosAfectadosPorMov(array $mov, int $uid): array
+    {
+        $loteIds = array_unique(array_filter([
+            (int)($mov['lote_origen_id']  ?? 0),
+            (int)($mov['lote_destino_id'] ?? 0),
+        ]));
+        if (empty($loteIds)) return [];
+        $ph = implode(',', array_fill(0, count($loteIds), '?'));
+        $stmt = \App\Core\Database::getInstance()->prepare("
+            SELECT DISTINCT i.id, i.fecha, i.nombre
+            FROM inventarios i
+            JOIN inventario_lineas il ON il.inventario_id = i.id
+            WHERE i.usuario_id = ?
+              AND i.fecha >= ?
+              AND il.lote_id IN ({$ph})
+            ORDER BY i.fecha
+        ");
+        $stmt->execute([$uid, $mov['fecha'], ...$loteIds]);
+        return $stmt->fetchAll();
+    }
+
+    /** Construye un mensaje de error con la lista de inventarios afectados. */
+    private function mensajeInventariosAfectados(array $invs): string
+    {
+        $nombres = array_map(function($i) {
+            $label = !empty($i['nombre']) ? $i['nombre'] : ('Inventario #' . $i['id']);
+            return $label . ' (' . date('d/m/Y', strtotime($i['fecha'])) . ')';
+        }, $invs);
+        return 'No se puede modificar/eliminar este movimiento: hay '
+            . count($invs) . ' inventario(s) con fecha posterior que dependen de él. '
+            . 'Borra primero: ' . implode(', ', $nombres) . '.';
     }
 
     /** AJAX: cuenta inventarios afectados por un cambio de lote en un movimiento. */
@@ -527,6 +583,14 @@ class MovimientoController extends BaseController
         $uid = Session::get('usuario_id');
         // IDOR guard: el movimiento debe ser del usuario
         $mov = $this->ownedMovimientoOrAbort((int)$id, $uid);
+
+        // Bloquear si hay inventarios posteriores que dependen de este mov.
+        $invsAfectados = $this->inventariosAfectadosPorMov($mov, $uid);
+        if (!empty($invsAfectados)) {
+            Session::flash('error', $this->mensajeInventariosAfectados($invsAfectados));
+            $this->redirect('movimientos');
+        }
+
         try {
             $this->revertirMovimiento($mov, $uid);
         } catch (\Exception $e) {
