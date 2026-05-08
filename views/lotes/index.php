@@ -93,16 +93,28 @@ $hayFiltros = !empty(array_filter($filtros));
 <?php if (empty($lotes)): ?>
     <div class="empty-state">No hay lotes<?= $hayFiltros ? ' con esos filtros' : '' ?>. <a href="<?= base_url('lotes/crear?modo=destete') ?>">Da de alta el primero (destete)</a>.</div>
 <?php else: ?>
-    <table class="list-table lotes-compact">
+    <table class="list-table lotes-compact" id="tablaLotes">
         <thead>
             <tr>
                 <th>Codigo</th>
+                <th>Nave / Cuadra</th>
                 <th style="text-align:right">Animales</th>
                 <th style="text-align:center">Semana</th>
                 <th style="text-align:right">P. tabla</th>
                 <th style="text-align:right">Peso real</th>
                 <th style="text-align:right">Valoración</th>
                 <th>Estado</th>
+                <th></th>
+            </tr>
+            <!-- Fila de filtros por columna (cliente) -->
+            <tr class="filtros-fila" style="background:#fafafa">
+                <?php for ($i = 0; $i < 8; $i++): ?>
+                <th style="padding:.25rem .4rem">
+                    <input type="text" oninput="filtrarLotes()" data-col="<?= $i ?>"
+                           placeholder="Filtrar"
+                           style="width:100%;padding:.18rem .35rem;border:1px solid #d1d5db;border-radius:.25rem;font-size:.72rem;font-weight:400">
+                </th>
+                <?php endfor; ?>
                 <th></th>
             </tr>
         </thead>
@@ -123,13 +135,6 @@ $hayFiltros = !empty(array_filter($filtros));
                 onclick="window.location='<?= base_url("lotes/{$l['id']}/editar") ?>'">
                 <td>
                     <strong style="font-family:monospace"><?= e($l['codigo']) ?></strong>
-                    <?php
-                        $cuadras = $cuadrasByLote[$l['id']] ?? [];
-                        $cuadraStr = !empty($cuadras)
-                            ? implode(', ', $cuadras)
-                            : ($l['nave_nombre'] ? $l['nave_nombre'] : '—');
-                    ?>
-                    <div style="font-size:.7rem;color:#9ca3af;margin-top:.1rem"><?= e($cuadraStr) ?></div>
                     <?php $tags = $tagsByLote[$l['id']] ?? []; ?>
                     <?php if (!empty($tags)): ?>
                     <div style="display:flex;flex-wrap:wrap;gap:.2rem;margin-top:.2rem">
@@ -140,6 +145,15 @@ $hayFiltros = !empty(array_filter($filtros));
                         <?php endforeach; ?>
                     </div>
                     <?php endif; ?>
+                </td>
+                <td>
+                    <?php
+                        $cuadras = $cuadrasByLote[$l['id']] ?? [];
+                        $cuadraStr = !empty($cuadras)
+                            ? implode(', ', $cuadras)
+                            : ($l['nave_nombre'] ? $l['nave_nombre'] : '—');
+                    ?>
+                    <span style="font-family:monospace;font-size:.82rem"><?= e($cuadraStr) ?></span>
                 </td>
                 <td style="text-align:right"><?= number_format($l['num_animales']) ?></td>
                 <td style="text-align:center">
@@ -222,5 +236,25 @@ function confirmarEliminar(codigo) {
         '  - El propio lote\n\n' +
         '¿Estas seguro?'
     );
+}
+
+// Filtrado cliente por columna en /lotes
+function filtrarLotes() {
+    const filtros = Array.from(document.querySelectorAll('#tablaLotes .filtros-fila input'))
+        .map(i => (i.value || '').trim().toLowerCase());
+    const tbody = document.querySelector('#tablaLotes tbody');
+    if (!tbody) return;
+    tbody.querySelectorAll('tr').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        let visible = true;
+        tds.forEach((td, idx) => {
+            if (idx >= filtros.length) return; // celda de acciones
+            const f = filtros[idx];
+            if (!f) return;
+            const txt = (td.textContent || '').trim().toLowerCase();
+            if (!txt.includes(f)) visible = false;
+        });
+        tr.style.display = visible ? '' : 'none';
+    });
 }
 </script>
