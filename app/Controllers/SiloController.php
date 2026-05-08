@@ -222,13 +222,26 @@ class SiloController extends BaseController
         if (!Session::validateCsrf($this->postString('csrf_token'))) {
             $this->redirect('silos');
         }
-        // delete() en el modelo ya filtra por usuario_id en el WHERE
         $uid   = Session::get('usuario_id');
         $antes = $this->model->find((int)$id, $uid);
-        $this->model->delete((int)$id, $uid);
-        if ($antes) {
-            AuditLog::log('silo', (int)$id, 'delete', $antes, null);
+        if (!$antes) {
+            Session::flash('error', 'Silo no encontrado.');
+            $this->redirect('silos');
         }
+
+        // Bloquear si tiene recargas registradas: borrarlo dejaría
+        // silo_recargas huérfanas (FK rota o referencia inválida).
+        $recargas = \App\Core\IntegridadCheck::recargasDelSilo((int)$id);
+        if (!empty($recargas)) {
+            Session::flash('error',
+                'No se puede eliminar el silo: tiene recargas registradas. '
+                . 'Borra primero las recargas en /almacen.'
+            );
+            $this->redirect('silos');
+        }
+
+        $this->model->delete((int)$id, $uid);
+        AuditLog::log('silo', (int)$id, 'delete', $antes, null);
         Session::flash('success', 'Silo eliminado.');
         $this->redirect('silos');
     }

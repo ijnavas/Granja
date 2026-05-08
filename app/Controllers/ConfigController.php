@@ -117,6 +117,20 @@ class ConfigController extends BaseController
     {
         auth_required();
         require_rol('admin');
+
+        // Bloquear si la raza está en uso por algún lote: borrarla dejaría
+        // la FK rota o el lote sin raza, perdiendo info histórica.
+        $lotes = \App\Core\IntegridadCheck::lotesConRaza((int)$id);
+        if (!empty($lotes)) {
+            $cods = implode(', ', array_map(fn($r) => $r['codigo'], array_slice($lotes, 0, 5)));
+            if (count($lotes) > 5) $cods .= ' …';
+            Session::flash('error',
+                'No se puede eliminar la raza: hay ' . count($lotes) . ' lote(s) que la usan: '
+                . $cods . '.'
+            );
+            $this->redirect('configuracion/razas');
+        }
+
         $this->razaModel->delete((int)$id);
         Session::flash('success', 'Raza eliminada.');
         $this->redirect('configuracion/razas');

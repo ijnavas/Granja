@@ -223,6 +223,21 @@ class AlmacenController extends BaseController
             'proveedor'    => $this->postString('proveedor') ?: null,
             'observaciones'=> $observaciones,
         ];
+
+        // Bloquear si hay inventarios de pienso posteriores que incluyen
+        // este silo (anterior O nuevo): editar la recarga modifica el
+        // stock_kg histórico y rompe la foto congelada.
+        $fechaCheck = min($recarga['fecha'], $datos['fecha']);
+        $invs = \App\Core\IntegridadCheck::inventarioSilosDeSiloDesde((int)$recarga['silo_id'], $fechaCheck, $uid);
+        if ($nuevoSiloId !== (int)$recarga['silo_id']) {
+            $invs2 = \App\Core\IntegridadCheck::inventarioSilosDeSiloDesde($nuevoSiloId, $fechaCheck, $uid);
+            $invs = array_values(array_column(array_merge($invs, $invs2), null, 'id'));
+        }
+        if (!empty($invs)) {
+            Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, 'editar esta recarga'));
+            $this->redirect("almacen/recargas/{$recargaId}/editar");
+        }
+
         $this->model->updateRecarga((int)$recargaId, $datos, (float)$recarga['cantidad_kg'], (int)$recarga['silo_id']);
         AuditLog::log('recarga', (int)$recargaId, 'update', $recarga, $datos);
 
@@ -253,6 +268,13 @@ class AlmacenController extends BaseController
                 'user_id' => $uid, 'resource' => 'SiloRecarga', 'target_id' => (int)$recargaId,
                 'context' => 'almacen/deleteRecarga',
             ]);
+            $this->redirect("almacen/{$id}");
+        }
+
+        // Bloquear si hay inventarios de pienso posteriores con este silo
+        $invs = \App\Core\IntegridadCheck::inventarioSilosDeSiloDesde((int)$id, $recarga['fecha'], $uid);
+        if (!empty($invs)) {
+            Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, 'borrar esta recarga'));
             $this->redirect("almacen/{$id}");
         }
 

@@ -109,6 +109,57 @@ final class IntegridadCheck
         return $stmt->fetchAll();
     }
 
+    /**
+     * Inventarios (de pienso) que incluyen una fila para el silo dado y
+     * cuya fecha es posterior o igual a la fecha indicada. Editar/borrar
+     * recargas anteriores a esa fecha alteraría el stock_kg ya congelado
+     * en inventario_silos.
+     */
+    public static function inventarioSilosDeSiloDesde(int $siloId, string $fechaDesde, int $userId): array
+    {
+        $stmt = Database::getInstance()->prepare("
+            SELECT DISTINCT i.id, i.fecha, i.nombre
+            FROM inventarios i
+            JOIN inventario_silos isl ON isl.inventario_id = i.id
+            WHERE i.usuario_id = :uid
+              AND i.fecha >= :fecha
+              AND isl.silo_id = :silo
+            ORDER BY i.fecha
+        ");
+        $stmt->execute(['uid' => $userId, 'fecha' => $fechaDesde, 'silo' => $siloId]);
+        return $stmt->fetchAll();
+    }
+
+    /** Recargas registradas en un silo. Si no es vacío, no borrar el silo. */
+    public static function recargasDelSilo(int $siloId): array
+    {
+        $stmt = Database::getInstance()->prepare("
+            SELECT id, fecha, cantidad_kg FROM silo_recargas WHERE silo_id = :s ORDER BY fecha DESC LIMIT 1
+        ");
+        $stmt->execute(['s' => $siloId]);
+        return $stmt->fetchAll();
+    }
+
+    /** Naves activas en una granja. Si no es vacío, no borrar la granja. */
+    public static function navesActivasEnGranja(int $granjaId): array
+    {
+        $stmt = Database::getInstance()->prepare("
+            SELECT id, nombre FROM naves WHERE granja_id = :g AND activa = 1 ORDER BY nombre
+        ");
+        $stmt->execute(['g' => $granjaId]);
+        return $stmt->fetchAll();
+    }
+
+    /** Lotes que usan una raza. Si no es vacío, no borrar la raza. */
+    public static function lotesConRaza(int $razaId): array
+    {
+        $stmt = Database::getInstance()->prepare("
+            SELECT id, codigo FROM lotes WHERE raza_id = :r ORDER BY codigo LIMIT 10
+        ");
+        $stmt->execute(['r' => $razaId]);
+        return $stmt->fetchAll();
+    }
+
     /** Mensaje legible para una lista de inventarios. */
     public static function mensajeInventarios(array $invs, string $accion = 'modificar/eliminar'): string
     {

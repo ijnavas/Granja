@@ -279,6 +279,12 @@ class MovimientoController extends BaseController
         $uid = Session::get('usuario_id');
         $mov = $this->ownedMovimientoOrAbort((int)$id, $uid);
 
+        // Destete = alta del lote: editar desde /lotes/{id}/editar, no aquí.
+        if (($mov['tipo'] ?? '') === 'destete' && !empty($mov['lote_origen_id'])) {
+            Session::flash('error', 'El destete se edita desde la ficha del lote.');
+            $this->redirect('lotes/' . (int)$mov['lote_origen_id'] . '/editar');
+        }
+
         $this->view('movimientos/form', [
             'movimiento'      => $mov,
             'tipo'            => $mov['tipo'],
@@ -584,6 +590,15 @@ class MovimientoController extends BaseController
         // IDOR guard: el movimiento debe ser del usuario
         $mov = $this->ownedMovimientoOrAbort((int)$id, $uid);
 
+        // Destete = alta del lote: solo se puede deshacer borrando el lote.
+        if (($mov['tipo'] ?? '') === 'destete') {
+            Session::flash('error',
+                'No se puede borrar un movimiento de destete por separado. '
+                . 'Para deshacerlo, elimina el propio lote desde /lotes.'
+            );
+            $this->redirect('movimientos');
+        }
+
         // Bloquear si hay inventarios posteriores que dependen de este mov.
         $invsAfectados = $this->inventariosAfectadosPorMov($mov, $uid);
         if (!empty($invsAfectados)) {
@@ -595,6 +610,13 @@ class MovimientoController extends BaseController
             $this->revertirMovimiento($mov, $uid);
         } catch (\Exception $e) {
             // Si no se puede revertir, eliminar igualmente
+        }
+
+        // Limpiar archivo de albarán adjunto si existe (evita basura en
+        // /uploads/albaranes/ por movimientos ya borrados).
+        if (!empty($mov['albaran_archivo'])) {
+            $rutaAbs = ROOT_PATH . '/' . ltrim($mov['albaran_archivo'], '/');
+            if (is_file($rutaAbs)) @unlink($rutaAbs);
         }
         \App\Core\Database::getInstance()
             ->prepare("DELETE FROM movimiento_cuadras WHERE movimiento_id = :id")

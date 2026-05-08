@@ -124,9 +124,22 @@ class GranjaController extends BaseController
         if (!Session::validateCsrf($this->postString('csrf_token'))) {
             $this->redirect('granjas');
         }
+
+        // Bloquear si la granja tiene naves activas
+        $naves = \App\Core\IntegridadCheck::navesActivasEnGranja((int)$id);
+        if (!empty($naves)) {
+            $nombres = implode(', ', array_map(fn($n) => $n['nombre'], array_slice($naves, 0, 5)));
+            if (count($naves) > 5) $nombres .= ' …';
+            Session::flash('error',
+                'No se puede eliminar la granja: tiene ' . count($naves) . ' nave(s) activa(s): '
+                . $nombres . '. Elimina o desactiva las naves primero.'
+            );
+            $this->redirect('granjas');
+        }
+
         // Admin puede eliminar cualquier granja (userId=null → sin filtro)
         $ok = $this->model->delete((int)$id, null);
-        Session::flash($ok ? 'success' : 'error', $ok ? 'Granja eliminada.' : 'No se pudo eliminar la granja (¿ya estaba inactiva o no existe?).');
+        Session::flash($ok ? 'success' : 'error', $ok ? 'Granja eliminada.' : 'No se pudo eliminar la granja.');
         $this->redirect('granjas');
     }
 }
