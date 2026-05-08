@@ -162,14 +162,16 @@ $hayFiltros = !empty(array_filter($filtros));
                 </td>
                 <td>
                     <?php if ($pesoReal): ?>
-                        <span style="font-weight:600;color:#1d4ed8"><?= number_format($pesoReal, 0) ?> kg</span>
-                        <?php if ($desv !== null): ?>
-                            <span style="font-size:.72rem;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>;display:block">
-                                <?= $desv >= 0 ? '+' : '' ?><?= $desv ?>% vs tabla
+                        <div>
+                            <span style="font-weight:600;color:#1d4ed8"><?= number_format($pesoReal, 0) ?> kg</span>
+                            <?php if ($desv !== null): ?>
+                            <span style="font-size:.78rem;font-weight:600;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>;margin-left:.3rem">
+                                <?= $desv >= 0 ? '+' : '' ?><?= $desv ?>%
                             </span>
-                        <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
                         <span style="font-size:.7rem;color:#9ca3af;display:block">
-                            Peso. <?= date('d/m/Y', strtotime($ultimoPesaje)) ?>
+                            Peso <?= date('d/m/y', strtotime($ultimoPesaje)) ?>
                         </span>
                     <?php else: ?>
                         <span style="color:#d1d5db">Sin peso</span>
