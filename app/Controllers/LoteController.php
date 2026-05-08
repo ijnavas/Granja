@@ -387,15 +387,17 @@ class LoteController extends BaseController
         ];
 
         // Bloquear si cambian las fechas (fecha_nacimiento o fecha_entrada)
-        // y existen inventarios que incluyen este lote: cualquier cambio en
-        // las fechas recalcula la edad → semana → peso esperado en TODA la
-        // historia del lote, alterando las cifras congeladas en inventarios.
+        // o la raza, y existen inventarios que incluyen este lote: cualquier
+        // cambio en estos campos recalcula edad/semana/peso/coste de tabla
+        // retroactivamente, alterando las cifras congeladas en inventarios.
         $cambiaNacimiento = ($antes['fecha_nacimiento'] ?? null) !== ($datosUpdate['fecha_nacimiento'] ?? null);
         $cambiaEntrada    = ($antes['fecha_entrada']    ?? null) !== ($datosUpdate['fecha_entrada']    ?? null);
-        if ($cambiaNacimiento || $cambiaEntrada) {
+        $cambiaRaza       = (int)($antes['raza_id'] ?? 0)         !== (int)($datosUpdate['raza_id'] ?? 0);
+        if ($cambiaNacimiento || $cambiaEntrada || $cambiaRaza) {
             $invs = \App\Core\IntegridadCheck::inventariosDeLote((int)$id, $uid);
             if (!empty($invs)) {
-                Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, 'cambiar la fecha del lote'));
+                $accion = $cambiaRaza ? 'cambiar la raza del lote' : 'cambiar la fecha del lote';
+                Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, $accion));
                 $this->redirect("lotes/{$id}/editar");
             }
         }
@@ -566,8 +568,19 @@ class LoteController extends BaseController
             Session::flash('error', 'Token inválido.');
             $this->redirect('lotes');
         }
+
+        $uid = Session::get('usuario_id');
+
+        // Bloquear si el lote aparece en algún inventario: borrarlo dejaría
+        // líneas huérfanas (FK rota o lote_id apuntando a registro
+        // inexistente) y rompería la vista del inventario.
+        $invs = \App\Core\IntegridadCheck::inventariosDeLote((int)$id, $uid);
+        if (!empty($invs)) {
+            Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, 'eliminar este lote'));
+            $this->redirect('lotes');
+        }
+
         try {
-            $uid   = Session::get('usuario_id');
             $antes = $this->model->find((int)$id, $uid);
             $ok    = $this->model->eliminarCompleto((int)$id, $uid);
             if ($ok) {

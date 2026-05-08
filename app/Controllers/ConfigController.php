@@ -210,6 +210,14 @@ class ConfigController extends BaseController
         $tabla = $this->tablaModel->find((int)$id, $uid);
         if (!$tabla) $this->redirect('configuracion/tablas');
 
+        // Bloquear si hay inventarios cuyas líneas usan razas asignadas a
+        // esta tabla: editar pesos/costes alteraría las cifras congeladas.
+        $invs = \App\Core\IntegridadCheck::inventariosDeTabla((int)$id, $uid);
+        if (!empty($invs)) {
+            Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, 'editar esta tabla de crecimiento'));
+            $this->redirect("configuracion/tablas/{$id}/editar");
+        }
+
         $this->tablaModel->update((int)$id,
             capitalizar($this->postString('nombre')),
             $this->postString('descripcion') ?: null

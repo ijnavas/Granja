@@ -962,6 +962,17 @@ class MovimientoController extends BaseController
         $loteOrigen = $this->loteModel->find($data['lote_origen_id'], $uid);
         if (!$loteOrigen) throw new \Exception('Lote de origen no encontrado.');
 
+        // No registrar nuevos movimientos sobre lotes cerrados (vendidos
+        // por completo, dados de baja...). Lo único que tendría sentido
+        // es reabrirlos vía un alta de animales (entrada/compra), pero
+        // mejor que el usuario lo haga explícito creando un lote nuevo.
+        if (($loteOrigen['estado'] ?? null) === 'cerrado') {
+            throw new \Exception(
+                'El lote ' . $loteOrigen['codigo'] . ' está cerrado. ' .
+                'No se pueden registrar nuevos movimientos sobre lotes cerrados.'
+            );
+        }
+
         $cantidad = $data['num_animales'];
         if ($cantidad < 1) throw new \Exception('La cantidad debe ser mayor que 0.');
 
@@ -1179,6 +1190,9 @@ class MovimientoController extends BaseController
                 }
                 $loteDestino = $this->loteModel->find((int)$data['lote_destino_id'], $uid);
                 if (!$loteDestino) throw new \Exception('Lote destino no válido.');
+                if (($loteDestino['estado'] ?? null) === 'cerrado') {
+                    throw new \Exception('El lote destino ' . $loteDestino['codigo'] . ' está cerrado. Reabre el lote o usa otro.');
+                }
                 if ($cantidad > $loteOrigen['num_animales']) {
                     throw new \Exception("Solo hay {$loteOrigen['num_animales']} animales en el lote origen.");
                 }

@@ -86,6 +86,29 @@ final class IntegridadCheck
         return $stmt->fetchAll();
     }
 
+    /**
+     * Inventarios cuyas líneas dependen de una tabla de crecimiento dada.
+     * Se llega vía: inventario_lineas → lote → raza → tabla_raza → tabla.
+     *
+     * Cambiar peso/coste en la tabla altera retroactivamente lo que se vería
+     * para los lotes que la usan, contradiciendo lo congelado en estos
+     * inventarios.
+     */
+    public static function inventariosDeTabla(int $tablaId, int $userId): array
+    {
+        $stmt = Database::getInstance()->prepare("
+            SELECT DISTINCT i.id, i.fecha, i.nombre
+            FROM inventarios i
+            JOIN inventario_lineas il ON il.inventario_id = i.id
+            JOIN lotes l              ON il.lote_id       = l.id
+            JOIN tabla_raza tr        ON tr.raza_id       = l.raza_id
+            WHERE i.usuario_id = :uid AND tr.tabla_id = :tabla
+            ORDER BY i.fecha
+        ");
+        $stmt->execute(['uid' => $userId, 'tabla' => $tablaId]);
+        return $stmt->fetchAll();
+    }
+
     /** Mensaje legible para una lista de inventarios. */
     public static function mensajeInventarios(array $invs, string $accion = 'modificar/eliminar'): string
     {
