@@ -229,6 +229,20 @@ class CuadraController extends BaseController
         if (!Session::validateCsrf($this->postString('csrf_token'))) {
             $this->redirect('cuadras');
         }
+
+        // Bloquear si la cuadra tiene lotes activos (cuadra_lote.activo=1
+        // con num_animales > 0). El soft-delete dejaría a esos lotes
+        // apuntando a una cuadra invisible — caso C7 que ya nos quemó.
+        $lotes = \App\Core\IntegridadCheck::lotesActivosEnCuadra((int)$id);
+        if (!empty($lotes)) {
+            $codigos = implode(', ', array_map(fn($r) => $r['codigo'] . ' (' . $r['num_animales'] . ' anim.)', $lotes));
+            Session::flash('error',
+                'No se puede eliminar la cuadra: tiene ' . count($lotes) . ' lote(s) asignado(s): '
+                . $codigos . '. Vacíala primero (mueve o vende los animales).'
+            );
+            $this->redirect('cuadras');
+        }
+
         // delete() en el modelo ya filtra por usuario_id en el WHERE
         $this->model->delete((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Cuadra eliminada.');

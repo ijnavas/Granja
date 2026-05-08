@@ -191,6 +191,14 @@ class PesajeController extends BaseController
             $this->redirect("pesajes/{$id}/editar");
         }
 
+        // Bloquear si hay inventarios posteriores que dependen de este lote
+        $fechaParaCheck = min($antes['fecha'], $fecha);
+        $invs = \App\Core\IntegridadCheck::inventariosDeLoteDesde((int)$antes['lote_id'], $fechaParaCheck, $uid);
+        if (!empty($invs)) {
+            Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, 'editar este pesaje'));
+            $this->redirect("pesajes/{$id}/editar");
+        }
+
         $consumo = $this->postString('consumo_pienso_kg') !== '' ? (float) $this->postString('consumo_pienso_kg') : null;
         $ic      = $this->postString('ic_real')           !== '' ? (float) $this->postString('ic_real')           : null;
         $obs     = $this->postString('observaciones') ?: null;
@@ -219,6 +227,14 @@ class PesajeController extends BaseController
         $uid = Session::get('usuario_id');
         // IDOR guard: el pesaje debe ser del usuario
         $antes = $this->ownedPesajeOrAbort((int)$id, $uid);
+
+        // Bloquear si hay inventarios posteriores que dependen de este lote
+        $invs = \App\Core\IntegridadCheck::inventariosDeLoteDesde((int)$antes['lote_id'], $antes['fecha'], $uid);
+        if (!empty($invs)) {
+            Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, 'borrar este pesaje'));
+            $this->redirect('pesajes');
+        }
+
         $this->model->delete((int)$id);
         AuditLog::log('pesaje', (int)$id, 'delete', $antes, null);
         Session::flash('success', 'Pesaje eliminado.');

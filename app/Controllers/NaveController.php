@@ -136,6 +136,20 @@ class NaveController extends BaseController
         if (!Session::validateCsrf($this->postString('csrf_token'))) {
             $this->redirect('naves');
         }
+
+        // Bloquear si alguna cuadra de la nave tiene lotes activos
+        $lotes = \App\Core\IntegridadCheck::lotesActivosEnNave((int)$id);
+        if (!empty($lotes)) {
+            $detalle = implode(', ', array_map(fn($r) => $r['codigo'] . ' (' . $r['cuadra'] . ')', array_slice($lotes, 0, 5)));
+            if (count($lotes) > 5) $detalle .= ' …';
+            Session::flash('error',
+                'No se puede eliminar la nave: tiene ' . count($lotes)
+                . ' lote(s) en sus cuadras: ' . $detalle
+                . '. Vacía o mueve los lotes primero.'
+            );
+            $this->redirect('naves');
+        }
+
         // delete() en el modelo ya filtra por usuario_id en el WHERE
         $this->model->delete((int)$id, Session::get('usuario_id'));
         Session::flash('success', 'Nave eliminada.');

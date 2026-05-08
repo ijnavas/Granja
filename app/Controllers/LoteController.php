@@ -385,6 +385,21 @@ class LoteController extends BaseController
             'fecha_nacimiento' => $this->postString('fecha_nacimiento') ?: null,
             'observaciones'    => $this->postString('observaciones'),
         ];
+
+        // Bloquear si cambian las fechas (fecha_nacimiento o fecha_entrada)
+        // y existen inventarios que incluyen este lote: cualquier cambio en
+        // las fechas recalcula la edad → semana → peso esperado en TODA la
+        // historia del lote, alterando las cifras congeladas en inventarios.
+        $cambiaNacimiento = ($antes['fecha_nacimiento'] ?? null) !== ($datosUpdate['fecha_nacimiento'] ?? null);
+        $cambiaEntrada    = ($antes['fecha_entrada']    ?? null) !== ($datosUpdate['fecha_entrada']    ?? null);
+        if ($cambiaNacimiento || $cambiaEntrada) {
+            $invs = \App\Core\IntegridadCheck::inventariosDeLote((int)$id, $uid);
+            if (!empty($invs)) {
+                Session::flash('error', \App\Core\IntegridadCheck::mensajeInventarios($invs, 'cambiar la fecha del lote'));
+                $this->redirect("lotes/{$id}/editar");
+            }
+        }
+
         $this->model->update((int)$id, $uid, $datosUpdate);
         $despues = $this->model->find((int)$id, $uid);
         AuditLog::log('lote', (int)$id, 'update', $antes, $despues);
