@@ -121,9 +121,6 @@ $hayFiltros = !empty(array_filter($filtros));
                 onclick="window.location='<?= base_url("lotes/{$l['id']}/editar") ?>'">
                 <td>
                     <strong style="font-family:monospace"><?= e($l['codigo']) ?></strong>
-                    <?php if ($l['raza_nombre']): ?>
-                        <div style="font-size:.75rem;color:#9ca3af"><?= e($l['raza_nombre']) ?></div>
-                    <?php endif; ?>
                     <?php $tags = $tagsByLote[$l['id']] ?? []; ?>
                     <?php if (!empty($tags)): ?>
                     <div style="display:flex;flex-wrap:wrap;gap:.2rem;margin-top:.25rem">
