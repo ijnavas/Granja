@@ -615,9 +615,24 @@ class ConfigController extends BaseController
             $this->redirect('configuracion/seed-test');
         }
 
-        // Raza: dejar sin asignar para que los lotes no lleven sufijo de raza
-        // (los animales son 50% Ibérico por defecto y no se especifica).
-        $razaId = null;
+        // Raza 50% Ibérico (sin identificador, así el código del lote no
+        // lleva sufijo). Si no existe, la crea.
+        $stmt = $db->prepare("
+            SELECT id FROM razas_porcino
+            WHERE LOWER(CONCAT(nombre, ' ', COALESCE(porcentaje, ''))) LIKE '%iber%50%'
+               OR LOWER(CONCAT(nombre, ' ', COALESCE(porcentaje, ''))) LIKE '%50%iber%'
+            ORDER BY id LIMIT 1
+        ");
+        $stmt->execute();
+        $razaId = $stmt->fetchColumn();
+        if (!$razaId) {
+            $db->prepare("
+                INSERT INTO razas_porcino (usuario_id, nombre, porcentaje, identificador)
+                VALUES (NULL, '50% Ibérico', '50%', NULL)
+            ")->execute();
+            $razaId = (int) $db->lastInsertId();
+        }
+        $razaId = (int) $razaId;
 
         // Helper inline: crea o devuelve nave/cuadra
         $naveOrCreate = function(string $nombre) use ($db, $granjaId): int {
