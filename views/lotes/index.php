@@ -5,15 +5,18 @@ $hayFiltros = !empty(array_filter($filtros));
 ?>
 
 <style>
-/* Filas más estrechas en /lotes para que se vean más a la vez */
+/* Filas compactas en /lotes */
 .list-card table.list-table.lotes-compact td,
 .list-card table.list-table.lotes-compact th {
-    padding-top: .35rem;
-    padding-bottom: .35rem;
-    font-size: .85rem;
+    padding-top: .3rem;
+    padding-bottom: .3rem;
+    padding-left: .55rem;
+    padding-right: .55rem;
+    font-size: .82rem;
+    line-height: 1.25;
 }
-.list-card table.list-table.lotes-compact .actions { gap: .25rem; flex-wrap: nowrap }
-.list-card table.list-table.lotes-compact .actions .btn-sm { padding: .15rem .5rem; font-size: .72rem }
+.list-card table.list-table.lotes-compact .actions { gap: .2rem; flex-wrap: nowrap }
+.list-card table.list-table.lotes-compact .actions .btn-sm { padding: .1rem .45rem; font-size: .7rem }
 </style>
 
 <div class="page-header">
@@ -94,12 +97,11 @@ $hayFiltros = !empty(array_filter($filtros));
         <thead>
             <tr>
                 <th>Codigo</th>
-                <th>Granja / Nave</th>
-                <th>Animales</th>
-                <th>Semana</th>
-                <th>Peso tabla</th>
-                <th>Peso real</th>
-                <th>Valoracion lote</th>
+                <th style="text-align:right">Animales</th>
+                <th style="text-align:center">Semana</th>
+                <th style="text-align:right">P. tabla</th>
+                <th style="text-align:right">Peso real</th>
+                <th style="text-align:right">Valoración</th>
                 <th>Estado</th>
                 <th></th>
             </tr>
@@ -121,48 +123,45 @@ $hayFiltros = !empty(array_filter($filtros));
                 onclick="window.location='<?= base_url("lotes/{$l['id']}/editar") ?>'">
                 <td>
                     <strong style="font-family:monospace"><?= e($l['codigo']) ?></strong>
+                    <?php
+                        $cuadras = $cuadrasByLote[$l['id']] ?? [];
+                        $cuadraStr = !empty($cuadras)
+                            ? implode(', ', $cuadras)
+                            : ($l['nave_nombre'] ? $l['nave_nombre'] : '—');
+                    ?>
+                    <div style="font-size:.7rem;color:#9ca3af;margin-top:.1rem"><?= e($cuadraStr) ?></div>
                     <?php $tags = $tagsByLote[$l['id']] ?? []; ?>
                     <?php if (!empty($tags)): ?>
-                    <div style="display:flex;flex-wrap:wrap;gap:.2rem;margin-top:.25rem">
+                    <div style="display:flex;flex-wrap:wrap;gap:.2rem;margin-top:.2rem">
                         <?php foreach ($tags as $t): ?>
-                        <span style="background:<?= e($t['color']) ?>22;color:<?= e($t['color']) ?>;font-size:.68rem;font-weight:600;padding:.05rem .4rem;border-radius:99px;border:1px solid <?= e($t['color']) ?>44">
+                        <span style="background:<?= e($t['color']) ?>22;color:<?= e($t['color']) ?>;font-size:.65rem;font-weight:600;padding:.02rem .35rem;border-radius:99px;border:1px solid <?= e($t['color']) ?>44">
                             <?= e($t['nombre']) ?>
                         </span>
                         <?php endforeach; ?>
                     </div>
                     <?php endif; ?>
                 </td>
-                <td>
-                    <?php if ($l['nave_nombre']): ?>
-                        <?= e($l['nave_nombre']) ?>
-                        <span style="color:#9ca3af;font-size:.8rem"> · <?= e($l['granja_nombre'] ?? '') ?></span>
-                    <?php elseif ($l['granja_nombre']): ?>
-                        <span style="color:#9ca3af"><?= e($l['granja_nombre']) ?></span>
-                    <?php else: ?>
-                        <span style="color:#d1d5db;font-style:italic">Sin asignar</span>
-                    <?php endif; ?>
-                </td>
-                <td><?= number_format($l['num_animales']) ?></td>
-                <td>
+                <td style="text-align:right"><?= number_format($l['num_animales']) ?></td>
+                <td style="text-align:center">
                     <?php if ($semana !== null): ?>
                         <span style="font-weight:600">S<?= $semana ?></span>
                     <?php else: ?>
                         <span style="color:#d1d5db">—</span>
                     <?php endif; ?>
                 </td>
-                <td>
+                <td style="text-align:right;white-space:nowrap">
                     <?php if ($pesoTabla): ?>
                         <?= number_format($pesoTabla, 0) ?> kg
                     <?php else: ?>
                         <span style="color:#d1d5db">—</span>
                     <?php endif; ?>
                 </td>
-                <td>
+                <td style="white-space:nowrap;text-align:right">
                     <?php if ($pesoReal): ?>
-                        <div>
+                        <div style="white-space:nowrap">
                             <span style="font-weight:600;color:#1d4ed8"><?= number_format($pesoReal, 0) ?> kg</span>
                             <?php if ($desv !== null): ?>
-                            <span style="font-size:.78rem;font-weight:600;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>;margin-left:.3rem">
+                            <span style="font-size:.78rem;font-weight:600;color:<?= $desv >= 0 ? '#16a34a' : '#dc2626' ?>;margin-left:.25rem">
                                 <?= $desv >= 0 ? '+' : '' ?><?= $desv ?>%
                             </span>
                             <?php endif; ?>
@@ -174,10 +173,10 @@ $hayFiltros = !empty(array_filter($filtros));
                         <span style="color:#d1d5db">Sin peso</span>
                     <?php endif; ?>
                 </td>
-                <td>
+                <td style="text-align:right;white-space:nowrap">
                     <?php if ($valoracion): ?>
-                        <div style="font-weight:600"><?= number_format($valoracion, 2) ?> EUR</div>
-                        <div style="font-size:.75rem;color:#9ca3af"><?= number_format($costeTabla, 2) ?> EUR/animal</div>
+                        <div style="font-weight:600"><?= number_format($valoracion, 0) ?> €</div>
+                        <div style="font-size:.7rem;color:#9ca3af"><?= number_format($costeTabla, 2) ?> €/ud</div>
                     <?php else: ?>
                         <span style="color:#d1d5db">—</span>
                     <?php endif; ?>

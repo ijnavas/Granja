@@ -47,14 +47,35 @@ class LoteController extends BaseController
         $lotes = $this->model->allByUsuario($uid, $filtros, $paginacion->perPage, $paginacion->offset);
         $tagsByLote = (new Etiqueta())->indexedByLoteIds(array_column($lotes, 'id'));
 
+        // Cuadras actuales (activas) agrupadas por lote_id, para mostrar en
+        // la segunda línea bajo el código del lote.
+        $loteIds = array_column($lotes, 'id');
+        $cuadrasByLote = [];
+        if ($loteIds) {
+            $ph = implode(',', array_fill(0, count($loteIds), '?'));
+            $stmt = \App\Core\Database::getInstance()->prepare("
+                SELECT cl.lote_id, c.nombre AS cuadra, n.nombre AS nave
+                FROM cuadra_lote cl
+                JOIN cuadras c ON cl.cuadra_id = c.id
+                JOIN naves n   ON c.nave_id    = n.id
+                WHERE cl.lote_id IN ({$ph}) AND cl.activo = 1
+                ORDER BY n.nombre, c.nombre
+            ");
+            $stmt->execute($loteIds);
+            while ($r = $stmt->fetch()) {
+                $cuadrasByLote[(int)$r['lote_id']][] = $r['nave'] . '·' . $r['cuadra'];
+            }
+        }
+
         $this->view('lotes/index', [
-            'lotes'      => $lotes,
-            'tagsByLote' => $tagsByLote,
-            'filtros'    => $filtros,
-            'paginacion' => $paginacion,
-            'granjas'    => $this->granjaModel->selectOptions($uid),
-            'razas'      => $this->razaModel->allParaUsuario($uid),
-            'pageTitle'  => 'Lotes',
+            'lotes'         => $lotes,
+            'tagsByLote'    => $tagsByLote,
+            'cuadrasByLote' => $cuadrasByLote,
+            'filtros'       => $filtros,
+            'paginacion'    => $paginacion,
+            'granjas'       => $this->granjaModel->selectOptions($uid),
+            'razas'         => $this->razaModel->allParaUsuario($uid),
+            'pageTitle'     => 'Lotes',
         ]);
     }
 
