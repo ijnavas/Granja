@@ -97,7 +97,9 @@ class Informe
             default       => "total_animales DESC",
         };
 
-        $where  = ['(g.organizacion_id = :uid OR gn.organizacion_id = :uid2)'];
+        $f1 = \App\Core\OrgContext::granjaFilterSql('g.id');
+        $f2 = \App\Core\OrgContext::granjaFilterSql('gn.id');
+        $where  = ["( (g.organizacion_id = :uid $f1) OR (gn.organizacion_id = :uid2 $f2) )"];
         $params = ['uid' => $usuarioId, 'uid2' => $usuarioId];
 
         // Filtro de categoría: usa tipos_movimiento.categoria + fallback de

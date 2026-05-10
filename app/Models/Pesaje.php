@@ -20,7 +20,8 @@ class Pesaje
      */
     private function buildPesajeFiltros(int $userId, array $filtros): array
     {
-        $conditions = ['g.organizacion_id = :uid'];
+        $filter     = \App\Core\OrgContext::granjaFilterSql('g.id');
+        $conditions = ["g.organizacion_id = :uid $filter"];
         $params     = ['uid' => \App\Core\OrgContext::id()];
 
         if (!empty($filtros['fecha_desde'])) {

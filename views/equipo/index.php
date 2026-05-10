@@ -39,9 +39,12 @@
                 <?php endif; ?>
             </td>
             <td style="color:#9ca3af;font-size:.78rem"><?= date('d/m/Y', strtotime($m['created_at'])) ?></td>
-            <td>
+            <td style="white-space:nowrap">
+                <?php if (in_array($m['rol'], ['operario','lector'], true) && in_array($rolActual, ['owner','admin'], true)): ?>
+                    <a href="<?= base_url("equipo/{$m['id']}/granjas") ?>" class="btn btn-secondary btn-sm" style="margin-right:.3rem">Granjas</a>
+                <?php endif; ?>
                 <?php if ($m['rol'] !== 'owner' && (int)$m['id'] !== $usuarioActual && in_array($rolActual, ['owner','admin'], true)): ?>
-                <form method="POST" action="<?= base_url("equipo/{$m['id']}/quitar") ?>" onsubmit="return confirm('¿Quitar a <?= e($m['nombre']) ?> de la organización?')">
+                <form method="POST" action="<?= base_url("equipo/{$m['id']}/quitar") ?>" onsubmit="return confirm('¿Quitar a <?= e($m['nombre']) ?> de la organización?')" style="display:inline">
                     <?= csrf_field() ?>
                     <button type="submit" class="btn btn-danger btn-sm">Quitar</button>
                 </form>

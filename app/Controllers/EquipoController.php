@@ -5,6 +5,7 @@ namespace App\Controllers;
 
 use App\Models\Organizacion;
 use App\Models\Usuario;
+use App\Models\Granja;
 use App\Core\Session;
 use App\Core\OrgContext;
 use App\Core\Database;
@@ -120,6 +121,82 @@ class EquipoController extends BaseController
         $ok = $this->orgModel->desvincular(OrgContext::id(), (int)$userId);
         Session::flash($ok ? 'success' : 'error', $ok ? 'Miembro eliminado.' : 'No se pudo eliminar (¿es owner?).');
         $this->redirect('equipo');
+    }
+
+    /**
+     * Pantalla para asignar/restringir granjas visibles a un miembro
+     * (operario o lector). Owner/admin ven siempre todas las granjas.
+     */
+    public function granjasForm(string $userId): void
+    {
+        auth_required();
+        if (!OrgContext::esAdmin()) $this->redirect('equipo');
+
+        $orgId  = OrgContext::id();
+        $rolDeM = $this->orgModel->rolEnOrg((int)$userId, $orgId);
+        if (!$rolDeM || $rolDeM === 'owner' || in_array($rolDeM, ['admin'], true)) {
+            // No tiene sentido restringir a owner/admin (siempre ven todo)
+            Session::flash('error', 'Owners y admins ven todas las granjas de la organización.');
+            $this->redirect('equipo');
+        }
+
+        $miembro = (new Usuario())->findById((int)$userId);
+        if (!$miembro) $this->redirect('equipo');
+
+        // Granjas de la org (todas, sin filtro de visibilidad propio)
+        $stmt = Database::getInstance()->prepare("
+            SELECT id, nombre FROM granjas WHERE organizacion_id = :o AND activa = 1 ORDER BY nombre
+        ");
+        $stmt->execute(['o' => $orgId]);
+        $granjas = $stmt->fetchAll();
+
+        $asignadas = $this->orgModel->granjasAsignadas((int)$userId, $orgId);
+
+        $this->view('equipo/granjas', [
+            'pageTitle' => 'Granjas de ' . ($miembro['nombre'] ?? ''),
+            'miembro'   => $miembro,
+            'rolDeM'    => $rolDeM,
+            'granjas'   => $granjas,
+            'asignadas' => $asignadas,
+            'success'   => Session::getFlash('success'),
+            'error'     => Session::getFlash('error'),
+        ]);
+    }
+
+    /** Guarda las granjas asignadas a un miembro. */
+    public function granjasGuardar(string $userId): void
+    {
+        auth_required();
+        if (!OrgContext::esAdmin()) $this->redirect('equipo');
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect("equipo/{$userId}/granjas");
+        }
+
+        $orgId  = OrgContext::id();
+        $rolDeM = $this->orgModel->rolEnOrg((int)$userId, $orgId);
+        if (!$rolDeM || $rolDeM === 'owner' || $rolDeM === 'admin') {
+            $this->redirect('equipo');
+        }
+
+        // Si "todas" → vaciar (sin restricción). Si lista → guardar.
+        $modo = $this->postString('modo'); // 'todas' | 'restringir'
+        $ids  = [];
+        if ($modo === 'restringir') {
+            $raw = $_POST['granja_ids'] ?? [];
+            if (is_array($raw)) {
+                foreach ($raw as $g) {
+                    $g = (int)$g;
+                    if ($g > 0) $ids[] = $g;
+                }
+            }
+        }
+
+        $this->orgModel->setGranjasAsignadas((int)$userId, $orgId, $ids);
+        Session::flash('success',
+            empty($ids) ? 'Acceso restablecido: el miembro verá todas las granjas.'
+                        : 'Granjas asignadas: ' . count($ids) . '.'
+        );
+        $this->redirect("equipo/{$userId}/granjas");
     }
 
     /** Pantalla pública para aceptar una invitación con token. */

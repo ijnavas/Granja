@@ -255,6 +255,8 @@ $router->get('/equipo',                                     [EquipoController::c
 $router->post('/equipo/invitar',                            [EquipoController::class, 'invitar']);
 $router->post('/equipo/{userId}/rol',                       [EquipoController::class, 'cambiarRol']);
 $router->post('/equipo/{userId}/quitar',                    [EquipoController::class, 'quitar']);
+$router->get('/equipo/{userId}/granjas',                    [EquipoController::class, 'granjasForm']);
+$router->post('/equipo/{userId}/granjas',                   [EquipoController::class, 'granjasGuardar']);
 $router->get('/aceptar-invitacion/{token}',                 [EquipoController::class, 'aceptarForm']);
 $router->post('/aceptar-invitacion/{token}',                [EquipoController::class, 'aceptarPost']);
 

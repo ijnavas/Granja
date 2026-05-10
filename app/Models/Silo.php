@@ -17,6 +17,7 @@ class Silo
 
     public function allByUsuario(int $userId): array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $stmt = $this->db->prepare("
             SELECT s.*, g.nombre AS granja_nombre,
                    GROUP_CONCAT(n.nombre ORDER BY n.nombre SEPARATOR ', ') AS naves_abastecidas
@@ -24,7 +25,7 @@ class Silo
             JOIN granjas g ON s.granja_id = g.id
             LEFT JOIN silo_nave sn ON sn.silo_id = s.id
             LEFT JOIN naves n ON sn.nave_id = n.id AND n.activa = 1
-            WHERE g.organizacion_id = :uid AND s.activo = 1
+            WHERE g.organizacion_id = :uid AND s.activo = 1 $filter
             GROUP BY s.id
             ORDER BY g.nombre, s.nombre
         ");
@@ -36,6 +37,7 @@ class Silo
 
     public function find(int $id, int $userId): ?array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $stmt = $this->db->prepare("
             SELECT s.*, g.nombre AS granja_nombre,
                    GROUP_CONCAT(n.nombre ORDER BY n.nombre SEPARATOR ', ') AS naves_abastecidas
@@ -43,7 +45,7 @@ class Silo
             JOIN granjas g ON s.granja_id = g.id
             LEFT JOIN silo_nave sn ON sn.silo_id = s.id
             LEFT JOIN naves n ON sn.nave_id = n.id AND n.activa = 1
-            WHERE s.id = :id AND g.organizacion_id = :uid
+            WHERE s.id = :id AND g.organizacion_id = :uid $filter
             GROUP BY s.id
         ");
         $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
@@ -435,7 +437,8 @@ class Silo
      */
     private function buildRecargaFiltros(int $userId, array $filtros): array
     {
-        $conditions = ['g.organizacion_id = :uid'];
+        $filter     = \App\Core\OrgContext::granjaFilterSql('g.id');
+        $conditions = ["g.organizacion_id = :uid $filter"];
         $params     = ['uid' => \App\Core\OrgContext::id()];
 
         if (!empty($filtros['fecha_desde'])) {

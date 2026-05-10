@@ -17,6 +17,7 @@ class Nave
 
     public function allByUsuario(int $userId, ?int $granjaId = null): array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $sql = "
             SELECT n.*, g.nombre AS granja_nombre,
                    COALESCE((
@@ -27,7 +28,7 @@ class Nave
                    ), 0) AS ocupacion_actual
             FROM naves n
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.organizacion_id = :uid AND n.activa = 1
+            WHERE g.organizacion_id = :uid AND n.activa = 1 $filter
         ";
         $params = ['uid' => \App\Core\OrgContext::id()];
 
@@ -44,11 +45,12 @@ class Nave
 
     public function find(int $id, int $userId): ?array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $stmt = $this->db->prepare("
             SELECT n.*, g.nombre AS granja_nombre, g.id AS granja_id
             FROM naves n
             JOIN granjas g ON n.granja_id = g.id
-            WHERE n.id = :id AND g.organizacion_id = :uid
+            WHERE n.id = :id AND g.organizacion_id = :uid $filter
         ");
         $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
         $row = $stmt->fetch();
@@ -97,6 +99,7 @@ class Nave
 
     public function totales(int $userId): array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $stmt = $this->db->prepare("
             SELECT
                 COALESCE(SUM(n.capacidad_maxima), 0)           AS capacidad_total,
@@ -107,7 +110,7 @@ class Nave
                 SELECT nave_id, SUM(num_animales) AS ocupacion
                 FROM lotes WHERE estado = 'activo' GROUP BY nave_id
             ) lotes_nave ON lotes_nave.nave_id = n.id
-            WHERE g.organizacion_id = :uid AND n.activa = 1
+            WHERE g.organizacion_id = :uid AND n.activa = 1 $filter
         ");
         $stmt->execute(['uid' => \App\Core\OrgContext::id()]);
         return $stmt->fetch() ?: ['capacidad_total' => 0, 'ocupacion_total' => 0];
@@ -131,11 +134,12 @@ class Nave
 
     public function selectOptions(int $userId, ?int $granjaId = null): array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $sql = "
             SELECT n.id, n.nombre, g.nombre AS granja_nombre
             FROM naves n
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.organizacion_id = :uid AND n.activa = 1
+            WHERE g.organizacion_id = :uid AND n.activa = 1 $filter
         ";
         $params = ['uid' => \App\Core\OrgContext::id()];
         if ($granjaId) {

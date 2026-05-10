@@ -33,6 +33,7 @@ class Cuadra
 
     public function allByUsuario(int $userId, ?int $naveId = null): array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $sql = "
             SELECT c.*,
                    n.nombre AS nave_nombre,
@@ -43,7 +44,7 @@ class Cuadra
             JOIN naves n   ON c.nave_id   = n.id
             JOIN granjas g ON n.granja_id = g.id
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
-            WHERE g.organizacion_id = :uid AND c.activa = 1
+            WHERE g.organizacion_id = :uid AND c.activa = 1 $filter
         ";
         $params = ['uid' => \App\Core\OrgContext::id()];
 
@@ -60,12 +61,13 @@ class Cuadra
 
     public function find(int $id, int $userId): ?array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $stmt = $this->db->prepare("
             SELECT c.*, n.nombre AS nave_nombre, g.nombre AS granja_nombre
             FROM cuadras c
             JOIN naves n   ON c.nave_id   = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE c.id = :id AND g.organizacion_id = :uid
+            WHERE c.id = :id AND g.organizacion_id = :uid $filter
         ");
         $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
         $row = $stmt->fetch();
@@ -191,12 +193,13 @@ class Cuadra
 
     public function selectOptions(int $userId, ?int $naveId = null): array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $sql = "
             SELECT c.id, c.nombre, n.nombre AS nave_nombre, g.nombre AS granja_nombre
             FROM cuadras c
             JOIN naves n   ON c.nave_id   = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.organizacion_id = :uid AND c.activa = 1
+            WHERE g.organizacion_id = :uid AND c.activa = 1 $filter
         ";
         $params = ['uid' => \App\Core\OrgContext::id()];
         if ($naveId) {

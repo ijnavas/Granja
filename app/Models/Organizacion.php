@@ -103,6 +103,46 @@ class Organizacion
     }
 
     /**
+     * IDs de granjas asignadas explícitamente a un usuario en una org.
+     * Devuelve [] si no hay restricción (ve todas) o lista de IDs.
+     */
+    public function granjasAsignadas(int $userId, int $orgId): array
+    {
+        $stmt = $this->db->prepare("
+            SELECT granja_id FROM granja_miembros
+            WHERE usuario_id = :u AND organizacion_id = :o
+        ");
+        $stmt->execute(['u' => $userId, 'o' => $orgId]);
+        return array_map('intval', $stmt->fetchAll(PDO::FETCH_COLUMN));
+    }
+
+    /**
+     * Reemplaza las granjas asignadas a un usuario en una org.
+     * Si $granjaIds está vacío, deja al usuario "sin restricción" (ve todas).
+     */
+    public function setGranjasAsignadas(int $userId, int $orgId, array $granjaIds): void
+    {
+        $this->db->beginTransaction();
+        try {
+            $this->db->prepare("DELETE FROM granja_miembros WHERE usuario_id = :u AND organizacion_id = :o")
+                     ->execute(['u' => $userId, 'o' => $orgId]);
+            if (!empty($granjaIds)) {
+                $stmt = $this->db->prepare("
+                    INSERT IGNORE INTO granja_miembros (granja_id, usuario_id, organizacion_id)
+                    VALUES (:g, :u, :o)
+                ");
+                foreach ($granjaIds as $g) {
+                    $stmt->execute(['g' => (int)$g, 'u' => $userId, 'o' => $orgId]);
+                }
+            }
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
      * Garantiza que el usuario tenga al menos una organización. Si no
      * tiene, crea una "personal" (su nombre + ' (personal)') donde es
      * owner, y migra sus granjas/inventarios/etiquetas/razas/tablas a

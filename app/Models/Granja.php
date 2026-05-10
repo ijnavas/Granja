@@ -27,6 +27,7 @@ class Granja
 
     public function allByOrg(int $orgId): array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
         $stmt = $this->db->prepare("
             SELECT g.*,
                    COUNT(DISTINCT n.id) AS num_naves,
@@ -34,7 +35,7 @@ class Granja
             FROM granjas g
             LEFT JOIN naves n ON n.granja_id = g.id AND n.activa = 1
             LEFT JOIN silos s ON s.granja_id = g.id AND s.activo = 1
-            WHERE g.organizacion_id = :oid AND g.activa = 1
+            WHERE g.organizacion_id = :oid AND g.activa = 1 $filter
             GROUP BY g.id
             ORDER BY g.nombre
         ");
@@ -44,7 +45,8 @@ class Granja
 
     public function find(int $id, int $userId): ?array
     {
-        // userId se ignora; se filtra por org activa.
+        // userId se ignora; se filtra por org activa + visibilidad de granja.
+        if (!\App\Core\OrgContext::puedeVerGranja($id)) return null;
         $stmt = $this->db->prepare("
             SELECT * FROM granjas WHERE id = :id AND organizacion_id = :oid AND activa = 1
         ");
@@ -104,9 +106,10 @@ class Granja
 
     public function selectOptions(int $userId): array
     {
+        $filter = \App\Core\OrgContext::granjaFilterSql('id');
         $stmt = $this->db->prepare("
             SELECT id, nombre, especie, tipo_produccion FROM granjas
-            WHERE organizacion_id = :oid AND activa = 1 ORDER BY nombre
+            WHERE organizacion_id = :oid AND activa = 1 $filter ORDER BY nombre
         ");
         $stmt->execute(['oid' => \App\Core\OrgContext::id()]);
         return $stmt->fetchAll();

@@ -20,7 +20,12 @@ class Lote
      */
     private function buildLoteFiltros(int $userId, array $filtros): array
     {
-        $conditions = ['(g.organizacion_id = :uid OR g2.organizacion_id = :uid2)'];
+        $orgFilter1 = \App\Core\OrgContext::granjaFilterSql('g.id');
+        $orgFilter2 = \App\Core\OrgContext::granjaFilterSql('g2.id');
+        // Wrap por nave (g) y por granja directa (g2). Cada lado debe ser visible.
+        $conditions = [
+            "( (g.organizacion_id = :uid $orgFilter1) OR (g2.organizacion_id = :uid2 $orgFilter2) )"
+        ];
         $params     = ['uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()];
 
         if (!empty($filtros['estado'])) {
@@ -118,6 +123,8 @@ class Lote
 
     public function find(int $id, int $userId): ?array
     {
+        $f1 = \App\Core\OrgContext::granjaFilterSql('g.id');
+        $f2 = \App\Core\OrgContext::granjaFilterSql('g2.id');
         $stmt = $this->db->prepare("
             SELECT l.*, ta.nombre AS tipo_animal_nombre,
                    n.nombre AS nave_nombre,
@@ -128,7 +135,7 @@ class Lote
             LEFT JOIN naves n   ON l.nave_id    = n.id
             LEFT JOIN granjas g ON n.granja_id  = g.id
             LEFT JOIN granjas g2 ON l.granja_id = g2.id
-            WHERE l.id = :id AND (g.organizacion_id = :uid OR g2.organizacion_id = :uid2 OR (l.nave_id IS NULL AND l.granja_id IS NULL))
+            WHERE l.id = :id AND ((g.organizacion_id = :uid $f1) OR (g2.organizacion_id = :uid2 $f2) OR (l.nave_id IS NULL AND l.granja_id IS NULL))
         ");
         $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()]);
         $row = $stmt->fetch();
@@ -343,6 +350,8 @@ class Lote
 
     public function allCerradosByUsuario(int $userId): array
     {
+        $f1 = \App\Core\OrgContext::granjaFilterSql('g.id');
+        $f2 = \App\Core\OrgContext::granjaFilterSql('g2.id');
         $stmt = $this->db->prepare("
             SELECT l.*,
                    ta.nombre  AS tipo_animal_nombre,
@@ -366,7 +375,7 @@ class Lote
             LEFT JOIN razas_porcino r ON l.raza_id = r.id
             LEFT JOIN movimientos m ON m.lote_origen_id = l.id
             WHERE l.estado = 'cerrado'
-              AND (g.organizacion_id = :uid OR g2.organizacion_id = :uid2)
+              AND ((g.organizacion_id = :uid $f1) OR (g2.organizacion_id = :uid2 $f2))
             GROUP BY l.id
             ORDER BY COALESCE(l.fecha_cierre, l.fecha_entrada) DESC
         ");
@@ -397,7 +406,7 @@ class Lote
             LEFT JOIN granjas g2 ON l.granja_id  = g2.id
             LEFT JOIN razas_porcino r ON l.raza_id = r.id
             LEFT JOIN movimientos m ON m.lote_origen_id = l.id
-            WHERE l.id = :id AND (g.organizacion_id = :uid OR g2.organizacion_id = :uid2)
+            WHERE l.id = :id AND ((g.organizacion_id = :uid " . \App\Core\OrgContext::granjaFilterSql('g.id') . ") OR (g2.organizacion_id = :uid2 " . \App\Core\OrgContext::granjaFilterSql('g2.id') . "))
             GROUP BY l.id
         ");
         $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()]);

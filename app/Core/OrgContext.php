@@ -67,4 +67,70 @@ final class OrgContext
         Session::set('current_org_rol', $rol);
         return true;
     }
+
+    /**
+     * IDs de granjas visibles para el usuario actual en la org activa.
+     *
+     * Devuelve:
+     *   - null  → ver todas (owner/admin, o operario/lector sin restricción)
+     *   - array → lista de granja_id permitidos (operario/lector restringido)
+     */
+    public static function granjasVisibles(): ?array
+    {
+        // Cache por request: el resultado no cambia dentro del mismo proceso.
+        static $cache = null;
+        if ($cache !== null) {
+            return $cache === 'all' ? null : $cache;
+        }
+
+        if (self::esAdmin()) {
+            $cache = 'all';
+            return null;
+        }
+
+        $userId = (int) (Session::get('usuario_id') ?? 0);
+        $orgId  = self::id();
+        if ($userId <= 0 || $orgId <= 0) {
+            $cache = 'all';
+            return null;
+        }
+
+        $stmt = Database::getInstance()->prepare("
+            SELECT granja_id FROM granja_miembros
+            WHERE usuario_id = :uid AND organizacion_id = :oid
+        ");
+        $stmt->execute(['uid' => $userId, 'oid' => $orgId]);
+        $ids = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+
+        if (empty($ids)) {
+            $cache = 'all';
+            return null;
+        }
+
+        $cache = array_map('intval', $ids);
+        return $cache;
+    }
+
+    /**
+     * Devuelve un fragmento SQL " AND <colExpr> IN (1,2,3) " (con espacios)
+     * que se puede concatenar en queries para restringir por granja.
+     * Si el usuario ve todas, devuelve "" (sin filtro).
+     * Los IDs se castean a int — seguro contra inyección.
+     */
+    public static function granjaFilterSql(string $colExpr = 'g.id'): string
+    {
+        $ids = self::granjasVisibles();
+        if ($ids === null) return '';
+        if (empty($ids))  return ' AND 1=0 ';
+        $list = implode(',', array_map('intval', $ids));
+        return " AND $colExpr IN ($list) ";
+    }
+
+    /** ¿Puede el usuario actual acceder a esta granja? */
+    public static function puedeVerGranja(int $granjaId): bool
+    {
+        $ids = self::granjasVisibles();
+        if ($ids === null) return true;
+        return in_array($granjaId, $ids, true);
+    }
 }

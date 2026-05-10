@@ -145,7 +145,7 @@ class Inventario
                     SELECT MAX(r2.fecha) FROM silo_recargas r2
                     WHERE r2.silo_id = s.id AND r2.tipo_pienso IS NOT NULL
                 )
-            WHERE g.organizacion_id = :uid AND s.activo = 1
+            WHERE g.organizacion_id = :uid AND s.activo = 1 " . \App\Core\OrgContext::granjaFilterSql('g.id') . "
             GROUP BY s.id
             ORDER BY g.nombre, s.nombre
         ");
@@ -211,7 +211,7 @@ class Inventario
             LEFT JOIN tablas_crecimiento_lineas tcl_p
                 ON tcl_p.tabla_id = tc.id
                 AND tcl_p.semana  = CEIL(DATEDIFF(ult_p.fecha, l.fecha_nacimiento) / 7)
-            WHERE g.organizacion_id      = :uid
+            WHERE g.organizacion_id      = :uid " . \App\Core\OrgContext::granjaFilterSql('g.id') . "
               AND l.fecha_nacimiento <= :fecha3
               AND l.fecha_nacimiento IS NOT NULL
             ORDER BY g.nombre, n.nombre, LENGTH(c.nombre), c.nombre, l.codigo
@@ -226,7 +226,7 @@ class Inventario
             FROM movimientos m
             JOIN lotes l   ON m.lote_origen_id = l.id
             JOIN granjas g ON l.granja_id = g.id
-            WHERE g.organizacion_id = :uid
+            WHERE g.organizacion_id = :uid " . \App\Core\OrgContext::granjaFilterSql('g.id') . "
               AND m.fecha > :fecha
         ");
         $stmtMov->execute(['uid' => \App\Core\OrgContext::id(), 'fecha' => $fecha]);

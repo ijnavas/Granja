@@ -20,7 +20,9 @@ class Movimiento
      */
     private function buildMovFiltros(int $userId, array $filtros): array
     {
-        $conditions = ['(g.organizacion_id = :uid OR gn.organizacion_id = :uid2)'];
+        $f1 = \App\Core\OrgContext::granjaFilterSql('g.id');
+        $f2 = \App\Core\OrgContext::granjaFilterSql('gn.id');
+        $conditions = ["( (g.organizacion_id = :uid $f1) OR (gn.organizacion_id = :uid2 $f2) )"];
         $oid    = \App\Core\OrgContext::id();
         $params = ['uid' => $oid, 'uid2' => $oid];
 
