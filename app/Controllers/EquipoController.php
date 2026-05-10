@@ -9,6 +9,8 @@ use App\Models\Granja;
 use App\Core\Session;
 use App\Core\OrgContext;
 use App\Core\Database;
+use App\Core\Mailer;
+use App\Core\EmailTemplate;
 
 class EquipoController extends BaseController
 {
@@ -89,13 +91,64 @@ class EquipoController extends BaseController
             'ex'  => $expira,
         ]);
 
-        $link = base_url('aceptar-invitacion/' . $token);
-        Session::flash('success',
-            "Invitación creada para <strong>{$email}</strong>. Comparte este enlace (válido 7 días):<br>"
-            . "<code style='background:#e0f2fe;padding:.2rem .5rem;border-radius:.25rem;word-break:break-all;display:inline-block;margin-top:.4rem'>"
-            . e($link) . "</code>"
-        );
+        $link    = base_url('aceptar-invitacion/' . $token);
+        $org     = $this->orgModel->find($orgId);
+        $orgName = (string)($org['nombre'] ?? 'BALTAE');
+        $invName = (string)(Session::get('usuario_nombre') ?? '');
+
+        $emailEnviado = $this->enviarEmailInvitacion($email, $orgName, $invName, $rol, $link, $expira);
+
+        $msg = "Invitación creada para <strong>{$email}</strong>";
+        if ($emailEnviado) {
+            $msg .= " — email enviado correctamente.";
+        } else {
+            $msg .= ". El email automático no se ha podido enviar; comparte este enlace manualmente (válido 7 días):<br>"
+                . "<code style='background:#e0f2fe;padding:.2rem .5rem;border-radius:.25rem;word-break:break-all;display:inline-block;margin-top:.4rem'>"
+                . e($link) . "</code>";
+        }
+        Session::flash('success', $msg);
         $this->redirect('equipo');
+    }
+
+    /** Construye y envía el email de invitación. Devuelve true si OK. */
+    private function enviarEmailInvitacion(
+        string $email, string $orgName, string $invName, string $rol, string $link, string $expira
+    ): bool {
+        $cfg = require ROOT_PATH . '/config.php';
+        if (empty($cfg['mail']['enabled']) || empty($cfg['mail']['smtp']['host'])) {
+            return false;
+        }
+
+        $T = EmailTemplate::class;
+        $body  = $T::title('Invitación a ' . $orgName);
+        $body .= $T::paragraph(
+            'Has sido invitado/a a unirte a la organización <strong>' . e($orgName) . '</strong>'
+            . ($invName ? ' por <strong>' . e($invName) . '</strong>' : '')
+            . ' con el rol <strong>' . e($rol) . '</strong>.'
+        );
+        $body .= $T::dataTable([
+            ['label' => 'Email',  'value' => e($email),    'bold' => true],
+            ['label' => 'Rol',    'value' => e($rol)],
+            ['label' => 'Caduca', 'value' => e(date('d/m/Y H:i', strtotime($expira)))],
+        ]);
+        $body .= $T::paragraph(
+            'Pulsa el botón para aceptar la invitación. Si aún no tienes cuenta, podrás registrarte primero.'
+        );
+        $body .= $T::button('Aceptar invitación', $link);
+        $body .= $T::paragraph(
+            '<span style="font-size:12px;color:#9ca3af">Si el botón no funciona, copia este enlace en tu navegador:<br>'
+            . '<a href="' . e($link) . '" style="color:#3b82f6">' . e($link) . '</a></span>'
+        );
+
+        $html    = $T::build($body, 'blue');
+        $subject = 'Invitación a ' . $orgName . ' · BALTAE';
+
+        try {
+            return (new Mailer())->send($email, $subject, $html, true);
+        } catch (\Throwable $e) {
+            error_log('[EquipoController] email invitación error: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /** Cambiar rol de un miembro (solo admin/owner, no se puede tocar al owner). */
