@@ -1,10 +1,21 @@
 <?php
-/** @var string|null $error   */
-/** @var string|null $success */
-/** @var array       $old     */
-$old       = $old ?? [];
-$pageTitle = 'Crear cuenta';
+/** @var string|null $error       */
+/** @var string|null $success     */
+/** @var array       $old         */
+/** @var string      $emailLocked */
+/** @var string      $orgNombre   */
+$old         = $old ?? [];
+$emailLocked = $emailLocked ?? '';
+$orgNombre   = $orgNombre ?? '';
+$pageTitle   = $emailLocked !== '' ? 'Unirse a ' . $orgNombre : 'Crear cuenta';
 ?>
+
+<?php if ($emailLocked !== ''): ?>
+    <div class="alert alert-success" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0">
+        <strong>Te unes a <?= e($orgNombre) ?></strong><br>
+        <span style="font-size:.82rem">Crea tu cuenta para aceptar la invitación de <strong><?= e($emailLocked) ?></strong>.</span>
+    </div>
+<?php endif; ?>
 
 <?php if ($error): ?>
     <div class="alert alert-error"><?= $error ?></div>
@@ -16,6 +27,9 @@ $pageTitle = 'Crear cuenta';
 
 <form method="POST" action="<?= base_url('register') ?>" novalidate>
     <?= csrf_field() ?>
+    <?php if ($emailLocked !== ''): ?>
+        <input type="hidden" name="invitation_token" value="<?= e($_GET['token'] ?? '') ?>">
+    <?php endif; ?>
 
     <div class="form-group">
         <label for="nombre">Nombre completo</label>
@@ -39,8 +53,12 @@ $pageTitle = 'Crear cuenta';
             required
             autocomplete="email"
             placeholder="tucorreo@ejemplo.com"
-            value="<?= e($old['email'] ?? '') ?>"
+            value="<?= e($emailLocked !== '' ? $emailLocked : ($old['email'] ?? '')) ?>"
+            <?= $emailLocked !== '' ? 'readonly style="background:#f3f4f6;color:#6b7280;cursor:not-allowed"' : '' ?>
         >
+        <?php if ($emailLocked !== ''): ?>
+            <p class="password-hint">Email bloqueado por la invitación. <a href="<?= base_url('register') ?>" style="color:#1a56db">Cancelar invitación</a></p>
+        <?php endif; ?>
     </div>
 
     <div class="form-group">

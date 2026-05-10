@@ -14,11 +14,20 @@
     <p style="font-size:.85rem;color:#6b7280">La invitación es para <strong><?= e($inv['email']) ?></strong> y caduca el <?= date('d/m/Y', strtotime($inv['expira_at'])) ?>.</p>
 
     <?php if (!$logueado): ?>
-        <div class="alert-flash" style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;margin:1rem 0">
-            Debes iniciar sesión con la cuenta <strong><?= e($inv['email']) ?></strong> antes de aceptar.
-            <br>¿No tienes cuenta? <a href="<?= base_url('register') ?>">Regístrate primero</a>.
-        </div>
-        <a href="<?= base_url('login') ?>" class="btn btn-primary">Iniciar sesión</a>
+        <?php if ($existeCuenta): ?>
+            <div class="alert-flash" style="background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;margin:1rem 0">
+                Ya existe una cuenta con el email <strong><?= e($inv['email']) ?></strong>.
+                Inicia sesión para aceptar la invitación.
+            </div>
+            <a href="<?= base_url('login') ?>" class="btn btn-primary">Iniciar sesión</a>
+        <?php else: ?>
+            <div class="alert-flash" style="background:#dcfce7;color:#166534;border:1px solid #bbf7d0;margin:1rem 0">
+                Crea tu cuenta para unirte directamente a <strong><?= e($inv['org_nombre']) ?></strong>.
+                Tu email <strong><?= e($inv['email']) ?></strong> ya está bloqueado para esta invitación.
+            </div>
+            <a href="<?= base_url('register?token=' . urlencode($token)) ?>" class="btn btn-primary">Crear cuenta y unirme</a>
+            <span style="margin-left:.75rem;font-size:.85rem;color:#6b7280">¿Ya tienes cuenta? <a href="<?= base_url('login') ?>">Inicia sesión</a></span>
+        <?php endif; ?>
     <?php else: ?>
         <form method="POST" action="<?= base_url('aceptar-invitacion/' . $token) ?>">
             <?= csrf_field() ?>

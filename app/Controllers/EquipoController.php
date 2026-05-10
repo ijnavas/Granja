@@ -74,6 +74,15 @@ class EquipoController extends BaseController
         $rol = $this->postString('rol') ?: 'operario';
         if (!in_array($rol, ['admin', 'operario', 'lector'], true)) $rol = 'operario';
 
+        // Solo el super-usuario (rol global 'admin' en usuarios.rol) puede
+        // crear invitaciones con rol 'admin'. Los owners/admins de una org
+        // que no sean super-usuario solo pueden invitar operario o lector.
+        $rolGlobal = (string) (Session::get('usuario_rol') ?? 'usuario');
+        if ($rol === 'admin' && $rolGlobal !== 'admin') {
+            Session::flash('error', 'Solo un super-usuario puede invitar administradores. Usa rol Operario o Lector.');
+            $this->redirect('equipo');
+        }
+
         $orgId   = OrgContext::id();
         $invitor = (int) Session::get('usuario_id');
         $token   = bin2hex(random_bytes(24));
@@ -281,16 +290,19 @@ class EquipoController extends BaseController
 
         // Si la invitación es válida y el usuario no está logueado, guardamos el
         // token en sesión para que tras login/register vuelva aquí automaticamente.
+        $existeCuenta = false;
         if ($inv && !Session::has('usuario_id')) {
             Session::set('pending_invitation_token', $token);
+            $existeCuenta = (new Usuario())->emailExists((string)$inv['email']);
         }
 
         $this->view('equipo/aceptar', [
-            'pageTitle' => 'Aceptar invitación',
-            'inv'       => $inv,
-            'token'     => $token,
-            'logueado'  => Session::has('usuario_id'),
-            'error'     => Session::getFlash('error'),
+            'pageTitle'    => 'Aceptar invitación',
+            'inv'          => $inv,
+            'token'        => $token,
+            'logueado'     => Session::has('usuario_id'),
+            'existeCuenta' => $existeCuenta,
+            'error'        => Session::getFlash('error'),
         ]);
     }
 

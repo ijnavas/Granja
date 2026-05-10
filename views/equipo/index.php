@@ -71,10 +71,13 @@
             </div>
             <div class="form-group">
                 <label>Rol *</label>
+                <?php $superUser = (auth_rol() === 'admin'); ?>
                 <select name="rol" required>
                     <option value="operario" selected>Operario</option>
-                    <option value="admin">Admin</option>
                     <option value="lector">Lector (solo lectura)</option>
+                    <?php if ($superUser): ?>
+                    <option value="admin">Admin</option>
+                    <?php endif; ?>
                 </select>
             </div>
         </div>

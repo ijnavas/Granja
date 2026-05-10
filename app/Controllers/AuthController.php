@@ -167,11 +167,35 @@ class AuthController extends BaseController
     public function registerForm(): void
     {
         guest_only();
+
+        // Si viene de una invitación (?token=XXX), bloqueamos el email al
+        // de la invitación. El token se reenvía como hidden field y se
+        // usa en POST para auto-aceptar tras crear la cuenta.
+        $token       = (string) ($_GET['token'] ?? '');
+        $emailLocked = '';
+        $orgNombre   = '';
+        if ($token !== '') {
+            $stmt = \App\Core\Database::getInstance()->prepare("
+                SELECT i.email, o.nombre AS org_nombre
+                FROM invitaciones_organizacion i
+                JOIN organizaciones o ON o.id = i.organizacion_id
+                WHERE i.token = :tk AND i.aceptado_at IS NULL AND i.expira_at > NOW()
+                LIMIT 1
+            ");
+            $stmt->execute(['tk' => $token]);
+            if ($inv = $stmt->fetch()) {
+                $emailLocked = (string) $inv['email'];
+                $orgNombre   = (string) $inv['org_nombre'];
+            }
+        }
+
         $oldRaw = Session::getFlash('old');
         $this->view('auth/register', [
-            'error'   => Session::getFlash('error'),
-            'success' => Session::getFlash('success'),
-            'old'     => $oldRaw ? (json_decode($oldRaw, true) ?: []) : [],
+            'error'       => Session::getFlash('error'),
+            'success'     => Session::getFlash('success'),
+            'old'         => $oldRaw ? (json_decode($oldRaw, true) ?: []) : [],
+            'emailLocked' => $emailLocked,
+            'orgNombre'   => $orgNombre,
         ], 'auth');
     }
 
@@ -209,14 +233,78 @@ class AuthController extends BaseController
             $this->redirect('register');
         }
 
+        // Si viene de una invitación (token en POST), validar email vs invitación
+        $invitationToken = (string) $this->postString('invitation_token');
+        if ($invitationToken !== '') {
+            $stmt = \App\Core\Database::getInstance()->prepare("
+                SELECT email FROM invitaciones_organizacion
+                WHERE token = :tk AND aceptado_at IS NULL AND expira_at > NOW() LIMIT 1
+            ");
+            $stmt->execute(['tk' => $invitationToken]);
+            $inv = $stmt->fetch();
+            if (!$inv || strtolower((string)$inv['email']) !== $email) {
+                Session::flash('error', 'El email no coincide con el de la invitación.');
+                $this->redirect('register?token=' . urlencode($invitationToken));
+            }
+        }
+
         $newId = $this->usuario->create($nombre, $email, $password);
         SecurityLog::log('register_success', ['user_id' => $newId, 'email' => $email]);
 
         // Email de bienvenida (no bloquear el registro si falla)
         $this->enviarEmailBienvenida($email, $nombre);
 
+        // Si venía de una invitación, auto-aceptar y auto-login
+        if ($invitationToken !== '') {
+            $this->aceptarInvitacionAutomatica($invitationToken, $newId, $email, $nombre);
+            return; // redirige dentro
+        }
+
         Session::flash('success', '¡Cuenta creada! Ya puedes iniciar sesión.');
         $this->redirect('login');
+    }
+
+    /**
+     * Tras un registro originado por una invitación: vincula al usuario a la org,
+     * marca la invitación como aceptada, abre sesión y redirige al dashboard.
+     */
+    private function aceptarInvitacionAutomatica(string $token, int $userId, string $email, string $nombre): void
+    {
+        $db = \App\Core\Database::getInstance();
+        $stmt = $db->prepare("
+            SELECT * FROM invitaciones_organizacion
+            WHERE token = :tk AND aceptado_at IS NULL AND expira_at > NOW() LIMIT 1
+        ");
+        $stmt->execute(['tk' => $token]);
+        $inv = $stmt->fetch();
+        if (!$inv) {
+            Session::flash('error', 'La invitación ya no es válida.');
+            $this->redirect('login');
+        }
+
+        // Vincular y marcar aceptada
+        $orgModel = new \App\Models\Organizacion();
+        $orgModel->vincular(
+            (int)$inv['organizacion_id'], $userId, (string)$inv['rol'], (int)$inv['invitado_por']
+        );
+        $db->prepare("UPDATE invitaciones_organizacion SET aceptado_at = NOW() WHERE id = :id")
+           ->execute(['id' => $inv['id']]);
+
+        // Abrir sesión (auto-login)
+        session_regenerate_id(true);
+        Session::rotateCsrf();
+        Session::set('usuario_id',     $userId);
+        Session::set('usuario_nombre', $nombre);
+        Session::set('usuario_email',  $email);
+        Session::set('usuario_rol',    'usuario');
+        Session::set('current_org_id',  (int)$inv['organizacion_id']);
+        Session::set('current_org_rol', (string)$inv['rol']);
+        Session::set('pending_invitation_token', null);
+
+        SecurityLog::log('login_success', ['user_id' => $userId, 'via' => 'invitation_register']);
+
+        Session::flash('success', '¡Bienvenido/a! Te has unido a la organización.');
+        $this->redirect('dashboard');
     }
 
     /** Envía el email de bienvenida tras un registro correcto. */
