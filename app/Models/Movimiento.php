@@ -20,8 +20,9 @@ class Movimiento
      */
     private function buildMovFiltros(int $userId, array $filtros): array
     {
-        $conditions = ['(g.usuario_id = :uid OR gn.usuario_id = :uid2)'];
-        $params = ['uid' => $userId, 'uid2' => $userId];
+        $conditions = ['(g.organizacion_id = :uid OR gn.organizacion_id = :uid2)'];
+        $oid    = \App\Core\OrgContext::id();
+        $params = ['uid' => $oid, 'uid2' => $oid];
 
         if (!empty($filtros['fecha_desde'])) {
             $conditions[] = 'm.fecha >= :fecha_desde';

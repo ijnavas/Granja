@@ -27,9 +27,9 @@ class Nave
                    ), 0) AS ocupacion_actual
             FROM naves n
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.usuario_id = :uid AND n.activa = 1
+            WHERE g.organizacion_id = :uid AND n.activa = 1
         ";
-        $params = ['uid' => $userId];
+        $params = ['uid' => \App\Core\OrgContext::id()];
 
         if ($granjaId) {
             $sql .= " AND n.granja_id = :granja_id";
@@ -48,9 +48,9 @@ class Nave
             SELECT n.*, g.nombre AS granja_nombre, g.id AS granja_id
             FROM naves n
             JOIN granjas g ON n.granja_id = g.id
-            WHERE n.id = :id AND g.usuario_id = :uid
+            WHERE n.id = :id AND g.organizacion_id = :uid
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -77,7 +77,7 @@ class Nave
                 n.alto_m = :alto_m,
                 n.largo_m = :largo_m,
                 n.descripcion = :descripcion
-            WHERE n.id = :id AND g.usuario_id = :usuario_id
+            WHERE n.id = :id AND g.organizacion_id = :usuario_id
         ");
         $data['id'] = $id;
         $data['usuario_id'] = $userId;
@@ -90,9 +90,9 @@ class Nave
             UPDATE naves n
             JOIN granjas g ON n.granja_id = g.id
             SET n.activa = 0
-            WHERE n.id = :id AND g.usuario_id = :uid
+            WHERE n.id = :id AND g.organizacion_id = :uid
         ");
-        return $stmt->execute(['id' => $id, 'uid' => $userId]);
+        return $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
     }
 
     public function totales(int $userId): array
@@ -107,9 +107,9 @@ class Nave
                 SELECT nave_id, SUM(num_animales) AS ocupacion
                 FROM lotes WHERE estado = 'activo' GROUP BY nave_id
             ) lotes_nave ON lotes_nave.nave_id = n.id
-            WHERE g.usuario_id = :uid AND n.activa = 1
+            WHERE g.organizacion_id = :uid AND n.activa = 1
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['uid' => \App\Core\OrgContext::id()]);
         return $stmt->fetch() ?: ['capacidad_total' => 0, 'ocupacion_total' => 0];
     }
 
@@ -135,9 +135,9 @@ class Nave
             SELECT n.id, n.nombre, g.nombre AS granja_nombre
             FROM naves n
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.usuario_id = :uid AND n.activa = 1
+            WHERE g.organizacion_id = :uid AND n.activa = 1
         ";
-        $params = ['uid' => $userId];
+        $params = ['uid' => \App\Core\OrgContext::id()];
         if ($granjaId) {
             $sql .= " AND n.granja_id = :granja_id";
             $params['granja_id'] = $granjaId;

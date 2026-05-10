@@ -49,7 +49,7 @@ class DashboardController extends BaseController
             FROM lotes l
             JOIN naves n ON l.nave_id = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
               AND l.estado = 'activo'
         ");
         $stmt->execute(['uid' => $userId]);
@@ -62,7 +62,7 @@ class DashboardController extends BaseController
             JOIN lotes l ON m.lote_id = l.id
             JOIN naves n ON l.nave_id = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
               AND m.tipo = 'baja'
               AND m.fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
         ");
@@ -76,7 +76,7 @@ class DashboardController extends BaseController
             JOIN lotes l ON m.lote_id = l.id
             JOIN naves n ON l.nave_id = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
               AND m.tipo = 'baja'
               AND m.fecha >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         ");
@@ -90,7 +90,7 @@ class DashboardController extends BaseController
             JOIN lotes l ON p.lote_id = l.id
             JOIN naves n ON l.nave_id = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
               AND l.estado = 'activo'
               AND p.ic_real IS NOT NULL
         ");
@@ -138,7 +138,7 @@ class DashboardController extends BaseController
             JOIN lotes l ON m.lote_id = l.id
             JOIN naves n ON l.nave_id = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
               AND m.tipo = 'baja'
               AND m.fecha >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
             GROUP BY l.id, l.codigo, g.nombre, n.nombre, l.num_animales
@@ -176,7 +176,7 @@ class DashboardController extends BaseController
             ) p ON p.lote_id = l.id
             JOIN lineas_tabla lt ON lt.tabla_id = tc.id
                 AND lt.dia = DATEDIFF(CURDATE(), l.fecha_entrada)
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
               AND l.estado = 'activo'
               AND ABS((p.peso_medio_kg - lt.peso_esperado_kg) / lt.peso_esperado_kg) > 0.10
             ORDER BY desviacion_pct ASC
@@ -217,7 +217,7 @@ class DashboardController extends BaseController
             JOIN tablas_crecimiento tc       ON tc.id        = tr.tabla_id AND tc.activa = 1
             JOIN tablas_crecimiento_lineas tcl ON tcl.tabla_id = tc.id
                 AND tcl.peso_kg >= 150
-            WHERE g.usuario_id   = :uid
+            WHERE g.organizacion_id   = :uid
               AND l.estado       = 'activo'
               AND l.raza_id      IS NOT NULL
               AND l.fecha_nacimiento IS NOT NULL
@@ -257,7 +257,7 @@ class DashboardController extends BaseController
             JOIN naves n ON l.nave_id = n.id
             JOIN granjas g ON n.granja_id = g.id
             LEFT JOIN naves nd ON m.nave_destino_id = nd.id
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
             ORDER BY m.fecha DESC, m.id DESC
             LIMIT 10
         ");
@@ -276,7 +276,7 @@ class DashboardController extends BaseController
             FROM naves n
             JOIN granjas g ON n.granja_id = g.id
             LEFT JOIN lotes l ON l.nave_id = n.id AND l.estado = 'activo'
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
               AND n.activa = 1
             GROUP BY n.id, n.nombre, g.nombre, n.capacidad_maxima
             ORDER BY g.nombre, n.nombre

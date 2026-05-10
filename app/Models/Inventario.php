@@ -27,20 +27,20 @@ class Inventario
             FROM inventarios i
             LEFT JOIN inventario_lineas il  ON il.inventario_id  = i.id
             LEFT JOIN inventario_silos  ins ON ins.inventario_id = i.id
-            WHERE i.usuario_id = :uid
+            WHERE i.organizacion_id = :uid
             GROUP BY i.id
             ORDER BY i.fecha DESC, i.created_at DESC
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['uid' => \App\Core\OrgContext::id()]);
         return $stmt->fetchAll();
     }
 
     public function find(int $id, int $userId): ?array
     {
         $stmt = $this->db->prepare("
-            SELECT * FROM inventarios WHERE id = :id AND usuario_id = :uid
+            SELECT * FROM inventarios WHERE id = :id AND organizacion_id = :uid
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
         return $stmt->fetch() ?: null;
     }
 
@@ -68,9 +68,16 @@ class Inventario
     public function create(int $userId, string $fecha, ?string $nombre, string $tipo): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO inventarios (usuario_id, fecha, nombre, tipo) VALUES (:uid, :fecha, :nombre, :tipo)
+            INSERT INTO inventarios (usuario_id, organizacion_id, fecha, nombre, tipo)
+            VALUES (:uid, :oid, :fecha, :nombre, :tipo)
         ");
-        $stmt->execute(['uid' => $userId, 'fecha' => $fecha, 'nombre' => $nombre, 'tipo' => $tipo]);
+        $stmt->execute([
+            'uid'    => $userId,
+            'oid'    => \App\Core\OrgContext::id(),
+            'fecha'  => $fecha,
+            'nombre' => $nombre,
+            'tipo'   => $tipo,
+        ]);
         return (int) $this->db->lastInsertId();
     }
 
@@ -138,11 +145,11 @@ class Inventario
                     SELECT MAX(r2.fecha) FROM silo_recargas r2
                     WHERE r2.silo_id = s.id AND r2.tipo_pienso IS NOT NULL
                 )
-            WHERE g.usuario_id = :uid AND s.activo = 1
+            WHERE g.organizacion_id = :uid AND s.activo = 1
             GROUP BY s.id
             ORDER BY g.nombre, s.nombre
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['uid' => \App\Core\OrgContext::id()]);
         $rows = $stmt->fetchAll();
 
         // Enriquecer con stock real via replay completo del timeline de recargas.
@@ -204,12 +211,12 @@ class Inventario
             LEFT JOIN tablas_crecimiento_lineas tcl_p
                 ON tcl_p.tabla_id = tc.id
                 AND tcl_p.semana  = CEIL(DATEDIFF(ult_p.fecha, l.fecha_nacimiento) / 7)
-            WHERE g.usuario_id      = :uid
+            WHERE g.organizacion_id      = :uid
               AND l.fecha_nacimiento <= :fecha3
               AND l.fecha_nacimiento IS NOT NULL
             ORDER BY g.nombre, n.nombre, LENGTH(c.nombre), c.nombre, l.codigo
         ");
-        $stmt->execute(['uid' => $userId, 'fecha1' => $fecha, 'fecha2' => $fecha, 'fecha3' => $fecha, 'fecha4' => $fecha]);
+        $stmt->execute(['uid' => \App\Core\OrgContext::id(), 'fecha1' => $fecha, 'fecha2' => $fecha, 'fecha3' => $fecha, 'fecha4' => $fecha]);
         $rows = $stmt->fetchAll();
 
         // 2. Movimientos POSTERIORES a la fecha para reconstruir conteos
@@ -219,10 +226,10 @@ class Inventario
             FROM movimientos m
             JOIN lotes l   ON m.lote_origen_id = l.id
             JOIN granjas g ON l.granja_id = g.id
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
               AND m.fecha > :fecha
         ");
-        $stmtMov->execute(['uid' => $userId, 'fecha' => $fecha]);
+        $stmtMov->execute(['uid' => \App\Core\OrgContext::id(), 'fecha' => $fecha]);
 
         // Ajuste a nivel de lote (para modo global)
         $ajusteLote = [];

@@ -20,8 +20,8 @@ class Pesaje
      */
     private function buildPesajeFiltros(int $userId, array $filtros): array
     {
-        $conditions = ['g.usuario_id = :uid'];
-        $params     = ['uid' => $userId];
+        $conditions = ['g.organizacion_id = :uid'];
+        $params     = ['uid' => \App\Core\OrgContext::id()];
 
         if (!empty($filtros['fecha_desde'])) {
             $conditions[] = 'p.fecha >= :fecha_desde';

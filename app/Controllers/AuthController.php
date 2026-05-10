@@ -115,6 +115,15 @@ class AuthController extends BaseController
         Session::set('usuario_email',  $user['email']);
         Session::set('usuario_rol',    $user['rol'] ?? 'usuario');
 
+        // Auto-instalar organización si el usuario no tiene; migra granjas/
+        // inventarios/etiquetas/razas/tablas legacy a esa org. Si ya tiene
+        // una o varias, escoge la primera (owner antes que el resto).
+        $orgModel = new \App\Models\Organizacion();
+        $orgId    = $orgModel->ensureOrgForUsuario((int)$user['id'], (string)$user['nombre']);
+        $orgRol   = $orgModel->rolEnOrg((int)$user['id'], $orgId) ?? 'operario';
+        Session::set('current_org_id',  $orgId);
+        Session::set('current_org_rol', $orgRol);
+
         SecurityLog::log('login_success', ['user_id' => (int)$user['id']]);
 
         $this->redirect('dashboard');

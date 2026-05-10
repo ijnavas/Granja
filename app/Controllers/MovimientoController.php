@@ -400,7 +400,7 @@ class MovimientoController extends BaseController
             SELECT COUNT(DISTINCT i.id)
             FROM inventarios i
             JOIN inventario_lineas il ON il.inventario_id = i.id
-            WHERE i.usuario_id = :uid
+            WHERE i.organizacion_id = :uid
               AND i.fecha >= :fecha
               AND (il.lote_id = :lote_a OR il.lote_id = :lote_n)
         ");
@@ -433,7 +433,7 @@ class MovimientoController extends BaseController
             SELECT DISTINCT i.id, i.fecha, i.nombre
             FROM inventarios i
             JOIN inventario_lineas il ON il.inventario_id = i.id
-            WHERE i.usuario_id = ?
+            WHERE i.organizacion_id = ?
               AND i.fecha >= ?
               AND il.lote_id IN ({$ph})
             ORDER BY i.fecha
@@ -485,7 +485,7 @@ class MovimientoController extends BaseController
             // IDOR guard: la nave debe ser del usuario
             $check = \App\Core\Database::getInstance()->prepare("
                 SELECT 1 FROM naves n JOIN granjas g ON n.granja_id = g.id
-                WHERE n.id = :id AND g.usuario_id = :uid
+                WHERE n.id = :id AND g.organizacion_id = :uid
             ");
             $check->execute(['id' => $naveId, 'uid' => $uid]);
             if (!$check->fetchColumn()) { echo json_encode([]); return; }
@@ -513,7 +513,7 @@ class MovimientoController extends BaseController
             SELECT l.id, l.codigo, l.num_animales
             FROM lotes l
             JOIN granjas g ON l.granja_id = g.id
-            WHERE g.usuario_id = :uid AND l.estado = 'activo' AND l.num_animales > 0
+            WHERE g.organizacion_id = :uid AND l.estado = 'activo' AND l.num_animales > 0
             ORDER BY l.codigo
         ");
         $stmt->execute(['uid' => $uid]);
@@ -667,7 +667,7 @@ class MovimientoController extends BaseController
         $check = \App\Core\Database::getInstance()->prepare("
             SELECT n.id FROM naves n
             JOIN granjas g ON n.granja_id = g.id
-            WHERE n.id IN ({$ph0}) AND g.usuario_id = ?
+            WHERE n.id IN ({$ph0}) AND g.organizacion_id = ?
         ");
         $check->execute([...$naveIds, $uid]);
         $naveIds = array_map('intval', $check->fetchAll(\PDO::FETCH_COLUMN));
@@ -724,7 +724,7 @@ class MovimientoController extends BaseController
             WHERE cl.lote_id = :lote_id
               AND cl.activo = 1
               AND cl.num_animales > 0
-              AND g.usuario_id = :uid
+              AND g.organizacion_id = :uid
             ORDER BY n.nombre, LENGTH(c.nombre), c.nombre
         ");
         $stmt->execute(['lote_id' => $loteId, 'uid' => $uid]);
@@ -744,7 +744,7 @@ class MovimientoController extends BaseController
             JOIN naves n   ON c.nave_id = n.id
             JOIN granjas g ON n.granja_id = g.id
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id
-            WHERE g.usuario_id = :uid
+            WHERE g.organizacion_id = :uid
             GROUP BY c.id, c.nombre, n.nombre
             ORDER BY n.nombre, LENGTH(c.nombre), c.nombre
         ");

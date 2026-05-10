@@ -118,8 +118,33 @@ function auth_rol(): string
     return Session::get('usuario_rol', 'usuario');
 }
 
-function es_admin(): bool    { return auth_rol() === 'admin'; }
-function es_director(): bool { return in_array(auth_rol(), ['admin', 'director']); }
+/**
+ * Helpers de rol — modelo SaaS multi-org.
+ *
+ * - es_admin(): el usuario es owner o admin de la org activa.
+ *   También es admin si su rol global de cuenta (usuarios.rol) es 'admin'
+ *   (super-admin de sistema, raramente usado).
+ * - es_director(): el usuario puede modificar datos (no es lector).
+ * - es_lector(): solo lectura.
+ */
+function es_admin(): bool
+{
+    if (auth_rol() === 'admin') return true;
+    return \App\Core\OrgContext::esAdmin();
+}
+function es_director(): bool
+{
+    if (in_array(auth_rol(), ['admin', 'director'], true)) return true;
+    return \App\Core\OrgContext::esOperarioOSuperior();
+}
+function es_lector(): bool { return \App\Core\OrgContext::esLector(); }
+
+/**
+ * ID de la organización activa del usuario en sesión. Toda query de datos
+ * del cliente debe filtrar por este id.
+ */
+function org_id(): int { return \App\Core\OrgContext::id(); }
+function org_rol(): string { return \App\Core\OrgContext::rol(); }
 
 /**
  * Aborta con 403 si el usuario no tiene el rol mínimo requerido.

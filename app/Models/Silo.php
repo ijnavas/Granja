@@ -24,11 +24,11 @@ class Silo
             JOIN granjas g ON s.granja_id = g.id
             LEFT JOIN silo_nave sn ON sn.silo_id = s.id
             LEFT JOIN naves n ON sn.nave_id = n.id AND n.activa = 1
-            WHERE g.usuario_id = :uid AND s.activo = 1
+            WHERE g.organizacion_id = :uid AND s.activo = 1
             GROUP BY s.id
             ORDER BY g.nombre, s.nombre
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['uid' => \App\Core\OrgContext::id()]);
         $rows = $stmt->fetchAll();
         foreach ($rows as &$r) $r = $this->withStockReal($r);
         return $rows;
@@ -43,10 +43,10 @@ class Silo
             JOIN granjas g ON s.granja_id = g.id
             LEFT JOIN silo_nave sn ON sn.silo_id = s.id
             LEFT JOIN naves n ON sn.nave_id = n.id AND n.activa = 1
-            WHERE s.id = :id AND g.usuario_id = :uid
+            WHERE s.id = :id AND g.organizacion_id = :uid
             GROUP BY s.id
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
         $row = $stmt->fetch();
         return $row ? $this->withStockReal($row) : null;
     }
@@ -333,7 +333,7 @@ class Silo
                 s.capacidad_kg = :capacidad_kg,
                 s.stock_minimo_kg = :stock_minimo_kg,
                 s.descripcion = :descripcion
-            WHERE s.id = :id AND g.usuario_id = :usuario_id
+            WHERE s.id = :id AND g.organizacion_id = :usuario_id
         ");
         $params = [
             'nombre'          => $data['nombre'],
@@ -354,9 +354,9 @@ class Silo
             UPDATE silos s
             JOIN granjas g ON s.granja_id = g.id
             SET s.activo = 0
-            WHERE s.id = :id AND g.usuario_id = :uid
+            WHERE s.id = :id AND g.organizacion_id = :uid
         ");
-        return $stmt->execute(['id' => $id, 'uid' => $userId]);
+        return $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
     }
 
     // ── Calibraciones (taras) ────────────────────────────────────
@@ -435,8 +435,8 @@ class Silo
      */
     private function buildRecargaFiltros(int $userId, array $filtros): array
     {
-        $conditions = ['g.usuario_id = :uid'];
-        $params     = ['uid' => $userId];
+        $conditions = ['g.organizacion_id = :uid'];
+        $params     = ['uid' => \App\Core\OrgContext::id()];
 
         if (!empty($filtros['fecha_desde'])) {
             $conditions[] = 'r.fecha >= :fecha_desde';

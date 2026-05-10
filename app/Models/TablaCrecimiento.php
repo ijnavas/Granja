@@ -25,20 +25,21 @@ class TablaCrecimiento
             LEFT JOIN tablas_crecimiento_lineas l ON l.tabla_id = t.id
             LEFT JOIN tabla_raza tr ON tr.tabla_id = t.id
             LEFT JOIN razas_porcino r ON tr.raza_id = r.id
-            WHERE t.usuario_id = :uid AND t.activa = 1
+            WHERE (t.organizacion_id IS NULL OR t.organizacion_id = :uid) AND t.activa = 1
             GROUP BY t.id
             ORDER BY t.nombre
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['uid' => \App\Core\OrgContext::id()]);
         return $stmt->fetchAll();
     }
 
     public function find(int $id, int $userId): ?array
     {
         $stmt = $this->db->prepare("
-            SELECT * FROM tablas_crecimiento WHERE id = :id AND usuario_id = :uid AND activa = 1
+            SELECT * FROM tablas_crecimiento WHERE id = :id
+              AND (organizacion_id IS NULL OR organizacion_id = :uid) AND activa = 1
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -65,10 +66,15 @@ class TablaCrecimiento
     public function create(int $userId, string $nombre, ?string $descripcion): int
     {
         $stmt = $this->db->prepare("
-            INSERT INTO tablas_crecimiento (usuario_id, nombre, descripcion)
-            VALUES (:uid, :nombre, :descripcion)
+            INSERT INTO tablas_crecimiento (usuario_id, organizacion_id, nombre, descripcion)
+            VALUES (:uid, :oid, :nombre, :descripcion)
         ");
-        $stmt->execute(['uid' => $userId, 'nombre' => $nombre, 'descripcion' => $descripcion]);
+        $stmt->execute([
+            'uid'         => $userId,
+            'oid'         => \App\Core\OrgContext::id(),
+            'nombre'      => $nombre,
+            'descripcion' => $descripcion,
+        ]);
         return (int) $this->db->lastInsertId();
     }
 

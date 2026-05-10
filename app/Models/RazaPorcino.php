@@ -17,24 +17,28 @@ class RazaPorcino
 
     public function allParaUsuario(int $userId): array
     {
+        // organizacion_id NULL = raza del sistema (visible para todos);
+        // las demás solo se ven dentro de su propia org.
         $stmt = $this->db->prepare("
             SELECT * FROM razas_porcino
-            WHERE (usuario_id IS NULL OR usuario_id = :uid) AND activa = 1
-            ORDER BY usuario_id IS NULL DESC, nombre
+            WHERE (organizacion_id IS NULL OR organizacion_id = :oid) AND activa = 1
+            ORDER BY organizacion_id IS NULL DESC, nombre
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['oid' => \App\Core\OrgContext::id()]);
         return $stmt->fetchAll();
     }
 
     public function allAdmin(): array
     {
-        $stmt = $this->db->query("
+        $stmt = $this->db->prepare("
             SELECT r.*, u.nombre AS creador
             FROM razas_porcino r
             LEFT JOIN usuarios u ON r.usuario_id = u.id
             WHERE r.activa = 1
-            ORDER BY r.usuario_id IS NULL DESC, r.nombre
+              AND (r.organizacion_id IS NULL OR r.organizacion_id = :oid)
+            ORDER BY r.organizacion_id IS NULL DESC, r.nombre
         ");
+        $stmt->execute(['oid' => \App\Core\OrgContext::id()]);
         return $stmt->fetchAll();
     }
 
@@ -48,9 +52,15 @@ class RazaPorcino
 
     public function create(array $data): int
     {
+        // Si no se indica organizacion_id, asignar la org activa del usuario
+        // (si usuario_id es NULL, también org NULL = raza del sistema).
+        if (!array_key_exists('organizacion_id', $data)) {
+            $data['organizacion_id'] = ($data['usuario_id'] ?? null) === null
+                ? null : \App\Core\OrgContext::id();
+        }
         $stmt = $this->db->prepare("
-            INSERT INTO razas_porcino (usuario_id, nombre, porcentaje, identificador)
-            VALUES (:usuario_id, :nombre, :porcentaje, :identificador)
+            INSERT INTO razas_porcino (usuario_id, organizacion_id, nombre, porcentaje, identificador)
+            VALUES (:usuario_id, :organizacion_id, :nombre, :porcentaje, :identificador)
         ");
         $stmt->execute($data);
         return (int) $this->db->lastInsertId();

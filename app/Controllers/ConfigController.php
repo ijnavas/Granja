@@ -1000,7 +1000,7 @@ class ConfigController extends BaseController
             SELECT l.id, l.codigo, l.num_animales_entrada, l.num_animales, l.fecha_entrada, l.estado, l.fecha_cierre
             FROM lotes l
             JOIN granjas g ON l.granja_id = g.id
-            WHERE g.usuario_id = :uid AND l.num_animales > 0 AND l.fecha_entrada IS NOT NULL
+            WHERE g.organizacion_id = :uid AND l.num_animales > 0 AND l.fecha_entrada IS NOT NULL
             ORDER BY l.fecha_entrada
         ");
         $stmt->execute(['uid' => $uid]);
@@ -1116,7 +1116,7 @@ class ConfigController extends BaseController
             JOIN granjas g ON n.granja_id = g.id
             LEFT JOIN cuadras c ON c.nave_id = n.id
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
-            WHERE g.usuario_id = :uid AND n.activa = 1 AND n.nombre IN ('D1','D2','D3','C7')
+            WHERE g.organizacion_id = :uid AND n.activa = 1 AND n.nombre IN ('D1','D2','D3','C7')
             GROUP BY n.id, n.nombre
             ORDER BY n.nombre
         ");

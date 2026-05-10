@@ -25,10 +25,11 @@ class Etiqueta
 
     public function allByUsuario(int $userId): array
     {
+        // Etiquetas son de la organización (compartidas por miembros)
         $stmt = $this->db->prepare("
-            SELECT * FROM etiquetas WHERE usuario_id = :uid ORDER BY nombre
+            SELECT * FROM etiquetas WHERE organizacion_id = :oid ORDER BY nombre
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['oid' => \App\Core\OrgContext::id()]);
         return $stmt->fetchAll();
     }
 
@@ -36,17 +37,19 @@ class Etiqueta
     {
         $nombre = $this->normalizar($nombre);
         if ($nombre === '') return 0;
+        $oid = \App\Core\OrgContext::id();
 
-        $stmt = $this->db->prepare("SELECT id FROM etiquetas WHERE usuario_id = :uid AND nombre = :n");
-        $stmt->execute(['uid' => $userId, 'n' => $nombre]);
+        $stmt = $this->db->prepare("SELECT id FROM etiquetas WHERE organizacion_id = :oid AND nombre = :n");
+        $stmt->execute(['oid' => $oid, 'n' => $nombre]);
         $id = $stmt->fetchColumn();
         if ($id) return (int)$id;
 
         $stmt = $this->db->prepare("
-            INSERT INTO etiquetas (usuario_id, nombre, color) VALUES (:uid, :n, :c)
+            INSERT INTO etiquetas (usuario_id, organizacion_id, nombre, color) VALUES (:uid, :oid, :n, :c)
         ");
         $stmt->execute([
             'uid' => $userId,
+            'oid' => $oid,
             'n'   => $nombre,
             'c'   => $color ?: $this->colorAuto($nombre),
         ]);
@@ -55,8 +58,8 @@ class Etiqueta
 
     public function delete(int $id, int $userId): bool
     {
-        $stmt = $this->db->prepare("DELETE FROM etiquetas WHERE id = :id AND usuario_id = :uid");
-        return $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $stmt = $this->db->prepare("DELETE FROM etiquetas WHERE id = :id AND organizacion_id = :oid");
+        return $stmt->execute(['id' => $id, 'oid' => \App\Core\OrgContext::id()]);
     }
 
     /** Lista de tags (filas completas) asociadas a un lote. */

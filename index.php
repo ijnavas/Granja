@@ -119,6 +119,7 @@ use App\Controllers\CuadraController;
 use App\Controllers\MovimientoController;
 use App\Controllers\InventarioController;
 use App\Controllers\InformeController;
+use App\Controllers\EquipoController;
 use App\Controllers\ConfigController;
 use App\Controllers\PerfilController;
 use App\Controllers\PesajeController;
@@ -248,6 +249,14 @@ $router->post('/inventarios/{id}/eliminar',         [InventarioController::class
 
 // Informes
 $router->get('/informes',                                   [InformeController::class, 'index']);
+
+// Equipo (multi-organización)
+$router->get('/equipo',                                     [EquipoController::class, 'index']);
+$router->post('/equipo/invitar',                            [EquipoController::class, 'invitar']);
+$router->post('/equipo/{userId}/rol',                       [EquipoController::class, 'cambiarRol']);
+$router->post('/equipo/{userId}/quitar',                    [EquipoController::class, 'quitar']);
+$router->get('/aceptar-invitacion/{token}',                 [EquipoController::class, 'aceptarForm']);
+$router->post('/aceptar-invitacion/{token}',                [EquipoController::class, 'aceptarPost']);
 
 // Pesajes
 $router->get('/pesajes/export',                              [PesajeController::class, 'export']);

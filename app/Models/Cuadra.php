@@ -43,9 +43,9 @@ class Cuadra
             JOIN naves n   ON c.nave_id   = n.id
             JOIN granjas g ON n.granja_id = g.id
             LEFT JOIN cuadra_lote cl ON cl.cuadra_id = c.id AND cl.activo = 1
-            WHERE g.usuario_id = :uid AND c.activa = 1
+            WHERE g.organizacion_id = :uid AND c.activa = 1
         ";
-        $params = ['uid' => $userId];
+        $params = ['uid' => \App\Core\OrgContext::id()];
 
         if ($naveId) {
             $sql .= " AND c.nave_id = :nave_id";
@@ -65,9 +65,9 @@ class Cuadra
             FROM cuadras c
             JOIN naves n   ON c.nave_id   = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE c.id = :id AND g.usuario_id = :uid
+            WHERE c.id = :id AND g.organizacion_id = :uid
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -95,7 +95,7 @@ class Cuadra
                 c.alto_m           = :alto_m,
                 c.largo_m          = :largo_m,
                 c.descripcion      = :descripcion
-            WHERE c.id = :id AND g.usuario_id = :usuario_id
+            WHERE c.id = :id AND g.organizacion_id = :usuario_id
         ");
         $data['id'] = $id;
         $data['usuario_id'] = $userId;
@@ -109,9 +109,9 @@ class Cuadra
             JOIN naves n   ON c.nave_id   = n.id
             JOIN granjas g ON n.granja_id = g.id
             SET c.activa = 0
-            WHERE c.id = :id AND g.usuario_id = :uid
+            WHERE c.id = :id AND g.organizacion_id = :uid
         ");
-        return $stmt->execute(['id' => $id, 'uid' => $userId]);
+        return $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
     }
 
     // ── Lotes en una cuadra ──────────────────────────────────────
@@ -196,9 +196,9 @@ class Cuadra
             FROM cuadras c
             JOIN naves n   ON c.nave_id   = n.id
             JOIN granjas g ON n.granja_id = g.id
-            WHERE g.usuario_id = :uid AND c.activa = 1
+            WHERE g.organizacion_id = :uid AND c.activa = 1
         ";
-        $params = ['uid' => $userId];
+        $params = ['uid' => \App\Core\OrgContext::id()];
         if ($naveId) {
             $sql .= " AND c.nave_id = :nave_id";
             $params['nave_id'] = $naveId;

@@ -111,6 +111,12 @@
             <span class="nav-tooltip">Informes y gráficos</span>
         </a>
 
+        <a href="<?= base_url('equipo') ?>" class="nav-item <?= str_contains($_SERVER['REQUEST_URI'], '/equipo') ? 'active' : '' ?>">
+            <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+            <span class="nav-label">Equipo</span>
+            <span class="nav-tooltip">Equipo y miembros de la organización</span>
+        </a>
+
         <div class="nav-section-label">Sistema</div>
         <?php $cfgHref = es_admin() ? 'configuracion/razas' : 'configuracion/general'; ?>
         <a href="<?= base_url($cfgHref) ?>" class="nav-item <?= (str_contains($_SERVER['REQUEST_URI'], '/configuracion') || str_contains($_SERVER['REQUEST_URI'], '/recevet') || str_contains($_SERVER['REQUEST_URI'], '/admin/audit-log')) ? 'active' : '' ?>">

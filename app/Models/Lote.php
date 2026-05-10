@@ -20,8 +20,8 @@ class Lote
      */
     private function buildLoteFiltros(int $userId, array $filtros): array
     {
-        $conditions = ['(g.usuario_id = :uid OR g2.usuario_id = :uid2)'];
-        $params     = ['uid' => $userId, 'uid2' => $userId];
+        $conditions = ['(g.organizacion_id = :uid OR g2.organizacion_id = :uid2)'];
+        $params     = ['uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()];
 
         if (!empty($filtros['estado'])) {
             $conditions[] = 'l.estado = :estado';
@@ -128,9 +128,9 @@ class Lote
             LEFT JOIN naves n   ON l.nave_id    = n.id
             LEFT JOIN granjas g ON n.granja_id  = g.id
             LEFT JOIN granjas g2 ON l.granja_id = g2.id
-            WHERE l.id = :id AND (g.usuario_id = :uid OR g2.usuario_id = :uid2 OR (l.nave_id IS NULL AND l.granja_id IS NULL))
+            WHERE l.id = :id AND (g.organizacion_id = :uid OR g2.organizacion_id = :uid2 OR (l.nave_id IS NULL AND l.granja_id IS NULL))
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId, 'uid2' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()]);
         $row = $stmt->fetch();
         return $row ?: null;
     }
@@ -190,7 +190,7 @@ class Lote
                 l.fecha_entrada    = :fecha_entrada,
                 l.fecha_nacimiento = :fecha_nacimiento,
                 l.observaciones    = :observaciones
-            WHERE l.id = :id AND (g.usuario_id = :usuario_id OR l.nave_id IS NULL OR l.granja_id IS NOT NULL)
+            WHERE l.id = :id AND (g.organizacion_id = :usuario_id OR l.nave_id IS NULL OR l.granja_id IS NOT NULL)
         ");
         if (empty($data['codigo'])) unset($data['codigo']);
         $data['id'] = $id;
@@ -222,9 +222,9 @@ class Lote
             LEFT JOIN naves n ON l.nave_id = n.id
             LEFT JOIN granjas g ON n.granja_id = g.id
             SET l.estado = 'cerrado'
-            WHERE l.id = :id AND (g.usuario_id = :uid OR l.nave_id IS NULL)
+            WHERE l.id = :id AND (g.organizacion_id = :uid OR l.nave_id IS NULL)
         ");
-        return $stmt->execute(['id' => $id, 'uid' => $userId]);
+        return $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id()]);
     }
 
     /**
@@ -244,14 +244,14 @@ class Lote
                 AND tcl.semana  = CEIL(DATEDIFF(CURDATE(), l.fecha_nacimiento) / 7)
             JOIN estados_animal ea ON ea.codigo = 'cebo' AND ea.peso_min_kg IS NOT NULL
             SET l.estado_animal = 'cebo'
-            WHERE g.usuario_id       = :uid
+            WHERE g.organizacion_id       = :uid
               AND l.estado           = 'activo'
               AND l.estado_animal    = 'lechon'
               AND l.fecha_nacimiento IS NOT NULL
               AND l.raza_id          IS NOT NULL
               AND tcl.peso_kg        >= ea.peso_min_kg
         ");
-        $stmt->execute(['uid' => $userId]);
+        $stmt->execute(['uid' => \App\Core\OrgContext::id()]);
         return $stmt->rowCount();
     }
 
@@ -267,9 +267,9 @@ class Lote
             LEFT JOIN naves n   ON l.nave_id   = n.id
             LEFT JOIN granjas g  ON n.granja_id  = g.id
             LEFT JOIN granjas g2 ON l.granja_id  = g2.id
-            WHERE l.id = :id AND (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+            WHERE l.id = :id AND (g.organizacion_id = :uid OR g2.organizacion_id = :uid2)
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId, 'uid2' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()]);
         if (!$stmt->fetch()) return false;
 
         $this->db->beginTransaction();
@@ -325,9 +325,9 @@ class Lote
             LEFT JOIN granjas g ON n.granja_id = g.id
             LEFT JOIN granjas g2 ON l.granja_id = g2.id
             SET l.estado = 'cerrado', l.fecha_cierre = CURDATE()
-            WHERE l.id = :id AND (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+            WHERE l.id = :id AND (g.organizacion_id = :uid OR g2.organizacion_id = :uid2)
         ");
-        return $stmt->execute(['id' => $id, 'uid' => $userId, 'uid2' => $userId]);
+        return $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()]);
     }
 
     public function cerrarSiVacio(int $id): void
@@ -366,11 +366,11 @@ class Lote
             LEFT JOIN razas_porcino r ON l.raza_id = r.id
             LEFT JOIN movimientos m ON m.lote_origen_id = l.id
             WHERE l.estado = 'cerrado'
-              AND (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+              AND (g.organizacion_id = :uid OR g2.organizacion_id = :uid2)
             GROUP BY l.id
             ORDER BY COALESCE(l.fecha_cierre, l.fecha_entrada) DESC
         ");
-        $stmt->execute(['uid' => $userId, 'uid2' => $userId]);
+        $stmt->execute(['uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()]);
         return $stmt->fetchAll();
     }
 
@@ -397,10 +397,10 @@ class Lote
             LEFT JOIN granjas g2 ON l.granja_id  = g2.id
             LEFT JOIN razas_porcino r ON l.raza_id = r.id
             LEFT JOIN movimientos m ON m.lote_origen_id = l.id
-            WHERE l.id = :id AND (g.usuario_id = :uid OR g2.usuario_id = :uid2)
+            WHERE l.id = :id AND (g.organizacion_id = :uid OR g2.organizacion_id = :uid2)
             GROUP BY l.id
         ");
-        $stmt->execute(['id' => $id, 'uid' => $userId, 'uid2' => $userId]);
+        $stmt->execute(['id' => $id, 'uid' => \App\Core\OrgContext::id(), 'uid2' => \App\Core\OrgContext::id()]);
         $lote = $stmt->fetch();
         if (!$lote) return null;
 

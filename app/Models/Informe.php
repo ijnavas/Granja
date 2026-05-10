@@ -97,7 +97,7 @@ class Informe
             default       => "total_animales DESC",
         };
 
-        $where  = ['(g.usuario_id = :uid OR gn.usuario_id = :uid2)'];
+        $where  = ['(g.organizacion_id = :uid OR gn.organizacion_id = :uid2)'];
         $params = ['uid' => $usuarioId, 'uid2' => $usuarioId];
 
         // Filtro de categoría: usa tipos_movimiento.categoria + fallback de
