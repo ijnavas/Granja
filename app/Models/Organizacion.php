@@ -143,12 +143,16 @@ class Organizacion
     }
 
     /**
-     * Garantiza que el usuario tenga al menos una organización. Si no
-     * tiene, crea una "personal" (su nombre + ' (personal)') donde es
-     * owner, y migra sus granjas/inventarios/etiquetas/razas/tablas a
-     * esa org. Devuelve el org_id que el usuario tendrá como activa.
+     * Devuelve la primera organización a la que pertenece el usuario, o
+     * null si no pertenece a ninguna. SOLO crea una nueva si el usuario
+     * tiene datos legacy (granjas con usuario_id pero sin organizacion_id),
+     * para preservar la migración del modelo single-tenant al SaaS.
+     *
+     * Para usuarios nuevos sin datos legacy, devuelve null. Es responsabilidad
+     * del flujo (login/registro) redirigir a la pantalla de "sin organización"
+     * y esperar a que un admin les envíe una invitación.
      */
-    public function ensureOrgForUsuario(int $userId, string $userName): int
+    public function ensureOrgForUsuario(int $userId, string $userName): ?int
     {
         // ¿Ya tiene alguna?
         $stmt = $this->db->prepare("SELECT organizacion_id FROM organizacion_usuarios WHERE usuario_id = :u ORDER BY rol = 'owner' DESC, organizacion_id ASC LIMIT 1");
@@ -156,12 +160,20 @@ class Organizacion
         $orgId = $stmt->fetchColumn();
         if ($orgId) return (int)$orgId;
 
-        // Crear org personal
+        // Sólo auto-crear si tiene datos legacy huérfanos. Evita que cada
+        // usuario nuevo se haga su propia "Org de fulanito" automáticamente.
+        $stmt = $this->db->prepare("
+            SELECT 1 FROM granjas WHERE usuario_id = :u AND organizacion_id IS NULL LIMIT 1
+        ");
+        $stmt->execute(['u' => $userId]);
+        if (!$stmt->fetch()) {
+            return null;
+        }
+
+        // Migrar legacy: crear org y backfill columnas organizacion_id.
         $orgId = $this->create("Org de {$userName}");
         $this->vincular($orgId, $userId, 'owner');
 
-        // Migrar datos legacy: backfill organizacion_id de las tablas que
-        // hasta ahora filtraban por usuario_id.
         $tablas = ['granjas', 'inventarios', 'razas_porcino', 'tablas_crecimiento', 'etiquetas'];
         foreach ($tablas as $t) {
             try {

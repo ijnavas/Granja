@@ -91,12 +91,34 @@ function csrf_field(): string
 }
 
 /**
- * Comprueba si el usuario está autenticado; si no, redirige
+ * Comprueba si el usuario está autenticado; si no, redirige a login.
+ *
+ * Además, si el usuario está logueado pero NO pertenece a ninguna
+ * organización (caso típico: se acaba de registrar y todavía no ha
+ * aceptado ninguna invitación), lo redirige a /sin-organizacion para
+ * que sepa que necesita una invitación. Las páginas que tienen sentido
+ * sin org (perfil, logout, aceptar invitación, /sin-organizacion en sí)
+ * están whitelisted.
  */
 function auth_required(): void
 {
     if (!Session::has('usuario_id')) {
         redirect('login');
+    }
+
+    $uri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+    $allowedSinOrg = [
+        '/sin-organizacion',
+        '/perfil',
+        '/logout',
+        '/aceptar-invitacion/',
+    ];
+    foreach ($allowedSinOrg as $a) {
+        if ($uri === $a || str_starts_with($uri, $a)) return;
+    }
+
+    if (\App\Core\OrgContext::id() === 0) {
+        redirect('sin-organizacion');
     }
 }
 

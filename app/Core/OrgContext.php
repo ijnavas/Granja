@@ -17,25 +17,29 @@ use App\Models\Organizacion;
  */
 final class OrgContext
 {
-    /** Devuelve el org_id activo del request (lazy-init si falta). */
+    /**
+     * Devuelve el org_id activo del request (0 si el usuario aún no
+     * pertenece a ninguna organización). Usa cache de sesión y, si está
+     * vacío, intenta resolverlo con ensureOrgForUsuario (sólo migra usuarios
+     * legacy; los usuarios nuevos sin invitación aceptada devuelven 0).
+     */
     public static function id(): int
     {
         $orgId = (int) (Session::get('current_org_id') ?? 0);
         if ($orgId > 0) return $orgId;
 
-        // Lazy init: si el usuario tiene alguna org, usar la primera.
-        // Si no, crear una personal.
         $userId = (int) (Session::get('usuario_id') ?? 0);
         if ($userId <= 0) return 0;
 
         $userName = (string) (Session::get('usuario_nombre') ?? 'Usuario');
         $orgModel = new Organizacion();
         $orgId    = $orgModel->ensureOrgForUsuario($userId, $userName);
+        if (!$orgId) return 0;
 
-        $rol = $orgModel->rolEnOrg($userId, $orgId) ?? 'operario';
-        Session::set('current_org_id',  $orgId);
+        $rol = $orgModel->rolEnOrg($userId, (int)$orgId) ?? 'operario';
+        Session::set('current_org_id',  (int)$orgId);
         Session::set('current_org_rol', $rol);
-        return $orgId;
+        return (int)$orgId;
     }
 
     /** Rol del usuario actual en la org activa. */

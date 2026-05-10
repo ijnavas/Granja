@@ -145,7 +145,47 @@
             <span class="topbar-title"><?= e($pageTitle ?? 'Panel') ?></span>
         </div>
         <div class="topbar-right">
-            <?php $u = auth_user(); ?>
+            <?php
+            $u           = auth_user();
+            $misOrgs     = [];
+            $orgActivaId = 0;
+            $orgActivaNm = '';
+            if (\App\Core\Session::has('usuario_id')) {
+                $orgActivaId = \App\Core\OrgContext::id();
+                $misOrgs     = (new \App\Models\Organizacion())->deUsuario((int)($u['id'] ?? 0));
+                foreach ($misOrgs as $o) {
+                    if ((int)$o['id'] === $orgActivaId) { $orgActivaNm = $o['nombre']; break; }
+                }
+            }
+            ?>
+            <?php if (count($misOrgs) > 1): ?>
+            <div class="org-switcher" id="orgSwitcher">
+                <button type="button" class="org-switcher-btn" onclick="document.getElementById('orgSwitcher').classList.toggle('open')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4"/></svg>
+                    <span class="org-switcher-name"><?= e($orgActivaNm ?: 'Org') ?></span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="org-switcher-menu">
+                    <div class="org-switcher-label">Cambiar de organización</div>
+                    <?php foreach ($misOrgs as $o): ?>
+                        <?php if ((int)$o['id'] === $orgActivaId): ?>
+                            <div class="org-switcher-item current">
+                                <strong><?= e($o['nombre']) ?></strong>
+                                <span class="org-switcher-rol"><?= e($o['rol']) ?></span>
+                            </div>
+                        <?php else: ?>
+                            <form method="POST" action="<?= base_url('equipo/cambiar-org/' . (int)$o['id']) ?>">
+                                <?= csrf_field() ?>
+                                <button type="submit" class="org-switcher-item">
+                                    <span><?= e($o['nombre']) ?></span>
+                                    <span class="org-switcher-rol"><?= e($o['rol']) ?></span>
+                                </button>
+                            </form>
+                        <?php endif; ?>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
             <a href="<?= base_url('perfil') ?>" class="user-badge" style="text-decoration:none;color:inherit" title="Mi perfil">
                 <div class="user-avatar"><?= strtoupper(substr($u['nombre'] ?? 'U', 0, 1)) ?></div>
                 <span><?= e($u['nombre'] ?? '') ?></span>
@@ -155,6 +195,12 @@
                 <button type="submit" class="btn-logout">Salir</button>
             </form>
         </div>
+        <script>
+            document.addEventListener('click', function(e) {
+                const sw = document.getElementById('orgSwitcher');
+                if (sw && !sw.contains(e.target)) sw.classList.remove('open');
+            });
+        </script>
     </header>
 
     <main class="main-content">

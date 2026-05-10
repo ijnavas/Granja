@@ -117,18 +117,50 @@ class AuthController extends BaseController
         Session::set('usuario_email',  $user['email']);
         Session::set('usuario_rol',    $user['rol'] ?? 'usuario');
 
-        // Auto-instalar organización si el usuario no tiene; migra granjas/
-        // inventarios/etiquetas/razas/tablas legacy a esa org. Si ya tiene
-        // una o varias, escoge la primera (owner antes que el resto).
+        // Selecciona organizacion activa. Para usuarios legacy con granjas
+        // huérfanas, ensureOrgForUsuario migra a una org "personal". Para
+        // usuarios nuevos sin invitación todavía aceptada, devuelve null.
         $orgModel = new \App\Models\Organizacion();
         $orgId    = $orgModel->ensureOrgForUsuario((int)$user['id'], (string)$user['nombre']);
-        $orgRol   = $orgModel->rolEnOrg((int)$user['id'], $orgId) ?? 'operario';
-        Session::set('current_org_id',  $orgId);
-        Session::set('current_org_rol', $orgRol);
+        if ($orgId) {
+            $orgRol = $orgModel->rolEnOrg((int)$user['id'], $orgId) ?? 'operario';
+            Session::set('current_org_id',  $orgId);
+            Session::set('current_org_rol', $orgRol);
+        } else {
+            Session::set('current_org_id',  null);
+            Session::set('current_org_rol', null);
+        }
 
         SecurityLog::log('login_success', ['user_id' => (int)$user['id']]);
 
+        // Si venia de una invitacion pendiente, retomamos el flujo
+        $pending = Session::get('pending_invitation_token');
+        if ($pending) {
+            Session::set('pending_invitation_token', null);
+            $this->redirect('aceptar-invitacion/' . $pending);
+        }
+
+        // Sin organización → pantalla "esperando invitación"
+        if (!$orgId) $this->redirect('sin-organizacion');
+
         $this->redirect('dashboard');
+    }
+
+    // ── GET /sin-organizacion ────────────────────────────────────
+    /** Pantalla "limbo": usuario logueado sin organizacion asignada. */
+    public function sinOrganizacion(): void
+    {
+        if (!Session::has('usuario_id')) {
+            $this->redirect('login');
+        }
+        // Si por algún motivo ya tiene org, mandarlo al dashboard.
+        if (\App\Core\OrgContext::id() > 0) {
+            $this->redirect('dashboard');
+        }
+        $this->view('auth/sin-organizacion', [
+            'u'         => auth_user(),
+            'pageTitle' => 'Sin organización',
+        ], 'auth');
     }
 
     // ── GET /register ────────────────────────────────────────────

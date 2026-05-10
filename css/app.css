@@ -935,3 +935,82 @@ body { max-width: 100%; overflow-x: hidden; }
     .legal-page { padding: 1.5rem 1.25rem; border-radius: 8px; }
     .legal-page th { width: 40%; }
 }
+
+/* ── Org switcher en topbar ──────────────────────────────────── */
+.org-switcher { position: relative; }
+.org-switcher-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: .4rem .65rem;
+    font-size: .82rem;
+    color: #374151;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background .15s, border-color .15s;
+}
+.org-switcher-btn:hover { background: #e5e7eb; }
+.org-switcher-btn svg { color: #6b7280; }
+.org-switcher-name { max-width: 160px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.org-switcher-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + .35rem);
+    right: 0;
+    min-width: 240px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.08);
+    padding: .35rem;
+    z-index: 100;
+}
+.org-switcher.open .org-switcher-menu { display: block; }
+
+.org-switcher-label {
+    padding: .5rem .65rem .35rem;
+    font-size: .68rem;
+    font-weight: 700;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.org-switcher-menu form { margin: 0; }
+.org-switcher-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: none;
+    border: 0;
+    text-align: left;
+    padding: .55rem .65rem;
+    border-radius: 6px;
+    font-size: .85rem;
+    color: #374151;
+    cursor: pointer;
+    font-family: inherit;
+    gap: .5rem;
+}
+.org-switcher-item:hover { background: #f3f4f6; }
+.org-switcher-item.current { background: #eff6ff; cursor: default; color: #1e3a8a; }
+.org-switcher-item.current:hover { background: #eff6ff; }
+.org-switcher-rol {
+    background: #e5e7eb;
+    color: #4b5563;
+    font-size: .68rem;
+    font-weight: 600;
+    padding: .15rem .45rem;
+    border-radius: 99px;
+    text-transform: capitalize;
+}
+.org-switcher-item.current .org-switcher-rol { background: #1d4ed8; color: #fff; }
+
+@media (max-width: 640px) {
+    .org-switcher-name { max-width: 90px; }
+}

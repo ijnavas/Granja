@@ -146,6 +146,7 @@ $router->get('/login',       [AuthController::class,     'loginForm']);
 $router->post('/login',      [AuthController::class,     'login']);
 $router->get('/register',    [AuthController::class,     'registerForm']);
 $router->post('/register',   [AuthController::class,     'register']);
+$router->get('/sin-organizacion', [AuthController::class, 'sinOrganizacion']);
 $router->post('/logout',          [AuthController::class, 'logout']);
 $router->get('/forgot-password',  [AuthController::class, 'forgotPasswordForm']);
 $router->post('/forgot-password', [AuthController::class, 'forgotPassword']);
@@ -259,6 +260,7 @@ $router->get('/informes',                                   [InformeController::
 // Equipo (multi-organización)
 $router->get('/equipo',                                     [EquipoController::class, 'index']);
 $router->post('/equipo/invitar',                            [EquipoController::class, 'invitar']);
+$router->post('/equipo/cambiar-org/{orgId}',                [EquipoController::class, 'cambiarOrg']);
 $router->post('/equipo/{userId}/rol',                       [EquipoController::class, 'cambiarRol']);
 $router->post('/equipo/{userId}/quitar',                    [EquipoController::class, 'quitar']);
 $router->get('/equipo/{userId}/granjas',                    [EquipoController::class, 'granjasForm']);

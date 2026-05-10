@@ -151,6 +151,20 @@ class EquipoController extends BaseController
         }
     }
 
+    /** Cambia la organización activa del usuario actual (debe pertenecer a ella). */
+    public function cambiarOrg(string $orgId): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('dashboard');
+        }
+        $ok = OrgContext::cambiar((int)$orgId);
+        Session::flash($ok ? 'success' : 'error',
+            $ok ? 'Organización activa actualizada.' : 'No perteneces a esa organización.'
+        );
+        $this->redirect('dashboard');
+    }
+
     /** Cambiar rol de un miembro (solo admin/owner, no se puede tocar al owner). */
     public function cambiarRol(string $userId): void
     {
@@ -264,6 +278,12 @@ class EquipoController extends BaseController
         ");
         $stmt->execute(['tk' => $token]);
         $inv = $stmt->fetch();
+
+        // Si la invitación es válida y el usuario no está logueado, guardamos el
+        // token en sesión para que tras login/register vuelva aquí automaticamente.
+        if ($inv && !Session::has('usuario_id')) {
+            Session::set('pending_invitation_token', $token);
+        }
 
         $this->view('equipo/aceptar', [
             'pageTitle' => 'Aceptar invitación',
