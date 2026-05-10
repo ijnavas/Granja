@@ -3,15 +3,16 @@
     <div class="legal-sub">Última actualización: <?= date('d/m/Y') ?></div>
 
     <p>
-        BALTAE Soluciones Ganaderas (en adelante, &laquo;BALTAE&raquo;) trata sus datos personales de
-        acuerdo con el <strong>Reglamento (UE) 2016/679 (RGPD)</strong> y la <strong>Ley Orgánica
+        Ganaderías Baltae (CIF B22575294, en adelante &laquo;BALTAE&raquo;) trata sus datos personales
+        de acuerdo con el <strong>Reglamento (UE) 2016/679 (RGPD)</strong> y la <strong>Ley Orgánica
         3/2018, de 5 de diciembre, de Protección de Datos Personales y garantía de los derechos
         digitales (LOPDGDD)</strong>.
     </p>
 
     <h2>1. Información básica</h2>
     <table>
-        <tr><th>Responsable</th><td>BALTAE Soluciones Ganaderas</td></tr>
+        <tr><th>Responsable</th><td>Ganaderías Baltae</td></tr>
+        <tr><th>CIF</th><td>B22575294</td></tr>
         <tr><th>Contacto</th><td><a href="mailto:notificaciones@baltae.com">notificaciones@baltae.com</a></td></tr>
         <tr><th>Finalidad</th><td>Gestión de la cuenta del usuario y prestación del servicio de gestión de granjas (lotes, pesajes, movimientos, almacén, etc.).</td></tr>
         <tr><th>Legitimación</th><td>Ejecución del contrato (registro como usuario) y consentimiento del interesado.</td></tr>
@@ -75,7 +76,7 @@
 
     <h2>7. Seguridad</h2>
     <p>
-        BALTAE aplica medidas técnicas y organizativas razonables para garantizar la confidencialidad,
+        Ganaderías Baltae aplica medidas técnicas y organizativas razonables para garantizar la confidencialidad,
         integridad y disponibilidad de los datos: contraseñas almacenadas con hash bcrypt, conexiones
         cifradas mediante HTTPS, registros de auditoría, límites de tasa contra ataques de fuerza
         bruta, y separación de datos por organización (multi-tenant).

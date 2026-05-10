@@ -11,7 +11,8 @@
 
     <h2>1. Titularidad</h2>
     <table>
-        <tr><th>Titular</th><td>BALTAE Soluciones Ganaderas</td></tr>
+        <tr><th>Titular</th><td>Ganaderías Baltae</td></tr>
+        <tr><th>CIF</th><td>B22575294</td></tr>
         <tr><th>Contacto</th><td><a href="mailto:notificaciones@baltae.com">notificaciones@baltae.com</a></td></tr>
         <tr><th>Sitio web</th><td><a href="<?= base_url() ?>"><?= e(base_url()) ?></a></td></tr>
     </table>
@@ -37,22 +38,24 @@
     <h2>4. Propiedad intelectual e industrial</h2>
     <p>
         Todos los contenidos de la Plataforma (textos, código fuente, diseño, logotipos, marcas e
-        imágenes) son titularidad de BALTAE o de terceros que han autorizado su uso, y están protegidos
-        por la legislación nacional e internacional sobre propiedad intelectual e industrial.
+        imágenes) son titularidad de Ganaderías Baltae o de terceros que han autorizado su uso, y
+        están protegidos por la legislación nacional e internacional sobre propiedad intelectual e
+        industrial.
     </p>
 
     <h2>5. Exclusión de responsabilidad</h2>
     <p>
-        BALTAE no garantiza la disponibilidad y continuidad ininterrumpida del servicio, ni se
-        responsabiliza de los daños que pudieran derivarse de fallos técnicos, interrupciones, virus o
-        cualquier otra causa ajena a su control. La Plataforma se ofrece &laquo;tal cual&raquo; sin
-        garantías expresas o implícitas más allá de las legalmente exigibles.
+        Ganaderías Baltae no garantiza la disponibilidad y continuidad ininterrumpida del servicio, ni
+        se responsabiliza de los daños que pudieran derivarse de fallos técnicos, interrupciones,
+        virus o cualquier otra causa ajena a su control. La Plataforma se ofrece &laquo;tal cual&raquo;
+        sin garantías expresas o implícitas más allá de las legalmente exigibles.
     </p>
 
     <h2>6. Legislación aplicable y jurisdicción</h2>
     <p>
         El presente aviso legal se rige por la legislación española. Para cualquier controversia
         relacionada con el uso de la Plataforma, las partes se someten a los Juzgados y Tribunales del
-        domicilio del titular, salvo cuando la normativa aplicable disponga otro fuero imperativo.
+        domicilio de Ganaderías Baltae (CIF B22575294), salvo cuando la normativa aplicable disponga
+        otro fuero imperativo.
     </p>
 </div>

@@ -223,7 +223,7 @@ class AuthController extends BaseController
             . '<strong style="color:#374151;font-size:12px">Información básica de protección de datos</strong><br>'
             . '<table cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;width:100%;font-size:11px;color:#6b7280">'
             . '<tr><td style="vertical-align:top;width:110px;padding:2px 0"><strong>Responsable</strong></td>'
-            . '<td style="padding:2px 0">BALTAE Soluciones Ganaderas.</td></tr>'
+            . '<td style="padding:2px 0">Ganaderías Baltae · CIF B22575294.</td></tr>'
             . '<tr><td style="vertical-align:top;padding:2px 0"><strong>Finalidad</strong></td>'
             . '<td style="padding:2px 0">Gestión de tu cuenta y prestación del servicio de gestión de granjas.</td></tr>'
             . '<tr><td style="vertical-align:top;padding:2px 0"><strong>Legitimación</strong></td>'

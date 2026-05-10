@@ -215,7 +215,7 @@ class EmailTemplate
             . '<p style="margin:0 0 6px;font-size:12px;color:#9ca3af">Este email ha sido generado automaticamente por</p>'
             . '<p style="margin:0 0 12px"><a href="https://granja.baltae.com" style="color:#3b82f6;font-weight:700;font-size:13px;text-decoration:none">granja.baltae.com</a></p>'
             . '<p style="margin:0;font-size:10px;color:#d1d5db;line-height:1.5">'
-            . 'BALTAE Soluciones Ganaderas &middot; Este mensaje es confidencial y esta dirigido exclusivamente a su destinatario.<br>'
+            . 'Ganaderías Baltae &middot; CIF B22575294 &middot; Este mensaje es confidencial y esta dirigido exclusivamente a su destinatario.<br>'
             . 'Si lo ha recibido por error, elimine el mensaje y notifiquelo al remitente.</p>'
             . '</td></tr>';
     }
