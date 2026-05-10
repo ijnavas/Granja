@@ -133,10 +133,11 @@ class AuthController extends BaseController
     public function registerForm(): void
     {
         guest_only();
+        $oldRaw = Session::getFlash('old');
         $this->view('auth/register', [
             'error'   => Session::getFlash('error'),
             'success' => Session::getFlash('success'),
-            'old'     => Session::getFlash('old') ? json_decode(Session::getFlash('old'), true) : [],
+            'old'     => $oldRaw ? (json_decode($oldRaw, true) ?: []) : [],
         ], 'auth');
     }
 
