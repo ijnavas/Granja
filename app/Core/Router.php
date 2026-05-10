@@ -47,9 +47,9 @@ class Router
             return;
         }
 
-        // Rutas con parámetros dinámicos: /lotes/{id}
+        // Rutas con parámetros dinámicos: /lotes/{id} o /equipo/{userId}/...
         foreach ($routes as $pattern => $handler) {
-            $regex = preg_replace('/\{([a-z_]+)\}/', '(?P<$1>[^/]+)', $pattern);
+            $regex = preg_replace('/\{([a-zA-Z_][a-zA-Z0-9_]*)\}/', '(?P<$1>[^/]+)', $pattern);
             $regex = '#^' . $regex . '$#';
             if (preg_match($regex, $uri, $matches)) {
                 $params = array_filter($matches, 'is_string', ARRAY_FILTER_USE_KEY);
