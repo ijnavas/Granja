@@ -160,6 +160,23 @@
     <main class="main-content">
         <?= $content ?>
     </main>
+
+    <footer class="app-footer">
+        <div class="app-footer-inner">
+            <span>&copy; <?= date('Y') ?> BALTAE</span>
+            <span class="app-footer-sep">·</span>
+            <a href="<?= base_url('legal/aviso') ?>">Aviso legal</a>
+            <span class="app-footer-sep">·</span>
+            <a href="<?= base_url('legal/privacidad') ?>">Privacidad</a>
+            <span class="app-footer-sep">·</span>
+            <a href="<?= base_url('legal/cookies') ?>">Cookies</a>
+            <span class="app-footer-spacer"></span>
+            <span class="app-footer-credit">
+                Diseñado por
+                <a href="https://manadi.es" target="_blank" rel="noopener noreferrer">Manadi</a>
+            </span>
+        </div>
+    </footer>
 </div>
 
 <script>

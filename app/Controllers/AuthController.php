@@ -8,6 +8,8 @@ use App\Core\Session;
 use App\Core\RateLimiter;
 use App\Core\SecurityLog;
 use App\Core\SecurityNotifier;
+use App\Core\Mailer;
+use App\Core\EmailTemplate;
 
 class AuthController extends BaseController
 {
@@ -178,8 +180,71 @@ class AuthController extends BaseController
         $newId = $this->usuario->create($nombre, $email, $password);
         SecurityLog::log('register_success', ['user_id' => $newId, 'email' => $email]);
 
+        // Email de bienvenida (no bloquear el registro si falla)
+        $this->enviarEmailBienvenida($email, $nombre);
+
         Session::flash('success', '¡Cuenta creada! Ya puedes iniciar sesión.');
         $this->redirect('login');
+    }
+
+    /** Envía el email de bienvenida tras un registro correcto. */
+    private function enviarEmailBienvenida(string $email, string $nombre): bool
+    {
+        $cfg = require ROOT_PATH . '/config.php';
+        if (empty($cfg['mail']['enabled']) || empty($cfg['mail']['smtp']['host'])) {
+            return false;
+        }
+
+        $T        = EmailTemplate::class;
+        $loginUrl = base_url('login');
+        $primer   = trim(explode(' ', trim($nombre))[0] ?? $nombre);
+
+        $body  = $T::title('¡Bienvenido/a a BALTAE, ' . e($primer) . '!');
+        $body .= $T::paragraph(
+            'Tu cuenta ya está creada. BALTAE es la plataforma para gestionar la operativa diaria '
+            . 'de tus granjas: lotes, pesajes, movimientos, inventarios, almacén y reportes — todo '
+            . 'desde un único panel.'
+        );
+        $body .= $T::sectionTitle('Primeros pasos');
+        $body .= '<ul style="margin:0 0 20px;padding-left:20px;color:#374151;font-size:14px;line-height:1.8">'
+            . '<li>Inicia sesión con el email <strong>' . e($email) . '</strong>.</li>'
+            . '<li>Crea tu primera <strong>granja</strong> en el menú lateral.</li>'
+            . '<li>Añade naves, cuadras y registra tu primer lote.</li>'
+            . '<li>Si trabajas con un equipo, invita compañeros desde <strong>Equipo</strong>.</li>'
+            . '</ul>';
+        $body .= $T::button('Iniciar sesión', $loginUrl);
+        $body .= $T::paragraph(
+            '<span style="font-size:12px;color:#9ca3af">¿Necesitas ayuda? Responde a este mensaje y te '
+            . 'atenderemos personalmente.</span>'
+        );
+
+        // Aviso legal y protección de datos (RGPD / LOPDGDD)
+        $body .= '<div style="margin-top:28px;padding:16px 20px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;font-size:11px;line-height:1.6;color:#6b7280">'
+            . '<strong style="color:#374151;font-size:12px">Información básica de protección de datos</strong><br>'
+            . '<table cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;width:100%;font-size:11px;color:#6b7280">'
+            . '<tr><td style="vertical-align:top;width:110px;padding:2px 0"><strong>Responsable</strong></td>'
+            . '<td style="padding:2px 0">BALTAE Soluciones Ganaderas.</td></tr>'
+            . '<tr><td style="vertical-align:top;padding:2px 0"><strong>Finalidad</strong></td>'
+            . '<td style="padding:2px 0">Gestión de tu cuenta y prestación del servicio de gestión de granjas.</td></tr>'
+            . '<tr><td style="vertical-align:top;padding:2px 0"><strong>Legitimación</strong></td>'
+            . '<td style="padding:2px 0">Ejecución del contrato (tu registro como usuario) y consentimiento del interesado.</td></tr>'
+            . '<tr><td style="vertical-align:top;padding:2px 0"><strong>Destinatarios</strong></td>'
+            . '<td style="padding:2px 0">No se cederán datos a terceros, salvo proveedores técnicos imprescindibles (hosting Dinahosting, S.L.U.). No se realizan transferencias internacionales.</td></tr>'
+            . '<tr><td style="vertical-align:top;padding:2px 0"><strong>Conservación</strong></td>'
+            . '<td style="padding:2px 0">Mientras la cuenta permanezca activa o exista una obligación legal de conservación.</td></tr>'
+            . '<tr><td style="vertical-align:top;padding:2px 0"><strong>Derechos</strong></td>'
+            . '<td style="padding:2px 0">Acceso, rectificación, supresión, oposición, limitación, portabilidad y a no ser objeto de decisiones automatizadas. Puedes ejercerlos respondiendo a este correo o escribiendo a <a href="mailto:notificaciones@baltae.com" style="color:#3b82f6">notificaciones@baltae.com</a>. También puedes presentar una reclamación ante la Agencia Española de Protección de Datos (<a href="https://www.aepd.es" style="color:#3b82f6">www.aepd.es</a>).</td></tr>'
+            . '</table></div>';
+
+        $html    = $T::build($body, 'blue');
+        $subject = '¡Bienvenido/a a BALTAE!';
+
+        try {
+            return (new Mailer())->send($email, $subject, $html, true);
+        } catch (\Throwable $e) {
+            error_log('[AuthController] email bienvenida error: ' . $e->getMessage());
+            return false;
+        }
     }
 
     // ── POST /logout ─────────────────────────────────────────────

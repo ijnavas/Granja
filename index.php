@@ -128,11 +128,17 @@ use App\Controllers\EscaneoController;
 use App\Controllers\RecevtController;
 use App\Controllers\AuditLogController;
 use App\Controllers\SecurityController;
+use App\Controllers\LegalController;
 
 Session::start();
 
 // ── Rutas ────────────────────────────────────────────────────
 $router = new Router();
+
+// Páginas legales (públicas)
+$router->get('/legal/aviso',       [LegalController::class, 'aviso']);
+$router->get('/legal/privacidad',  [LegalController::class, 'privacidad']);
+$router->get('/legal/cookies',     [LegalController::class, 'cookies']);
 
 // Auth
 $router->get('/',            [AuthController::class,     'loginForm']);

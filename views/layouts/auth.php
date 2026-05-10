@@ -12,10 +12,24 @@
             background: #f4f6f9;
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 1.5rem;
         }
+
+        .auth-footer-bar {
+            margin-top: 1.5rem;
+            font-size: .78rem;
+            color: #9ca3af;
+            text-align: center;
+            line-height: 1.7;
+        }
+        .auth-footer-bar a { color: #6b7280; text-decoration: none; }
+        .auth-footer-bar a:hover { color: #1a56db; text-decoration: underline; }
+        .auth-footer-bar .sep { margin: 0 .35rem; }
+        .auth-footer-bar .credit { display: block; margin-top: .25rem; }
+        .auth-footer-bar .credit a { color: #1a56db; font-weight: 600; }
 
         .auth-card {
             background: #fff;
@@ -122,6 +136,17 @@
         </div>
 
         <?= $content ?>
+    </div>
+
+    <div class="auth-footer-bar">
+        <a href="<?= base_url('legal/aviso') ?>">Aviso legal</a>
+        <span class="sep">·</span>
+        <a href="<?= base_url('legal/privacidad') ?>">Privacidad</a>
+        <span class="sep">·</span>
+        <a href="<?= base_url('legal/cookies') ?>">Cookies</a>
+        <span class="credit">
+            Diseñado por <a href="https://manadi.es" target="_blank" rel="noopener noreferrer">Manadi</a>
+        </span>
     </div>
 </body>
 </html>
