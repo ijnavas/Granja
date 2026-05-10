@@ -224,7 +224,8 @@ class AuthController extends BaseController
         $errors = $this->validateRegister($nombre, $email, $password, $password2);
 
         if ($errors) {
-            Session::flash('error', implode('<br>', $errors));
+            // Newlines (no HTML) — la vista hace nl2br(e()) para evitar XSS.
+            Session::flash('error', implode("\n", $errors));
             $this->redirect('register');
         }
 

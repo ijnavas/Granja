@@ -356,7 +356,7 @@ class AlmacenController extends BaseController
             if ($this->postString('guardar_email') === '1') {
                 (new Usuario())->updateEmailPedidos($uid, $emailDest);
             }
-            Session::flash('success', "Pedido enviado a {$emailDest}.");
+            Session::flash('success', "Pedido enviado a " . e($emailDest) . ".");
         } else {
             Session::flash('error', 'Error al enviar el email.');
         }

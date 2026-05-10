@@ -31,7 +31,10 @@ class LoteController extends BaseController
     {
         auth_required();
         $uid = Session::get('usuario_id');
-        $this->model->actualizarEstadoLechonACebo($uid);
+        // El paso lechón→cebo ahora es MANUAL para que el usuario controle
+        // cuándo aplicar la transición. Disponible vía boton en /lotes
+        // (POST /lotes/actualizar-estado-animal). Antes corria en cada
+        // carga del listado y mutaba lotes sin que el usuario lo viese.
 
         $filtros = array_filter([
             'estado'    => trim($_GET['estado']    ?? ''),
@@ -279,7 +282,7 @@ class LoteController extends BaseController
             ], $uid);
         }
 
-        Session::flash('success', "Lote <strong>{$codigo}</strong> creado correctamente.");
+        Session::flash('success', "Lote <strong>" . e($codigo) . "</strong> creado correctamente.");
         $this->redirect('lotes');
     }
 
@@ -541,6 +544,31 @@ class LoteController extends BaseController
             'porcentaje'    => $porcentaje ?: null,
             'identificador' => $identificador ?: null,
         ]);
+    }
+
+    /**
+     * Aplica manualmente la transición lechón → cebo en los lotes que han
+     * superado el peso de tabla configurado para 'cebo'. Sustituye al cron
+     * automatico que corría en cada carga de /dashboard y /lotes.
+     */
+    public function actualizarEstadoAnimal(): void
+    {
+        auth_required();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('lotes');
+        }
+        $uid       = Session::get('usuario_id');
+        $afectados = $this->model->actualizarEstadoLechonACebo($uid);
+        if ($afectados > 0) {
+            Session::flash('success',
+                "Se han actualizado {$afectados} lote(s) de lechón a cebo según el peso de tabla."
+            );
+        } else {
+            Session::flash('success',
+                'Ningún lote en estado lechón ha alcanzado todavía el peso de transición a cebo.'
+            );
+        }
+        $this->redirect('lotes');
     }
 
     public function delete(string $id): void

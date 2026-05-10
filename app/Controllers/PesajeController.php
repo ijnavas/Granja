@@ -242,13 +242,15 @@ class PesajeController extends BaseController
     }
 
     /**
-     * Verifica que el pesaje exista y pertenezca al usuario. Pesaje::find()
-     * no filtra por usuario_id, por lo que validamos la columna aquí.
+     * Verifica que el pesaje exista y pertenezca a la organización activa.
+     * El check anterior por usuario_id era frágil en multi-tenant: un
+     * miembro que cambiaba de org seguia editando pesajes "suyos" y
+     * los admin/owner no podían ver pesajes de los operarios.
      */
     private function ownedPesajeOrAbort(int $id, int $uid): array
     {
-        $pesaje = $this->model->find($id);
-        if (!$pesaje || (int)($pesaje['usuario_id'] ?? 0) !== $uid) {
+        $pesaje = $this->model->findOwned($id);
+        if (!$pesaje) {
             \App\Core\SecurityLog::log('idor_attempt', [
                 'user_id' => $uid, 'resource' => 'Pesaje', 'target_id' => $id,
             ]);

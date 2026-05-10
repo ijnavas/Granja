@@ -136,6 +136,32 @@ class Pesaje
     }
 
     /**
+     * Pesaje con validación de pertenencia a la organización activa.
+     * Devuelve null si no existe o pertenece a otra org.
+     */
+    public function findOwned(int $id): ?array
+    {
+        $filter = \App\Core\OrgContext::granjaFilterSql('g.id');
+        $stmt = $this->db->prepare("
+            SELECT p.*
+            FROM pesajes p
+            JOIN lotes l   ON p.lote_id   = l.id
+            LEFT JOIN naves n   ON l.nave_id   = n.id
+            LEFT JOIN granjas g ON n.granja_id = g.id
+            LEFT JOIN granjas g2 ON l.granja_id = g2.id
+            WHERE p.id = :id
+              AND ( g.organizacion_id = :oid {$filter} OR g2.organizacion_id = :oid2 " . \App\Core\OrgContext::granjaFilterSql('g2.id') . " )
+            LIMIT 1
+        ");
+        $stmt->execute([
+            'id'   => $id,
+            'oid'  => \App\Core\OrgContext::id(),
+            'oid2' => \App\Core\OrgContext::id(),
+        ]);
+        return $stmt->fetch() ?: null;
+    }
+
+    /**
      * Último pesaje de un lote con proyección al momento actual.
      */
     public function ultimoPorLote(int $loteId): ?array

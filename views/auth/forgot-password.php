@@ -5,7 +5,7 @@ $pageTitle = 'Recuperar contraseña';
 ?>
 
 <?php if ($error): ?>
-    <div class="alert alert-error"><?= $error ?></div>
+    <div class="alert alert-error"><?= nl2br(e($error)) ?></div>
 <?php endif; ?>
 
 <?php if ($success): ?>

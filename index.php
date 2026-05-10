@@ -201,6 +201,7 @@ $router->get('/lotes/crear',                [LoteController::class, 'create']);
 $router->post('/lotes',                     [LoteController::class, 'store']);
 $router->get('/lotes/tabla-semana',          [LoteController::class, 'tablaSemana']);
 $router->post('/lotes/raza',                 [LoteController::class, 'crearRaza']);
+$router->post('/lotes/actualizar-estado-animal', [LoteController::class, 'actualizarEstadoAnimal']);
 $router->get('/lotes/historico',            [LoteController::class, 'historico']);
 $router->get('/lotes/{id}/trazabilidad',    [LoteController::class, 'trazabilidad']);
 $router->get('/lotes/{id}/historico',       [LoteController::class, 'historicoShow']);

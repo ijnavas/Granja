@@ -74,7 +74,7 @@ class ConfigController extends BaseController
             'porcentaje'    => $this->postString('porcentaje') ?: null,
             'identificador' => strtoupper(trim($this->postString('identificador'))) ?: null,
         ]);
-        Session::flash('success', "Raza \"{$nombre}\" creada.");
+        Session::flash('success', "Raza \"" . e($nombre) . "\" creada.");
         $this->redirect('configuracion/razas');
     }
 
@@ -190,7 +190,7 @@ class ConfigController extends BaseController
         $razaIds = $_POST['raza_ids'] ?? [];
         $this->tablaModel->syncRazas($id, $razaIds);
 
-        Session::flash('success', "Tabla \"{$nombre}\" creada correctamente.");
+        Session::flash('success', "Tabla \"" . e($nombre) . "\" creada correctamente.");
         $this->redirect('configuracion/tablas');
     }
 
@@ -289,7 +289,7 @@ class ConfigController extends BaseController
         }
         $pesoMin = $this->postString('peso_min_kg') !== '' ? (float) $this->postString('peso_min_kg') : null;
         $this->estadoModel->create($nombre, $codigo, $pesoMin);
-        Session::flash('success', "Estado \"{$nombre}\" creado.");
+        Session::flash('success', "Estado \"" . e($nombre) . "\" creado.");
         $this->redirect('configuracion/estados');
     }
 
@@ -428,7 +428,7 @@ class ConfigController extends BaseController
             $this->redirect('configuracion/movimientos');
         }
         if ($this->tipoMovModel->findByCodigo($codigo)) {
-            Session::flash('error', "Ya existe un tipo con código \"{$codigo}\".");
+            Session::flash('error', "Ya existe un tipo con código \"" . e($codigo) . "\".");
             $this->redirect('configuracion/movimientos');
         }
         $this->tipoMovModel->create([
@@ -439,7 +439,7 @@ class ConfigController extends BaseController
             'orden'     => (int)$this->post('orden'),
             'color'     => $this->postString('color') ?: null,
         ]);
-        Session::flash('success', "Tipo \"{$nombre}\" creado.");
+        Session::flash('success', "Tipo \"" . e($nombre) . "\" creado.");
         $this->redirect('configuracion/movimientos');
     }
 
@@ -475,7 +475,7 @@ class ConfigController extends BaseController
         if ($actual && $codigo !== $actual['codigo']) {
             $otro = $this->tipoMovModel->findByCodigo($codigo);
             if ($otro && (int)$otro['id'] !== (int)$id) {
-                Session::flash('error', "Ya existe un tipo con código \"{$codigo}\".");
+                Session::flash('error', "Ya existe un tipo con código \"" . e($codigo) . "\".");
                 $this->redirect("configuracion/movimientos/{$id}/editar");
             }
         }
@@ -534,11 +534,11 @@ class ConfigController extends BaseController
             $this->redirect('configuracion/general');
         }
         if ($this->motivoModel->findByCodigo($codigo)) {
-            Session::flash('error', "Ya existe un motivo con código \"{$codigo}\".");
+            Session::flash('error', "Ya existe un motivo con código \"" . e($codigo) . "\".");
             $this->redirect('configuracion/general');
         }
         $this->motivoModel->create($codigo, $nombre, (int)$this->post('orden'), true);
-        Session::flash('success', "Motivo \"{$nombre}\" creado.");
+        Session::flash('success', "Motivo \"" . e($nombre) . "\" creado.");
         $this->redirect('configuracion/general');
     }
 

@@ -107,7 +107,7 @@ class EquipoController extends BaseController
 
         $emailEnviado = $this->enviarEmailInvitacion($email, $orgName, $invName, $rol, $link, $expira);
 
-        $msg = "Invitación creada para <strong>{$email}</strong>";
+        $msg = "Invitación creada para <strong>" . e($email) . "</strong>";
         if ($emailEnviado) {
             $msg .= " — email enviado correctamente.";
         } else {

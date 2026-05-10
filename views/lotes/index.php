@@ -21,7 +21,15 @@ $hayFiltros = !empty(array_filter($filtros));
 
 <div class="page-header">
     <h2>Lotes</h2>
-    <div style="display:flex;gap:.75rem;align-items:center">
+    <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <form method="POST" action="<?= base_url('lotes/actualizar-estado-animal') ?>"
+              onsubmit="return confirm('¿Aplicar transición lechón → cebo en los lotes que han alcanzado el peso de tabla?')"
+              style="margin:0">
+            <?= csrf_field() ?>
+            <button type="submit" class="btn btn-secondary btn-sm" title="Pasar lotes lechón a cebo según peso de tabla">
+                Lechón → cebo
+            </button>
+        </form>
         <a href="<?= base_url('lotes/export') . ($hayFiltros ? '?' . http_build_query($filtros) : '') ?>"
            class="btn btn-secondary btn-sm" title="Descargar CSV">CSV</a>
         <a href="<?= base_url('lotes/historico') ?>" class="btn btn-secondary">Historico</a>

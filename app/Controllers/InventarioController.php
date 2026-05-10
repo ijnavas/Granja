@@ -229,7 +229,7 @@ class InventarioController extends BaseController
         }
 
         if ($ok) {
-            Session::flash('success', "Inventario enviado a {$to}.");
+            Session::flash('success', "Inventario enviado a " . e($to) . ".");
         } else {
             Session::flash('error', 'Error al enviar el email. Comprueba la configuracion del servidor.');
         }

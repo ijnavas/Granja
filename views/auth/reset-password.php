@@ -5,7 +5,7 @@ $pageTitle = 'Nueva contraseña';
 ?>
 
 <?php if ($error): ?>
-    <div class="alert alert-error"><?= $error ?></div>
+    <div class="alert alert-error"><?= nl2br(e($error)) ?></div>
 <?php endif; ?>
 
 <p style="color:#555;font-size:.95rem;margin-bottom:1.25rem;">

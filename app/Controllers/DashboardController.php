@@ -22,8 +22,8 @@ class DashboardController extends BaseController
         auth_required();
         $userId = Session::get('usuario_id');
 
-        // Transición automática lechón → cebo (≥22 kg según tabla)
-        (new Lote())->actualizarEstadoLechonACebo($userId);
+        // La transición lechón → cebo se aplica manualmente desde /lotes,
+        // no automáticamente al cargar el dashboard.
 
         $data = [
             'kpis'         => $this->getKpis($userId),

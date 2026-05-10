@@ -10,6 +10,13 @@ class Silo
 {
     private PDO $db;
 
+    /**
+     * Cache de rebuildStockAt por (silo_id, fecha) dentro del request.
+     * Vital para dashboards/listados que pintan stock de >5 silos —
+     * cada llamada original lanza 4-5 queries.
+     */
+    private static array $stockCache = [];
+
     public function __construct()
     {
         $this->db = Database::getInstance();
@@ -105,6 +112,30 @@ class Silo
      * kg, la calibración de hoy "mata" el estado previo, no al revés.
      */
     public function rebuildStockAt(int $siloId, string $targetDate): float
+    {
+        $cacheKey = $siloId . '|' . $targetDate;
+        if (isset(self::$stockCache[$cacheKey])) {
+            return self::$stockCache[$cacheKey];
+        }
+
+        $result = $this->rebuildStockAtUncached($siloId, $targetDate);
+        self::$stockCache[$cacheKey] = $result;
+        return $result;
+    }
+
+    /** Invalida la cache de stock de un silo (usar tras añadir recarga/calibración). */
+    public static function invalidateStockCache(?int $siloId = null): void
+    {
+        if ($siloId === null) {
+            self::$stockCache = [];
+            return;
+        }
+        foreach (array_keys(self::$stockCache) as $k) {
+            if (str_starts_with($k, $siloId . '|')) unset(self::$stockCache[$k]);
+        }
+    }
+
+    private function rebuildStockAtUncached(int $siloId, string $targetDate): float
     {
         $siloStmt = $this->db->prepare(
             "SELECT stock_actual_kg, stock_base_fecha FROM silos WHERE id = :id"

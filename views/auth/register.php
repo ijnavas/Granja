@@ -18,7 +18,7 @@ $pageTitle   = $emailLocked !== '' ? 'Unirse a ' . $orgNombre : 'Crear cuenta';
 <?php endif; ?>
 
 <?php if ($error): ?>
-    <div class="alert alert-error"><?= $error ?></div>
+    <div class="alert alert-error"><?= nl2br(e($error)) ?></div>
 <?php endif; ?>
 
 <?php if ($success): ?>
