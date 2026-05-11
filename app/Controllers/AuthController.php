@@ -166,7 +166,11 @@ class AuthController extends BaseController
         }
 
         $ip = client_ip();
-        if (!RateLimiter::attempt('demo', $ip, 10, 3600)) {
+        // 100 sesiones de demo por IP cada hora. Limite alto pensando en
+        // NAT corporativo (varios visitantes saliendo por una sola IP).
+        // Si bajo este umbral conviene mover el contador de IP a fingerprint
+        // de navegador para que no bloquee entre usuarios de una empresa.
+        if (!RateLimiter::attempt('demo', $ip, 100, 3600)) {
             SecurityLog::log('demo_rate_limited');
             Session::flash('error', 'Demasiadas solicitudes de demo desde esta IP. Vuelve en una hora.');
             $this->redirect('login');
