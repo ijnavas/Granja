@@ -145,6 +145,106 @@ class ClienteController extends BaseController
         $this->redirect('clientes');
     }
 
+    /** Detalle de un cliente: miembros + granjas + invitaciones pendientes. */
+    public function show(string $id): void
+    {
+        $this->requireSuperUser();
+        $orgId = (int)$id;
+
+        $org = $this->orgModel->find($orgId);
+        if (!$org) {
+            Session::flash('error', 'Cliente no encontrado.');
+            $this->redirect('clientes');
+        }
+
+        $db = Database::getInstance();
+
+        $miembros = $this->orgModel->miembros($orgId);
+
+        $stmt = $db->prepare("
+            SELECT g.id, g.nombre, g.codigo_rega, g.especie, g.tipo_produccion, g.capacidad_max,
+                   (SELECT COUNT(*) FROM naves n WHERE n.granja_id = g.id AND n.activa = 1) AS num_naves
+            FROM granjas g
+            WHERE g.organizacion_id = :oid AND g.activa = 1
+            ORDER BY g.nombre
+        ");
+        $stmt->execute(['oid' => $orgId]);
+        $granjas = $stmt->fetchAll();
+
+        $stmt = $db->prepare("
+            SELECT i.email, i.rol, i.expira_at, i.created_at, i.token
+            FROM invitaciones_organizacion i
+            WHERE i.organizacion_id = :oid AND i.aceptado_at IS NULL AND i.expira_at > NOW()
+            ORDER BY i.created_at DESC
+        ");
+        $stmt->execute(['oid' => $orgId]);
+        $invsPendientes = $stmt->fetchAll();
+
+        $this->view('clientes/show', [
+            'pageTitle'      => $org['nombre'],
+            'org'            => $org,
+            'miembros'       => $miembros,
+            'granjas'        => $granjas,
+            'invsPendientes' => $invsPendientes,
+            'success'        => Session::getFlash('success'),
+            'error'          => Session::getFlash('error'),
+        ]);
+    }
+
+    /** Edita nombre y plan del cliente. */
+    public function update(string $id): void
+    {
+        $this->requireSuperUser();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('clientes/' . $id);
+        }
+        $orgId  = (int)$id;
+        $nombre = trim($this->postString('nombre'));
+        $plan   = $this->postString('plan') ?: 'free';
+        if (!in_array($plan, ['free', 'pro', 'enterprise'], true)) $plan = 'free';
+
+        if (strlen($nombre) < 2) {
+            Session::flash('error', 'El nombre es obligatorio.');
+            $this->redirect('clientes/' . $orgId);
+        }
+
+        $stmt = Database::getInstance()->prepare("
+            UPDATE organizaciones SET nombre = :n, plan = :p WHERE id = :id
+        ");
+        $stmt->execute(['n' => $nombre, 'p' => $plan, 'id' => $orgId]);
+
+        SecurityLog::log('cliente_editado', ['org_id' => $orgId, 'nombre' => $nombre, 'plan' => $plan]);
+        Session::flash('success', 'Cliente actualizado.');
+        $this->redirect('clientes/' . $orgId);
+    }
+
+    /**
+     * Desactiva un cliente (soft-delete activa=0). Sus datos quedan
+     * intactos en BD pero la org deja de aparecer en /clientes y sus
+     * miembros pierden acceso (su sesion sigue, pero auth_required
+     * los manda a /sin-organizacion).
+     */
+    public function delete(string $id): void
+    {
+        $this->requireSuperUser();
+        if (!Session::validateCsrf($this->postString('csrf_token'))) {
+            $this->redirect('clientes/' . $id);
+        }
+        $orgId = (int)$id;
+
+        $stmt = Database::getInstance()->prepare("
+            UPDATE organizaciones SET activa = 0 WHERE id = :id
+        ");
+        $stmt->execute(['id' => $orgId]);
+        $afectados = $stmt->rowCount();
+
+        SecurityLog::log('cliente_desactivado', ['org_id' => $orgId]);
+        Session::flash($afectados > 0 ? 'success' : 'error',
+            $afectados > 0 ? 'Cliente desactivado correctamente.' : 'No se pudo desactivar.'
+        );
+        $this->redirect('clientes');
+    }
+
     private function enviarEmailClienteNuevo(string $email, string $orgNombre, string $link, string $expira): bool
     {
         $cfg = require ROOT_PATH . '/config.php';

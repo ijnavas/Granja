@@ -29,8 +29,8 @@
             <tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:1.5rem">Todavía no hay clientes.</td></tr>
         <?php else: ?>
             <?php foreach ($clientes as $c): ?>
-            <tr>
-                <td><strong><?= e($c['nombre']) ?></strong></td>
+            <tr style="cursor:pointer" onclick="window.location='<?= base_url('clientes/' . (int)$c['id']) ?>'">
+                <td><strong><a href="<?= base_url('clientes/' . (int)$c['id']) ?>" style="color:inherit;text-decoration:none"><?= e($c['nombre']) ?></a></strong></td>
                 <td><?= e($c['owner_nombre'] ?? '—') ?></td>
                 <td style="color:#6b7280;font-size:.85rem"><?= e($c['owner_email'] ?? '—') ?></td>
                 <td style="text-align:center"><?= (int)$c['num_miembros'] ?></td>

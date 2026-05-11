@@ -263,6 +263,9 @@ $router->get('/informes',                                   [InformeController::
 $router->get('/clientes',          [ClienteController::class, 'index']);
 $router->get('/clientes/nuevo',    [ClienteController::class, 'create']);
 $router->post('/clientes/nuevo',   [ClienteController::class, 'store']);
+$router->get('/clientes/{id}',     [ClienteController::class, 'show']);
+$router->post('/clientes/{id}/editar', [ClienteController::class, 'update']);
+$router->post('/clientes/{id}/borrar', [ClienteController::class, 'delete']);
 
 // Equipo (multi-organización)
 $router->get('/equipo',                                     [EquipoController::class, 'index']);
