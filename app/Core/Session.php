@@ -13,7 +13,13 @@ class Session
                 'path'     => '/',
                 'secure'   => true,
                 'httponly' => true,
-                'samesite' => 'Strict',
+                // Lax: la cookie se envia en navegaciones top-level (clicks de
+                // enlaces externos hacia la app, p.ej. botones "Probar demo"
+                // desde landings de otro dominio). Strict bloqueaba cross-site
+                // navigation y rompia el flujo de /demo y otros enlaces externos.
+                // Lax sigue bloqueando POST cross-site y subrecursos, asi que
+                // contra CSRF estamos cubiertos por el token de cada form.
+                'samesite' => 'Lax',
             ]);
             // Nombre de cookie sin valor por defecto PHPSESSID
             session_name('baltae_sid');
