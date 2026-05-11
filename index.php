@@ -129,6 +129,7 @@ use App\Controllers\RecevtController;
 use App\Controllers\AuditLogController;
 use App\Controllers\SecurityController;
 use App\Controllers\LegalController;
+use App\Controllers\ClienteController;
 
 Session::start();
 
@@ -257,6 +258,11 @@ $router->post('/inventarios/{id}/eliminar',         [InventarioController::class
 
 // Informes
 $router->get('/informes',                                   [InformeController::class, 'index']);
+
+// Clientes (gestión multi-tenant, solo super-usuario)
+$router->get('/clientes',          [ClienteController::class, 'index']);
+$router->get('/clientes/nuevo',    [ClienteController::class, 'create']);
+$router->post('/clientes/nuevo',   [ClienteController::class, 'store']);
 
 // Equipo (multi-organización)
 $router->get('/equipo',                                     [EquipoController::class, 'index']);
