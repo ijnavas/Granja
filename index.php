@@ -148,6 +148,7 @@ $router->post('/login',      [AuthController::class,     'login']);
 $router->get('/register',    [AuthController::class,     'registerForm']);
 $router->post('/register',   [AuthController::class,     'register']);
 $router->get('/sin-organizacion', [AuthController::class, 'sinOrganizacion']);
+$router->get('/demo',             [AuthController::class, 'demoLogin']);
 $router->post('/logout',          [AuthController::class, 'logout']);
 $router->get('/forgot-password',  [AuthController::class, 'forgotPasswordForm']);
 $router->post('/forgot-password', [AuthController::class, 'forgotPassword']);

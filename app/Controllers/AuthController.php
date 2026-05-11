@@ -146,6 +146,60 @@ class AuthController extends BaseController
         $this->redirect('dashboard');
     }
 
+    // ── GET /demo ────────────────────────────────────────────────
+    /**
+     * Auto-login para la cuenta demo (demo@manadi.es). Pensado para un
+     * boton "Probar demo" en una landing externa: usuario llega aqui sin
+     * autenticarse y queda logueado en la cuenta demo, listo para mirar.
+     *
+     * Diseno:
+     *  - Solo funciona si existe la fila `usuarios` con email demo@manadi.es.
+     *  - Rate-limit: 10 sesiones de demo por IP cada hora (evita abuso).
+     *  - Si el usuario ya estaba logueado en otra cuenta, no le tocamos
+     *    la sesion; lo mandamos al dashboard.
+     *  - Audit log: 'login_success' con via=demo para trazabilidad.
+     */
+    public function demoLogin(): void
+    {
+        if (Session::has('usuario_id')) {
+            $this->redirect('dashboard');
+        }
+
+        $ip = client_ip();
+        if (!RateLimiter::attempt('demo', $ip, 10, 3600)) {
+            SecurityLog::log('demo_rate_limited');
+            Session::flash('error', 'Demasiadas solicitudes de demo desde esta IP. Vuelve en una hora.');
+            $this->redirect('login');
+        }
+
+        $user = $this->usuario->findByEmail('demo@manadi.es');
+        if (!$user) {
+            Session::flash('error', 'La cuenta demo no está configurada.');
+            $this->redirect('login');
+        }
+
+        // Abrir sesión como la cuenta demo
+        session_regenerate_id(true);
+        Session::rotateCsrf();
+        Session::set('usuario_id',     $user['id']);
+        Session::set('usuario_nombre', $user['nombre']);
+        Session::set('usuario_email',  $user['email']);
+        Session::set('usuario_rol',    $user['rol'] ?? 'usuario');
+
+        $orgModel = new \App\Models\Organizacion();
+        $orgId    = $orgModel->ensureOrgForUsuario((int)$user['id'], (string)$user['nombre']);
+        if ($orgId) {
+            $orgRol = $orgModel->rolEnOrg((int)$user['id'], $orgId) ?? 'operario';
+            Session::set('current_org_id',  $orgId);
+            Session::set('current_org_rol', $orgRol);
+        }
+
+        SecurityLog::log('login_success', ['user_id' => (int)$user['id'], 'via' => 'demo']);
+
+        if (!$orgId) $this->redirect('sin-organizacion');
+        $this->redirect('dashboard');
+    }
+
     // ── GET /sin-organizacion ────────────────────────────────────
     /** Pantalla "limbo": usuario logueado sin organizacion asignada. */
     public function sinOrganizacion(): void
